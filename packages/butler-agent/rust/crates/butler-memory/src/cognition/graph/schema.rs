@@ -31,6 +31,7 @@ pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<
     base::ensure_historical_columns(connection)?;
     migration::legacy_failures(connection, now)?;
     migration::interrupted_failures(connection, now)?;
+    migration::provider_pause_failures(connection, now)?;
     source_hash::complete_if_empty(connection, now)
 }
 
@@ -39,7 +40,8 @@ pub(super) fn recover_interrupted_failures(
     connection: &mut Connection,
     now: &str,
 ) -> CognitionResult<()> {
-    migration::interrupted_failures(connection, now)
+    migration::interrupted_failures(connection, now)?;
+    migration::provider_pause_failures(connection, now)
 }
 
 pub(super) fn ensure_column(

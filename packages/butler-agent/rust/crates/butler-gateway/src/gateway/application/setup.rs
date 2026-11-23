@@ -5,8 +5,10 @@
 
 pub(crate) mod butler_account;
 pub(crate) mod butler_backup;
+pub(crate) mod publishing;
 use butler_account::{ButlerAccountRequest, butler_account_disabled};
 use butler_backup::ButlerBackupRequest;
+use publishing::PublishingRequest;
 
 use butler_platform::secrets::SecretText;
 use std::sync::Arc;
@@ -338,6 +340,11 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         _request: ButlerAccountRequest,
     ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(butler_account_disabled()) })
+    }
+
+    /// Publishing to the web; off unless `butlerAccountEnabled`.
+    fn publishing(&self, _request: PublishingRequest) -> ApplicationFuture<Value> {
         Box::pin(async { Err(butler_account_disabled()) })
     }
 }

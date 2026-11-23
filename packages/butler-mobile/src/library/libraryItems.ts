@@ -21,6 +21,10 @@ export function goesToChat(item: LibraryItem): boolean {
   return Boolean(item.session && (item.file || item.output || item.kind === "doc"));
 }
 
+export function publishable(item: LibraryItem): boolean {
+  return Boolean(item.output) || /^(text\/html|image\/|application\/pdf$)/.test(item.file?.mime_type ?? "");
+}
+
 export function libraryMeta(item: LibraryItem, locale: string): string {
   const host = hasWebSource(item.url) ? item.site || new URL(item.url).host : undefined;
   return [host, new Date(item.updatedAt ?? item.capturedAt).toLocaleDateString(locale)].filter(Boolean).join(" · ");

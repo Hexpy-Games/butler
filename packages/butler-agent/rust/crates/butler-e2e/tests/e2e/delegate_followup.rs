@@ -23,6 +23,7 @@ use butler_e2e::e2e::{
     gateway::immediate_turn_id,
     scenario::{Scenario, Setup, turn_timeout},
 };
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
@@ -53,7 +54,7 @@ async fn followup(stopped: bool, failed: bool) -> Result<(), HarnessError> {
     .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
     .start()
     .await?;
-    s.turn("general", stub::OWNER).await?;
+    let (owner, _) = s.turn("general", stub::OWNER).await?;
     let first = if stopped {
         tokio::time::timeout(Duration::from_secs(20), script.held.notified())
             .await
@@ -82,6 +83,7 @@ async fn followup(stopped: bool, failed: bool) -> Result<(), HarnessError> {
     } else {
         wait_first(&s).await?
     };
+    assert_owner_answered(&s, &owner).await;
     terminal::assert_closed(
         &rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?,
         first["session_id"].as_str().unwrap(),
@@ -202,6 +204,77 @@ async fn wait_result(s: &Scenario, relation: &str, status: &str) -> Result<Value
         assert!(
             Instant::now() < deadline,
             "{children:?}\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+async fn assert_owner_answered(s: &Scenario, owner: &str) {
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let conversation =
+        rusqlite::Connection::open(s.sandbox.data.join("runtime/conversation-store.sqlite"))
+            .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let btcc = db.query_row(
+            "SELECT semantic_state, final_disposition, suspension_reason, canonical_assistant_message_id
+             FROM btcc_turns WHERE turn_id=?1",
+            [owner],
+            |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            )),
+        ).optional().unwrap();
+        let status: Option<String> = conversation
+            .query_row(
+                "SELECT status FROM conversation_turns WHERE id=?1",
+                [owner],
+                |row| row.get(0),
+            )
+            .optional()
+            .unwrap();
+        let outcome = conversation.query_row(
+            "SELECT q.origin_kind, a.origin_kind, a.turn_id,
+                    (SELECT json_extract(p.content_json,'$.text') FROM conversation_parts p WHERE p.message_id=a.id AND p.kind='text'),
+                    (SELECT r.origin_kind FROM conversation_turn_outcomes ro JOIN conversation_messages r ON r.id=ro.request_message_id WHERE ro.turn_id=a.turn_id),
+                    a.id
+             FROM conversation_turn_outcomes o
+             JOIN conversation_messages q ON q.id=o.request_message_id
+             JOIN conversation_messages a ON a.id=o.public_assistant_message_id
+             WHERE o.turn_id=?1",
+            [owner],
+            |row| Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, String>(5)?,
+            )),
+        ).optional().unwrap();
+        let count = outcome.as_ref().map(|(_, _, _, _, _, reply_id)| {
+            conversation.query_row(
+                "SELECT count(*) FROM conversation_turn_outcomes o JOIN conversation_messages q ON q.id=o.request_message_id
+                 WHERE o.public_assistant_message_id=?1 AND q.origin_kind='user_input'",
+                [reply_id],
+                |row| row.get::<_, i64>(0),
+            ).unwrap()
+        });
+        if matches!(&btcc, Some((state, Some(disposition), None, Some(_)))
+            if state == "delivered" && disposition == "completed")
+            && status.as_deref() == Some("complete")
+            && matches!(&outcome, Some((request, answer, Some(turn), Some(text), Some(origin), _))
+                if request == "user_input" && answer == "assistant_public" && turn != owner
+                    && text.contains("원문 확인 결과를 정리했습니다.") && origin == "internal_control")
+            && count == Some(1)
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "owner={owner}, BTCC={btcc:?}, status={status:?}, outcome={outcome:?}, memory count={count:?}\n{}",
             s.agent.logs()
         );
         tokio::time::sleep(Duration::from_millis(20)).await;

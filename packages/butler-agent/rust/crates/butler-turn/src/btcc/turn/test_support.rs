@@ -14,6 +14,7 @@ pub(super) fn agent_result() -> AgentLoopResult {
         accepted_work_result: None,
         runtime_failure: None,
         outputs: Vec::new(),
+        documents: Vec::new(),
         artifacts: vec![],
         changed_files: vec![],
         answer_blocks: Vec::new(),

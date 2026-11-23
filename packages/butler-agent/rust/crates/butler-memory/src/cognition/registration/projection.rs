@@ -247,11 +247,7 @@ async fn settle_failure(
     let window = claim.window_ref.clone();
     let nonce = claim.owner_nonce.clone();
     let code = error.code();
-    let repair = if error.message().starts_with("repair_exhausted:") {
-        RepairBudget::Exhausted
-    } else {
-        RepairBudget::Remaining
-    };
+    let (repair, resume_at) = failure_retry(error);
     let clock = operation.clock.clone();
     settlement
         .write(move |state| {
@@ -296,13 +292,30 @@ async fn settle_failure(
                     provider,
                 )?;
             } else {
-                state
-                    .graph
-                    .settle_window_failure(owner, code, &clock(), provider, repair)?;
+                state.graph.settle_window_failure(
+                    owner,
+                    code,
+                    &clock(),
+                    provider,
+                    repair,
+                    resume_at.as_deref(),
+                )?;
             }
             state.graph.progress(&job)
         })
         .await
+}
+
+fn failure_retry(error: &CognitionError) -> (RepairBudget, Option<String>) {
+    let message = error.message();
+    let repair = if message.starts_with("repair_exhausted:") {
+        RepairBudget::Exhausted
+    } else {
+        RepairBudget::Remaining
+    };
+    let resume_at = (error.code() == "memory_extract_provider_paused" && !message.is_empty())
+        .then_some(message);
+    (repair, resume_at)
 }
 
 async fn execute_claimed(

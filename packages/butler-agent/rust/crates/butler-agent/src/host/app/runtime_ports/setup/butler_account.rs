@@ -17,17 +17,19 @@ const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
 
 pub(crate) struct ButlerAccount {
     http: Client,
-    base_url: String,
+    pub(super) base_url: String,
+    pub(super) data: PathBuf,
+    pub(super) uploads: Client,
     file: PathBuf,
 }
 
 #[derive(Deserialize, Serialize)]
-struct StoredAccount {
+pub(super) struct StoredAccount {
     schema_version: u32,
     api_url: String,
-    device_token: String,
+    pub(super) device_token: String,
     account_id: String,
-    device_id: String,
+    pub(super) device_id: String,
 }
 
 impl ButlerAccount {
@@ -39,19 +41,23 @@ impl ButlerAccount {
             .unwrap_or_else(|| DEFAULT_API_URL.to_owned())
             .trim_end_matches('/')
             .to_owned();
-        let http = butler_log::http::external(Purpose::new("butler-cloud"))
-            .timeout(Duration::from_secs(10))
-            .connect_timeout(Duration::from_secs(5))
-            .redirect(RedirectPolicy::none())
-            .build()
-            .map_err(|_| {
-                BtccError::relayed(
-                    "cloud_unavailable",
-                    "The Butler service could not be reached.",
-                )
-            })?;
+        let client = |timeout| {
+            butler_log::http::external(Purpose::new("butler-cloud"))
+                .timeout(Duration::from_secs(timeout))
+                .connect_timeout(Duration::from_secs(5))
+                .redirect(RedirectPolicy::none())
+                .build()
+                .map_err(|_| {
+                    BtccError::relayed(
+                        "cloud_unavailable",
+                        "The Butler service could not be reached.",
+                    )
+                })
+        };
         Ok(Self {
-            http,
+            http: client(10)?,
+            uploads: client(60)?,
+            data: data_root.to_owned(),
             base_url,
             file: data_root.join("auth/butler-account.json"),
         })
@@ -202,7 +208,7 @@ impl ButlerAccount {
         &self.base_url
     }
 
-    async fn read(&self) -> Result<Option<StoredAccount>, GatewayApplicationError> {
+    pub(super) async fn read(&self) -> Result<Option<StoredAccount>, GatewayApplicationError> {
         let file = self.file.clone();
         let base_url = self.base_url.clone();
         tokio::task::spawn_blocking(move || {
@@ -227,7 +233,7 @@ impl ButlerAccount {
         }
     }
 
-    async fn send(
+    pub(super) async fn send(
         &self,
         method: Method,
         path: &str,
@@ -248,7 +254,10 @@ impl ButlerAccount {
     }
 }
 
-async fn check(response: Response, expected: u16) -> Result<Response, GatewayApplicationError> {
+pub(super) async fn check(
+    response: Response,
+    expected: u16,
+) -> Result<Response, GatewayApplicationError> {
     let status = response.status().as_u16();
     if status == expected {
         return Ok(response);
@@ -268,7 +277,7 @@ async fn check(response: Response, expected: u16) -> Result<Response, GatewayApp
     })
 }
 
-fn unavailable() -> GatewayApplicationError {
+pub(super) fn unavailable() -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 502,
         code: "cloud_unavailable".into(),
@@ -277,7 +286,7 @@ fn unavailable() -> GatewayApplicationError {
     }
 }
 
-fn signed_out() -> GatewayApplicationError {
+pub(super) fn signed_out() -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 401,
         code: "butler_account_signed_out".into(),

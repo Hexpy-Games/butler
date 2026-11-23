@@ -1,7 +1,7 @@
 //! Stub-only Butler account service.
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -20,11 +20,16 @@ use tokio::task::JoinHandle;
 
 use super::HarnessError;
 
+const PAGE_ID: &str = "k7m2q9xd4b3hn";
+const PAGE_URL: &str = "https://pages.test/p/k7m2q9xd4b3hn/";
+
 struct State {
     seen: Mutex<Vec<String>>,
     plan: Mutex<String>,
     devices: AtomicU64,
     backup: Mutex<Backup>,
+    blobs: Mutex<BTreeSet<String>>,
+    page: Mutex<Option<(String, u64)>>,
 }
 
 pub struct FakeButlerCloud {
@@ -42,6 +47,8 @@ impl FakeButlerCloud {
             plan: Mutex::new("free".into()),
             devices: AtomicU64::new(0),
             backup: Mutex::default(),
+            blobs: Mutex::new(BTreeSet::new()),
+            page: Mutex::new(None),
         });
         let router = Router::new()
             .fallback(route)
@@ -151,7 +158,7 @@ async fn route(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .route(&method, path, &headers, body, quota);
     }
-    authenticated(&state, method, path, &account, &device(device_id))
+    authenticated(&state, method, path, &account, &device(device_id), &body)
 }
 
 fn device(id: u64) -> Value {
@@ -169,6 +176,7 @@ fn authenticated(
     path: &str,
     account: &Value,
     device: &Value,
+    body: &[u8],
 ) -> Response {
     match (method, path) {
         (Method::GET, "/v1/me") => {
@@ -181,6 +189,41 @@ fn authenticated(
             {"id": "dev_other", "name": "Other", "platform": "linux", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": false}
         ]})).into_response(),
         (Method::DELETE, "/v1/devices/dev_other") | (Method::POST, "/v1/auth/sign-out") => StatusCode::NO_CONTENT.into_response(),
+        (Method::POST, "/v1/pages") => {
+            let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+            let mut page = state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let version = page.as_ref().map_or(1, |(_, version)| version + 1);
+            *page = Some((input["source_key"].as_str().unwrap_or_default().to_owned(), version));
+            let blobs = state.blobs.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let missing: BTreeSet<_> = input["files"].as_array().into_iter().flatten()
+                .filter_map(|file| file["sha256"].as_str())
+                .filter(|sha| !blobs.contains(*sha))
+                .collect();
+            Json(json!({"id": PAGE_ID, "url": PAGE_URL, "version": version, "missing": missing})).into_response()
+        }
+        (Method::PUT, path) if path.starts_with("/v1/pages/k7m2q9xd4b3hn/blobs/") => {
+            let sha = path.trim_start_matches("/v1/pages/k7m2q9xd4b3hn/blobs/");
+            state.blobs.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(sha.to_owned());
+            StatusCode::NO_CONTENT.into_response()
+        }
+        (Method::POST, "/v1/pages/k7m2q9xd4b3hn/publish") => {
+            let page = state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let version = page.as_ref().map(|(_, version)| version);
+            Json(json!({"id": PAGE_ID, "url": PAGE_URL, "version": version})).into_response()
+        }
+        (Method::GET, "/v1/pages") => {
+            let page = state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let pages: Vec<_> = page.iter().map(|(source_key, _)| json!({
+                "id": PAGE_ID, "url": PAGE_URL, "title": "Output", "status": "live",
+                "size_bytes": 0, "file_count": 0, "updated_at": "2026-01-01T00:00:00Z", "source_key": source_key,
+            })).collect();
+            Json(json!({"pages": pages, "used": pages.len(), "limit": 3, "badge": true,
+                "page_bytes": 10_000_000, "page_files": 200})).into_response()
+        }
+        (Method::DELETE, "/v1/pages/k7m2q9xd4b3hn") => {
+            *state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            StatusCode::NO_CONTENT.into_response()
+        }
         _ => (StatusCode::NOT_FOUND, Json(json!({"error": {"code": "not_found", "message": "Not found."}}))).into_response(),
     }
 }

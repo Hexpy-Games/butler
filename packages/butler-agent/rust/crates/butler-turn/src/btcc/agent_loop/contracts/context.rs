@@ -112,6 +112,7 @@ pub(crate) struct GuidedCloseout {
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
     pub outputs: Vec<String>,
+    pub documents: Vec<String>,
     /// Journal-owned change records, forwarded to the final payload unchanged.
     pub changed_files: Vec<crate::btcc::ChangedFileSummary>,
     pub answer_blocks: Vec<serde_json::Value>,

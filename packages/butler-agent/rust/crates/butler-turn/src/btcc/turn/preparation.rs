@@ -18,8 +18,8 @@ use crate::btcc::BtccCode;
 use crate::btcc::storage::{BtccRepositories, StorageCode, WakeAuthorization};
 use crate::btcc::{BtccError, ReasoningEffort, TurnRequest, TurnTrigger};
 use crate::conversation::{
-    AgentConversationStore, ConversationAdmissionObserver, ConversationAdmissionTurn,
-    ConversationAdmissionTurnInput,
+    AgentConversationStore, CompletionObservation, ConversationAdmissionObserver,
+    ConversationAdmissionTurn, ConversationAdmissionTurnInput,
 };
 use crate::workspace::{SessionBindingStore, StoredSessionBinding};
 
@@ -313,6 +313,54 @@ impl DefaultTurnPreparation {
 impl TurnPreparation for DefaultTurnPreparation {
     fn prepare(&self, request: TurnRequest) -> PortFuture<'_, PreparedExecution> {
         Box::pin(self.prepare_owned(request))
+    }
+
+    fn close_answered(
+        &self,
+        session_id: &str,
+        parents: &[String],
+        answer_turn_id: &str,
+    ) -> PortFuture<'_, ()> {
+        let session_id = session_id.to_owned();
+        let parents = parents.to_vec();
+        let answer_turn_id = answer_turn_id.to_owned();
+        Box::pin(async move {
+            let binding = self
+                .binding_store
+                .get_by_session_id(&session_id)
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| {
+                    error(
+                        BtccCode::SessionBindingMissing,
+                        format!("Missing stored BTCC session binding: {session_id}"),
+                    )
+                })?;
+            let now = self.conversation_store.identity_clock().now_iso();
+            for parent in parents {
+                if let Some(answered) = self
+                    .conversation_store
+                    .finalize_answered(&parent, &answer_turn_id, &now)
+                    .await?
+                    && let Some(out) = answered.assistant_message_id
+                {
+                    let _ = self
+                        .observer
+                        .completion_observation(CompletionObservation {
+                            project_id: binding.project_id.clone(),
+                            runtime_session_id: session_id.clone(),
+                            conversation_session_id: answered.session_id,
+                            conversation_turn_id: parent,
+                            inbound_message_id: answered.request_message_id,
+                            outbound_message_id: out,
+                            outcome_generation: answered.generation,
+                            completed_at: now.clone(),
+                        })
+                        .await;
+                }
+            }
+            Ok(())
+        })
     }
 }
 

@@ -61,6 +61,7 @@ pub use application::settings::{
 };
 pub use application::setup::butler_account::{ButlerAccountRequest, butler_account_disabled};
 pub use application::setup::butler_backup::ButlerBackupRequest;
+pub use application::setup::publishing::{PublishSource, PublishingRequest};
 pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,

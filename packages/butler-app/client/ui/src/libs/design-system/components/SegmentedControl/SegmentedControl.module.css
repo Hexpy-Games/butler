@@ -75,7 +75,7 @@
   line-height: var(--typo-caption-line-height);
 }
 
-.item:hover:not(:disabled, [data-state="on"]) {
+.item:hover:not(:disabled, [aria-disabled="true"], [data-state="on"]) {
   background: color-mix(in srgb, var(--selection) 72%, transparent);
   color: var(--text-primary);
 }
@@ -91,7 +91,8 @@
   box-shadow: var(--focus-ring);
 }
 
-.item:disabled {
+.item:disabled,
+.item[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.52;
 }

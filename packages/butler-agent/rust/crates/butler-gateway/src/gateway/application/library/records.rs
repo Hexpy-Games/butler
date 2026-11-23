@@ -65,6 +65,7 @@ pub(in crate::gateway::application) fn save(
         None => (None, None),
     };
     keep_user_title(&mut item, prior_item.as_ref());
+    keep_published(&mut item, prior_item.as_ref());
     let group = match requested_group(db, &kind, &item)? {
         Some(group) => group,
         None => prior_group,
@@ -124,6 +125,34 @@ fn keep_user_title(item: &mut Value, prior: Option<&Value>) {
     object.insert("autoTitle".into(), auto);
     object.insert("title".into(), prior["title"].clone());
 }
+/// Keep App-owned publishing state when a saved item is refreshed.
+fn keep_published(item: &mut Value, prior: Option<&Value>) {
+    if item.get("published").is_none()
+        && let Some(published) = prior.and_then(|prior| prior.get("published"))
+    {
+        item["published"] = published.clone();
+    }
+}
+
+pub(super) fn set_published(
+    db: &Connection,
+    id: &str,
+    published: Option<Value>,
+) -> Result<Value, AppStorageError> {
+    let mut item = super::blocks::get(db, id)?;
+    if let Some(published) = published {
+        item["published"] = published;
+    } else if let Some(object) = item.as_object_mut() {
+        object.remove("published");
+    }
+    db.execute(
+        "UPDATE browser_library SET payload=?2 WHERE id=?1",
+        params![id, item.to_string()],
+    )
+    .map_err(sql)?;
+    item::refresh(db, id)
+}
+
 /// The group the item names, if it names one (`Some(None)` for none).
 fn requested_group(
     db: &Connection,

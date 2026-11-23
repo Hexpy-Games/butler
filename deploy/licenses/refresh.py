@@ -298,12 +298,12 @@ def js_components():
 def native_components():
     lock = json.loads((RUST / "scripts/static-ort.lock.json").read_text(encoding="utf-8"))
     components = []
-    for name, repository, license_id in (
-        ("onnxruntime", "microsoft/onnxruntime", "MIT"),
-        ("onnx", "onnx/onnx", "Apache-2.0"),
+    for name, base, license_id in (
+        ("onnxruntime", "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-{revision:.8}", "MIT"),
+        ("onnx", "https://raw.githubusercontent.com/onnx/onnx/{revision}", "Apache-2.0"),
     ):
         revision = lock["sources"][name]["commit"]
-        base = f"https://raw.githubusercontent.com/{repository}/{revision}"
+        base = base.format(revision=revision)
         files = []
         for file in ("LICENSE", "NOTICE", "ThirdPartyNotices.txt"):
             text = fetch(f"{base}/{file}")

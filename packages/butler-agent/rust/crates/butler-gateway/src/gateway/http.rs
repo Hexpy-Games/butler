@@ -17,6 +17,7 @@ mod image_fixtures;
 mod image_models;
 mod library;
 mod pending_asks;
+mod publishing;
 mod start;
 pub(super) use start::{Listeners, serve};
 mod access_log;

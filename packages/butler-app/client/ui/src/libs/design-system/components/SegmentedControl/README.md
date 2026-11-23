@@ -31,7 +31,8 @@ import { SegmentedControl } from "@/butler-ds";
 
 ## Accessibility
 - `role="radiogroup"` with `role="radio"` buttons and `aria-checked`.
-- Roving focus: only the selected option is in the tab order; arrow keys, Home and End move and select.
+- Roving focus: the selected option is in the tab order; arrow keys, Home and End move and select.
+- A blocked option says why with `disabledReason`. It is tabbable for its tooltip and skipped by selection keys.
 - The focused option shows the shared focus ring; the track's inset keeps the ring whole inside the scrolling track.
 
 ## Best practice

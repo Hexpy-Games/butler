@@ -162,6 +162,7 @@ wire_codes! {
         MemoryExtractMixedSourceRoles = "memory_extract_mixed_source_roles",
         MemoryExtractNeedsContext = "memory_extract_needs_context",
         MemoryExtractProviderFailed = "memory_extract_provider_failed",
+        MemoryExtractProviderPaused = "memory_extract_provider_paused",
         MemoryExtractSourceCoverage = "memory_extract_source_coverage",
         MemoryExtractSourceWindowExceedsBudget = "memory_extract_source_window_exceeds_budget",
         MemoryExtractStageChanged = "memory_extract_stage_changed",

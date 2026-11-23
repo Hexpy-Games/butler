@@ -222,8 +222,17 @@ impl GraphRepository {
         now: &str,
         provider: ProviderCall,
         repair: RepairBudget,
+        resume_at: Option<&str>,
     ) -> CognitionResult<()> {
-        failure::settle(self.connection_mut()?, owner, code, now, provider, repair)
+        failure::settle(
+            self.connection_mut()?,
+            owner,
+            code,
+            now,
+            provider,
+            repair,
+            resume_at,
+        )
     }
     pub(in crate::cognition) fn commit_meaning(
         &mut self,

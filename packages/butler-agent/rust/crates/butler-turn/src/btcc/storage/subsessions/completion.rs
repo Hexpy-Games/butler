@@ -204,11 +204,16 @@ fn result_text(
         &completion.session,
         delegation.packet.child_role,
     )?);
-    text.push_str(&super::assets::delivery_made(tx, &completion.turn)?);
+    text.push_str(&super::assets::delivery_made(
+        tx,
+        &completion.turn,
+        delegation.packet.child_role,
+    )?);
     text.push_str(&delivery_artifacts(
         tx,
         &completion.turn,
         &completion.status,
+        delegation.packet.child_role,
     )?);
     if let Some(code) = completion
         .failure_code
@@ -278,6 +283,7 @@ fn delivery_artifacts(
     tx: &rusqlite::Transaction<'_>,
     turn: &str,
     status: &str,
+    role: ChildRole,
 ) -> Result<String, StorageError> {
     let raw: Option<String> = tx
         .query_row(
@@ -300,9 +306,14 @@ fn delivery_artifacts(
     else {
         return Ok(String::new());
     };
-    Ok(format!(
-        "\nartifacts: {artifacts}\nThese captured files accompany this result and are attached to your reply automatically. For image artifacts, display them inline with Markdown ![caption](exact safePathLabel). Use each exact safePathLabel when linking other artifacts."
-    ))
+    Ok(match role {
+        ChildRole::Steward => format!(
+            "\nartifacts: {artifacts}\nThese captured files accompany this result and are attached to your reply automatically. For image artifacts, display them inline with Markdown ![caption](exact safePathLabel). Use each exact safePathLabel when linking other artifacts."
+        ),
+        ChildRole::Worker => format!(
+            "\nartifacts: {artifacts}\nThese are this Worker's working files for you. The user receives one only if you deliver it with deliver_files (a page: output_publish)."
+        ),
+    })
 }
 
 fn delegation_feedback(

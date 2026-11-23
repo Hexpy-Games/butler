@@ -186,6 +186,11 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     for job in ["session-sync", "consolidation-cycle"] {
         std::fs::remove_file(s.sandbox.data.join(format!("state/scheduler/{job}.json")))?;
     }
+    // A sheet from the previous format counts as empty and is rebuilt.
+    std::fs::write(
+        generation.join("hot/standing.md"),
+        "<!-- butler-standing {\"v\":1,\"through_at\":\"\",\"through_id\":\"\",\"sources\":0,\"model\":\"old\",\"updated_at\":\"2026-10-01T00:00:00Z\"} -->\nOld sheet line.",
+    )?;
     super::memory_fixture::arm_consolidation(&s.sandbox.data, "2026-10-02T03:59:00.000Z")?;
     // Seed dormant Box data after initialization, including an expired item and
     // an invalid index. Daily maintenance must neither validate nor rewrite it.
@@ -234,11 +239,16 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .join("state/scheduler/consolidation-cycle.json"),
     )?)?;
     assert_eq!(cycle["status"], "ok", "{cycle}");
-    until(|| generation.join("hot/standing.md").exists()).await;
+    until(|| {
+        std::fs::read_to_string(generation.join("hot/standing.md"))
+            .is_ok_and(|text| text.contains("\"v\":2"))
+    })
+    .await;
     assert!(server.chat_requests().iter().any(|request| {
         let text = request.to_string();
         text.contains("You keep a short fact sheet about one person")
             && text.contains("] My preferred garden flower is the blue iris.")
+            && text.contains("Current sheet (0 bytes; keep it under 3,000)")
     }));
     assert_eq!(
         box_snapshot(&box_root)?,

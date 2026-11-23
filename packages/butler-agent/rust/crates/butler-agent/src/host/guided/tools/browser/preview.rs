@@ -3,9 +3,9 @@ use super::super::{GuidedTools, dispatch::encoded};
 use super::{authority, client::Client};
 use butler_core::json::JsonDocument;
 use butler_turn::btcc::{
-    AccessMode, AdapterOutcome, EffectAccess, EffectAdapter, EffectAdapterError, EffectFailure,
-    EffectFuture, EffectOutcome, ExecuteEffect, GuidedInvocation, ModelRoundToolCall, PlanBinding,
-    ToolExecutionError,
+    AccessDecision, AccessMode, AdapterOutcome, CapabilityKind, EffectAccess, EffectAdapter,
+    EffectAdapterError, EffectFailure, EffectFuture, EffectOutcome, ExecuteEffect,
+    GuidedInvocation, ModelRoundToolCall, PlanBinding, ToolExecutionError,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -33,9 +33,17 @@ pub(super) async fn execute(
     }
     .unwrap_or("")
     .to_owned();
-    let approval = match authority::gate(owner, call, occurrence, &input, &target).await? {
-        authority::Gate::Pending(value) => return encoded(&value),
-        authority::Gate::Allowed(reference, _) => reference,
+    let decision = super::super::access::for_kind(
+        owner,
+        CapabilityKind::of_call(&call.name, &call.arguments, false),
+    );
+    let approval = if matches!(decision, AccessDecision::Allow) {
+        None
+    } else {
+        match authority::gate(owner, call, occurrence, &input, &target).await? {
+            authority::Gate::Pending(value) => return encoded(&value),
+            authority::Gate::Allowed(reference, _) => reference,
+        }
     };
     let work = owner
         .work

@@ -14,6 +14,9 @@ pub(super) async fn route(
     let args = query(request.uri());
     let parts = components(&path)?;
     let parts = parts.iter().map(String::as_str).collect::<Vec<_>>();
+    if let [id, "publish"] = parts.as_slice() {
+        return publishing::item(&state, &method, id).await;
+    }
     let command = command_from_request(&method, &parts, &args, request).await?;
     let value = state.application.library(command).await?;
     json(

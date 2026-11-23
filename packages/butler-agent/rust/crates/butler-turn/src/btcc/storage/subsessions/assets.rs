@@ -31,7 +31,11 @@ pub(super) fn delivery_assets(
 }
 
 /// What the child turn made in the chat (documents, images) reaches the parent by id.
-pub(super) fn delivery_made(db: &Connection, turn: &str) -> Result<String, StorageError> {
+pub(super) fn delivery_made(
+    db: &Connection,
+    turn: &str,
+    role: crate::btcc::ChildRole,
+) -> Result<String, StorageError> {
     let mut query = db.prepare("SELECT d.value FROM btcc_guided_tool_calls c, json_each(CASE WHEN json_valid(c.result_json) THEN c.result_json ELSE '{}' END,'$.deliverables') d WHERE c.turn_id=?1 ORDER BY c.started_at,c.rowid,d.key").map_err(StorageError::sqlite)?;
     let items = query
         .query_map([turn], |r| r.get::<_, String>(0))
@@ -41,8 +45,10 @@ pub(super) fn delivery_made(db: &Connection, turn: &str) -> Result<String, Stora
     if items.is_empty() {
         return Ok(String::new());
     }
-    Ok(format!(
-        "\nmade: [{}]\nThese are what this work made in the chat; refer to them by id.",
-        items.join(",")
-    ))
+    let guidance = if role == crate::btcc::ChildRole::Worker {
+        "These are this Worker's working items. They reach the user only if you declare them; create any document the user should receive yourself."
+    } else {
+        "These are what this work made in the chat; refer to them by id."
+    };
+    Ok(format!("\nmade: [{}]\n{guidance}", items.join(",")))
 }
