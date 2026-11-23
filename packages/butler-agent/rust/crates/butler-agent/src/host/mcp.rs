@@ -5,7 +5,7 @@ mod cleanup;
 mod graph;
 mod model;
 mod registry_cli;
-mod restart;
+pub(super) mod restart;
 mod server;
 mod skills;
 mod status;

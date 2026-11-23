@@ -9,6 +9,7 @@
 //! The shared system clock and UUID generator here retain no Turn/session state. Domain
 //! ports remain explicit; domains do not depend on this composition module.
 
+mod backup;
 pub(crate) mod build_info;
 mod chatgpt_sign_in;
 mod error;

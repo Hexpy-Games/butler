@@ -1,18 +1,24 @@
 import { useState } from "react";
-import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { Button, ButtonContainer, Input, SettingsField, SettingsSection, Typo } from "@/butler-ds";
 import { passwordIntro, useButlerVault } from "../vault/useButlerVault";
 import { VaultPasswordFields } from "../vault/VaultPasswordFields";
 
-export function ButlerVaultSection() {
-  useAppLocale();
+export function useButlerVaultSectionState() {
   const vault = useButlerVault();
   const [editing, setEditing] = useState(false);
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
+  return { vault, editing, setEditing, current, setCurrent, password, setPassword,
+    confirmation, setConfirmation, error, setError };
+}
+
+export function butlerVaultSection(state: ReturnType<typeof useButlerVaultSectionState>) {
+  const { vault, editing, setEditing, current, setCurrent, password, setPassword,
+    confirmation, setConfirmation, error, setError } = state;
   const copy = appCopy.butlerVault;
   const { view } = vault;
   if (vault.state !== "ready" || !view) return null;

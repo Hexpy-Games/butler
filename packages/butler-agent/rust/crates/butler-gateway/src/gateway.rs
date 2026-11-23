@@ -60,6 +60,7 @@ pub use application::settings::{
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::setup::butler_account::{ButlerAccountRequest, butler_account_disabled};
+pub use application::setup::butler_backup::ButlerBackupRequest;
 pub use application::setup::publishing::{PublishSource, PublishingRequest};
 pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{

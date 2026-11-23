@@ -195,7 +195,15 @@ impl ProductVault {
         })
     }
 
-    fn write_marker(&self, unlock: &'static str, copied: usize) -> Result<(), VaultError> {
+    pub fn set_recovery_recipient(
+        &self,
+        old: Option<&str>,
+        new: Option<&str>,
+    ) -> Result<(), VaultError> {
+        self.vault.set_recovery_recipient(old, new)
+    }
+
+    pub fn write_marker(&self, unlock: &'static str, copied: usize) -> Result<(), VaultError> {
         let migrated_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_millis());

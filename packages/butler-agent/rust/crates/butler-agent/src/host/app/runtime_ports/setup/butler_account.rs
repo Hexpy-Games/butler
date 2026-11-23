@@ -200,6 +200,14 @@ impl ButlerAccount {
         self.status().await
     }
 
+    pub(crate) async fn device_token(&self) -> Result<Option<String>, GatewayApplicationError> {
+        Ok(self.read().await?.map(|stored| stored.device_token))
+    }
+
+    pub(crate) fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub(super) async fn read(&self) -> Result<Option<StoredAccount>, GatewayApplicationError> {
         let file = self.file.clone();
         let base_url = self.base_url.clone();
@@ -217,7 +225,7 @@ impl ButlerAccount {
         .map_err(GatewayApplicationError::internal_from)?
     }
 
-    pub(super) async fn delete(&self) -> Result<(), GatewayApplicationError> {
+    pub(crate) async fn delete(&self) -> Result<(), GatewayApplicationError> {
         match tokio::fs::remove_file(&self.file).await {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),

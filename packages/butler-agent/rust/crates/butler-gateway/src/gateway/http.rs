@@ -8,6 +8,7 @@ mod body;
 mod browser_host;
 mod browser_stills;
 mod butler_account;
+mod butler_backup;
 mod computers;
 mod content;
 mod documents;

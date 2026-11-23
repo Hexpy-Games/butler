@@ -5,7 +5,7 @@ import { notifyError } from "@/app/notifications.ts";
 import { subscribePairedDevices } from "@/app/securityDeviceEvents.ts";
 import { listPairedDevices, revokePairedDevice, type PairedDevice } from "./securityApi";
 
-export function usePairedDevices() {
+export function usePairedDevices(enabled: boolean) {
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [state, setState] = useState<"loading" | "error" | "ready">("loading");
   const [busy, setBusy] = useState(false);
@@ -25,11 +25,17 @@ export function usePairedDevices() {
     }
   }, []);
   useEffect(() => {
+    if (!enabled) {
+      setDevices([]);
+      setState("loading");
+      setBusy(false);
+      return;
+    }
     mounted.current = true;
     void refresh();
     const unsubscribe = subscribePairedDevices(() => void refresh());
     return () => { mounted.current = false; revision.current++; unsubscribe(); };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   async function revoke(deviceId?: string) {
     if (revoking.current) return;
