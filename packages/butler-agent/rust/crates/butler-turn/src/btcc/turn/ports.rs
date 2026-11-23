@@ -21,6 +21,14 @@ pub struct PreparedExecution {
 
 pub trait TurnPreparation: Send + Sync {
     fn prepare(&self, request: TurnRequest) -> PortFuture<'_, PreparedExecution>;
+    fn close_answered(
+        &self,
+        _session_id: &str,
+        _parents: &[String],
+        _answer_turn_id: &str,
+    ) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// Owned by one prepared execution, including failure and suspension paths.
@@ -58,6 +66,18 @@ pub trait TurnStore: Send + Sync {
     fn activate_successor(&self, turn_id: &str) -> PortFuture<'_, TurnRecord>;
     /// Persists a stop request for the turn.
     fn stop(&self, turn_id: &str) -> PortFuture<'_, StopPersistenceOutcome>;
+    /// Finds waiting turns answered by a delivered result turn.
+    fn answered_turns(&self, _answer_turn_id: &str) -> PortFuture<'_, Vec<String>> {
+        Box::pin(async { Ok(vec![]) })
+    }
+    /// Persists delivery of the answer for the waiting turns.
+    fn close_answered(&self, _parents: Vec<String>, _answer_turn_id: &str) -> PortFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// Finds delivered result turns to replay through answered close.
+    fn recovery_answers(&self) -> PortFuture<'_, Vec<String>> {
+        Box::pin(async { Ok(vec![]) })
+    }
     /// Records a model-route event under the turn claim.
     fn record_model_route_event(
         &self,

@@ -125,6 +125,35 @@ impl TurnStore for BtccRepositories {
                 .map_err(BtccError::from)
         })
     }
+    fn answered_turns(&self, answer_turn_id: &str) -> PortFuture<'_, Vec<String>> {
+        let storage = self.storage.clone();
+        let id = answer_turn_id.to_owned();
+        Box::pin(async move {
+            storage
+                .execute(move |db| transitions::answered::answered_turns(db, &id))
+                .await
+                .map_err(BtccError::from)
+        })
+    }
+    fn close_answered(&self, parents: Vec<String>, answer_turn_id: &str) -> PortFuture<'_, ()> {
+        let storage = self.storage.clone();
+        let id = answer_turn_id.to_owned();
+        Box::pin(async move {
+            storage
+                .execute(move |db| transitions::answered::close_answered(db, &parents, &id))
+                .await
+                .map_err(BtccError::from)
+        })
+    }
+    fn recovery_answers(&self) -> PortFuture<'_, Vec<String>> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .execute(transitions::answered::recovery_answers)
+                .await
+                .map_err(BtccError::from)
+        })
+    }
     fn record_model_route_event(
         &self,
         write: ModelRouteEventWrite,

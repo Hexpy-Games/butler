@@ -241,6 +241,11 @@ impl Btcc {
         self.inner.run_turn(request).await
     }
 
+    /// Closes waiting turns whose result replies were already delivered.
+    pub async fn recover_answered(&self) -> Result<(), BtccError> {
+        self.inner.recover_answered().await
+    }
+
     /// Whether a session has a live turn flight, including preparation and delivery.
     pub fn has_active_session_execution(&self, session_id: &str) -> bool {
         self.inner.has_active_session_execution(session_id)

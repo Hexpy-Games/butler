@@ -125,6 +125,16 @@ impl TurnFacade {
                     );
                 }
                 execution.conversation.complete(outcome.clone()).await?;
+                if let Err(error) = self
+                    .close_answered(&prepared.request.turn_id, &prepared.request.session_id)
+                    .await
+                {
+                    butler_core::diagnostic!(
+                        "warning: answered close failed for {}: {}",
+                        prepared.request.turn_id,
+                        error.code()
+                    );
+                }
             }
             TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. } => {
                 execution.conversation.cancel().await?;
@@ -132,6 +142,39 @@ impl TurnFacade {
             _ => {}
         }
         Ok(outcome)
+    }
+
+    async fn close_answered(
+        &self,
+        answer_turn_id: &str,
+        session_id: &str,
+    ) -> Result<(), BtccError> {
+        let parents = self.store.answered_turns(answer_turn_id).await?;
+        if parents.is_empty() {
+            return Ok(());
+        }
+        self.preparation
+            .close_answered(session_id, &parents, answer_turn_id)
+            .await?;
+        self.store.close_answered(parents, answer_turn_id).await
+    }
+
+    async fn recover_answered(&self) -> Result<(), BtccError> {
+        for id in self.store.recovery_answers().await? {
+            let result = match self.store.find_turn(&id).await {
+                Ok(Some(turn)) => self.close_answered(&id, &turn.session_id).await,
+                Ok(None) => continue,
+                Err(error) => Err(error),
+            };
+            if let Err(error) = result {
+                butler_core::diagnostic!(
+                    "warning: answered close failed for {}: {}",
+                    id,
+                    error.code()
+                );
+            }
+        }
+        Ok(())
     }
 
     pub(super) async fn stop(&self, turn_id: &str) -> Result<TurnOutcome, BtccError> {
