@@ -20,6 +20,7 @@ import {
 import { ContainedDialogDemo } from "./Dialog.contained.demo";
 import { TitleOnlyConfirmDemo } from "./Dialog.titleOnly.demo";
 import { FullHeightDialogDemo } from "./Dialog.fullHeight.demo";
+import { FooterThatWraps } from "./Dialog.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "Dialog",
@@ -99,6 +100,11 @@ function ReaderDialog({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Rename conversation", states: ["open"], render: (context) => <RenameDialog context={context} /> },
+  {
+    name: "Footer that wraps",
+    widths: ["375", "app"],
+    render: (context) => <FooterThatWraps {...context} closeLabel={text(context).close} />,
+  },
   {
     name: "Edit project description",
     render: (context) => (

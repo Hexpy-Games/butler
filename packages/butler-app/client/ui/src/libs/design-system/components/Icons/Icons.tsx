@@ -37,7 +37,7 @@ const TableOfContentsGlyph = [
 
 export { ICON_SIZE, type IconProps, type IconSize } from "./iconBase";
 export * from "./BrowserIcons";
-
+export * from "./LinkIcons";
 // Export individual icon components. A glyph is mapped once; alternate
 // names (kept for shadcn-style call sites) alias the same component.
 export const Activity = createIcon(Activity01Icon);

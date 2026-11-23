@@ -324,6 +324,21 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   // User actions carry their trace context to the agent (set by api()).
   const traceparent = requestTraceparent(options.headers);
   if (url.pathname === "/browser-history" || url.pathname.startsWith("/browser-history/")) return callBridge<T>(bridge, "history", { path: url.pathname + url.search, method, ...(options.body == null ? {} : { body: parseBody(options.body) }) });
+  if (method === "GET" && url.pathname === "/publishing") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getPublishing"));
+  }
+  if (method === "GET" && url.pathname === "/publishing/pages") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "listPublishedPages"));
+  }
+  const publishedPage = url.pathname.match(/^\/publishing\/pages\/([^/]+)$/u);
+  if (method === "DELETE" && publishedPage) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "unpublishPage", { id: decodeURIComponent(publishedPage[1]!) }));
+  }
+  const itemPublish = url.pathname.match(/^\/library\/([^/]+)\/publish$/u);
+  if (itemPublish && (method === "GET" || method === "POST" || method === "DELETE")) {
+    const operation = method === "GET" ? "previewPublish" : method === "POST" ? "publishItem" : "unpublishItem";
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, operation, { id: decodeURIComponent(itemPublish[1]!) }));
+  }
   if (url.pathname === "/library" && method === "GET") return callBridge<T>(bridge,"listLibrary",Object.fromEntries(url.searchParams));
   if (method === "POST" && ["/library/documents", "/library/blocks"].includes(url.pathname)) {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, url.pathname === "/library/documents" ? "saveLibraryDocument" : "saveLibraryBlock", parseBody(options.body)));

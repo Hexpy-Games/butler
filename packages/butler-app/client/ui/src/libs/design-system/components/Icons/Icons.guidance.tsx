@@ -24,7 +24,12 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Pixel sizes (size={17}) drift off the 12/14/16/20/24/32 scale; mixed sizes in one row misalign.", render: () => <Stack align="row" gap="xs" cross="center"><Settings size="sm" /><Settings size="xl" /><Typo.Caption>sm + xl</Typo.Caption></Stack> },
     },
   ],
-  content: ["Name new mappings after the meaning (FolderPlus), not the glyph file."],
+  content: [
+    "Name new mappings after the meaning (FolderPlus), not the glyph file.",
+    "Link copies or names a link.",
+    "Share opens the system share sheet.",
+    "Unlink stops a published link.",
+  ],
   accessibility: ["Icons are decorative (aria-hidden); the surrounding label carries the meaning."],
   tokens: ["--icon-size-sm", "--icon-size-md", "--icon-size-lg"],
 };

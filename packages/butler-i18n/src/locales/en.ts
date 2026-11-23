@@ -1,4 +1,5 @@
 import { workFailureLine } from "../work-failure.ts";
+import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -423,6 +424,7 @@ export const enUsCopy: AppCopy = {
   },
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
   canon: CANON_COPY["en-US"],
+  publishing: PUBLISHING_COPY["en-US"],
   sessionInfo: SESSION_INFO_COPY["en-US"],
   fileViewer: FILE_VIEWER_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],

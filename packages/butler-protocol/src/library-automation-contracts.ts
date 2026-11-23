@@ -3,6 +3,7 @@ export type LibraryKind = "scrap" | "document" | "bookmark" | "output";
 export interface LibraryItem {
   id: string; kind: LibraryKind | "doc"; title: string; url: string; capturedAt: string; updatedAt?: string;
   site?: string; session?: string; file?: ElementFileRef; output?: string; image_url?: string; crop?: string;
+  published?: { page_id: string; url: string };
 }
 export interface LibraryPage { items: LibraryItem[]; next_cursor?: string | null }
 export interface LibraryFacets { total: number }

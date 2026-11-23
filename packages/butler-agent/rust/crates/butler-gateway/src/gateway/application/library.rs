@@ -28,6 +28,10 @@ pub enum AppLibraryCommand {
         url: String,
     },
     Save(Value),
+    SetPublished {
+        id: String,
+        published: Option<Value>,
+    },
     SaveDocumentBlock {
         document_id: String,
         index: usize,
@@ -96,6 +100,9 @@ impl AppApplication {
             }
             C::Item { id } => self.library_read(move |db| blocks::get(db, &id)),
             C::Save(item) => self.library_write(move |db| save_item(db, item)),
+            C::SetPublished { id, published } => {
+                self.library_write(move |db| records::set_published(db, &id, published))
+            }
             C::Delete { id } => self.library_write(move |db| delete(db, &id)),
             C::Snapshot { id } => self.library_read(move |db| snapshot(db, &id)),
             C::Groups { kind } => self.library_read(move |db| groups::overview(db, &kind)),
