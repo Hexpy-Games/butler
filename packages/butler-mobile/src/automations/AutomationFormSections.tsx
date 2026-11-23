@@ -52,7 +52,7 @@ export function AutomationFormSections({ draft, set, error }: {
       {error?.field === "accessMode" || error?.field === "form"
         ? <ListGroupItem><Text tone="danger">{error.message}</Text></ListGroupItem> : null}
     </ListGroup>
-    <ListGroup label={copy.frequency}>
+    <ListGroup>
       <SelectRow title={copy.frequency} value={frequency} options={frequencies}
         onSelect={value => set(d => withFrequency(d, value), "interval")} />
       {schedule ? <>
