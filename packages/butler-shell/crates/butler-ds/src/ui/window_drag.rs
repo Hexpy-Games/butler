@@ -5,19 +5,22 @@ use std::cell::Cell;
 thread_local!(static ARMED: Cell<bool> = const { Cell::new(false) });
 
 /// A window drag band: a press and move moves the window, a double click does what the system
-/// setting says. On Windows the band also answers the OS hit test, which moves and maximizes
-/// itself before a move reaches these handlers.
+/// setting says. On Windows the band answers the OS hit test through the same
+/// `window_control_area_at_mouse` map, so a no-drag rect is never HTCAPTION, even under an overlay.
 pub fn area(el: Div) -> Div {
     el.window_control_area(WindowControlArea::Drag)
         .on_mouse_down(MouseButton::Left, |event, window, _| {
             if window.is_fullscreen() {
                 return;
             }
+            let drag = window.window_control_area_at_mouse() == Some(WindowControlArea::Drag);
             if event.click_count == 2 {
                 ARMED.set(false);
-                window.titlebar_double_click();
+                if drag {
+                    window.titlebar_double_click();
+                }
             } else {
-                ARMED.set(true);
+                ARMED.set(drag);
             }
         })
         .on_mouse_down_out(|_, _, _| ARMED.set(false))
@@ -37,8 +40,9 @@ pub fn take_armed() -> bool {
 
 /// A control inside a drag band: it takes the press, so the band never moves the window from it.
 pub fn no_drag(el: Div) -> Div {
-    el.on_mouse_down(MouseButton::Left, |_, _, cx| {
-        ARMED.set(false);
-        cx.stop_propagation();
-    })
+    el.window_control_area(WindowControlArea::NoDrag)
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            ARMED.set(false);
+            cx.stop_propagation();
+        })
 }
