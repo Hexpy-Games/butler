@@ -112,6 +112,7 @@ pub use configuration::{
     ProviderKeySaveError, QuietHours, ResolvedImageModel, SavedProviderKey, SettingsError,
     generate_pkce_verifier, pkce_challenge,
 };
+pub(crate) use configuration::{stored_secret_refs, stored_secret_refs_from_value};
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
 /// Process-owned immutable catalog data and lazily allocated tokenizer.

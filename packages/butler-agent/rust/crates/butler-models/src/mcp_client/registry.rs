@@ -410,32 +410,6 @@ fn string_field<'a>(value: &'a serde_json::Map<String, Value>, key: &str) -> Opt
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn stored_secret_refs(
-    data_root: &Path,
-) -> Result<Vec<(String, SecretBackend)>, McpRegistryError> {
-    stored_secret_refs_from_value(&read_registry_value(data_root)?)
-}
-
-pub(super) fn stored_secret_refs_from_value(
-    registry: &Value,
-) -> Result<Vec<(String, SecretBackend)>, McpRegistryError> {
-    let mut refs = Vec::new();
-    for value in registry
-        .get("servers")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_object)
-    {
-        let mut server = normalize_server(value)?;
-        refs.extend(
-            literal_slots(&mut server)
-                .filter_map(|(id, secret)| secret.storage.map(|backend| (id, backend))),
-        );
-    }
-    Ok(refs)
-}
-
 pub(super) fn literal_slots(
     server: &mut McpServerConfig,
 ) -> impl Iterator<Item = (String, &mut SecretValue)> {

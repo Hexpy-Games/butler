@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use butler_platform::secrets::{SYSTEM_BACKEND, SecretBackend, SecretError, SecretKey, SecretText};
 use butler_vault::vault::ItemKind;
+use serde_json::Value;
 use tokio::task::spawn_blocking;
 
 use super::secret_store::{CredentialStoreError, ProviderSecrets};
@@ -114,4 +115,67 @@ pub(super) fn mcp_store_key(
 
 pub(super) fn mcp_vault_id(id: &str) -> String {
     format!("mcp/{id}")
+}
+
+pub(crate) fn stored_secret_refs(
+    data_root: &Path,
+) -> Result<Vec<(String, SecretBackend)>, butler_core::configuration::ConfigError> {
+    let registry = butler_core::configuration::read_json_object(
+        &data_root.join("config").join("mcp-servers.json"),
+    )?;
+    Ok(stored_secret_refs_from_value(&registry))
+}
+
+pub(crate) fn stored_secret_refs_from_value(registry: &Value) -> Vec<(String, SecretBackend)> {
+    let mut refs = Vec::new();
+    for server in registry
+        .get("servers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(server_id) = server.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        for field in ["env", "headers"] {
+            for item in server
+                .get(field)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if matches!(
+                    item.get("source").and_then(Value::as_str),
+                    Some("env" | "file")
+                ) {
+                    continue;
+                }
+                let key = item
+                    .get("key")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim()
+                    .chars()
+                    .map(|ch| {
+                        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                            ch
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect::<String>();
+                if key.is_empty() {
+                    continue;
+                }
+                if let Some(backend) = item
+                    .get("storage")
+                    .and_then(Value::as_str)
+                    .and_then(SecretBackend::from_name)
+                {
+                    refs.push((format!("{server_id}/{field}/{key}"), backend));
+                }
+            }
+        }
+    }
+    refs
 }

@@ -11,7 +11,6 @@ pub use children::stop_mcp_children;
 mod image_capability;
 mod management;
 mod registry;
-pub(crate) use registry::stored_secret_refs;
 mod session;
 mod sse_transport;
 mod stored;

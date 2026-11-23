@@ -2,7 +2,7 @@
 use super::{
     credentials::{CREDENTIALS_FILE, CredentialsFile},
     local_credentials,
-    mcp_secrets::{mcp_store_key, mcp_vault_id},
+    mcp_secrets::{mcp_store_key, mcp_vault_id, stored_secret_refs},
     secret_store,
 };
 use butler_platform::secrets::{SecretBackend, SecretText};
@@ -59,7 +59,7 @@ pub fn vault_legacy_items(root: &Path) -> io::Result<Vec<LegacyItem>> {
             });
         }
     }
-    for (id, backend) in crate::mcp_client::stored_secret_refs(root).map_err(io::Error::other)? {
+    for (id, backend) in stored_secret_refs(root).map_err(io::Error::other)? {
         let key = mcp_store_key(root, backend, &id).map_err(io::Error::other)?;
         let mut sources = Vec::new();
         if backend.is_system() {

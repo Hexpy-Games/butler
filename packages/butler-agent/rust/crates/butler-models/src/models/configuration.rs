@@ -29,6 +29,7 @@ mod logging;
 mod mcp;
 mod mcp_secrets;
 pub use mcp_secrets::McpSecretStore;
+pub(crate) use mcp_secrets::{stored_secret_refs, stored_secret_refs_from_value};
 mod mutations;
 mod proactive;
 mod probes;

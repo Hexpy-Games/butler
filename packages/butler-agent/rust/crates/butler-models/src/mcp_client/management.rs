@@ -4,13 +4,14 @@ use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 
+use crate::models::{stored_secret_refs, stored_secret_refs_from_value};
+
 use super::registry::McpRegistryError;
 use super::{
     McpClient,
     registry::{
         McpServerConfig, normalize_server_config, normalize_server_id, now_iso,
-        read_registry_value, redact_server, registry_path, server_to_value, stored_secret_refs,
-        stored_secret_refs_from_value,
+        read_registry_value, redact_server, registry_path, server_to_value,
     },
 };
 
@@ -200,7 +201,7 @@ impl McpClient {
         let _permit = self.configuration_writes.acquire_owned().await;
         let (mut next, reply, changed, old_refs) = tokio::task::spawn_blocking(move || {
             let registry = read_registry_value(&data_root)?;
-            let old_refs = stored_secret_refs_from_value(&registry)?;
+            let old_refs = stored_secret_refs_from_value(&registry);
             let (next, reply, changed) = operation(registry)?;
             Ok::<_, McpRegistryError>((next, reply, changed, old_refs))
         })
@@ -212,7 +213,7 @@ impl McpClient {
             let path_guard = Arc::clone(&self.registry_path_guard);
             let new_refs = tokio::task::spawn_blocking(move || {
                 write_registry(&data_root, path_guard.as_ref(), &next)?;
-                stored_secret_refs(&data_root)
+                stored_secret_refs(&data_root).map_err(McpRegistryError::from)
             })
             .await
             .map_err(McpRegistryError::WriteTask)??;
