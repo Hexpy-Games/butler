@@ -199,6 +199,7 @@ pub(super) async fn hit(
     ) else {
         return Ok(None);
     };
+    let image = super::crop::shot(page, &crop, cx).await?;
     let url = cx
         .update(|cx| cx.global::<BrowserState>().tab(page).map(|t| t.url.clone()))
         .unwrap_or_default();
@@ -210,6 +211,7 @@ pub(super) async fn hit(
         data: json!({
             "id": uuid::Uuid::new_v4().to_string(), "tab": page.0.as_ref(), "url": url, "site": site,
             "capturedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "crop": image,
             "title": data["title"], "text": data["text"], "tag": data["tag"], "rect": rect, "cropRect": crop, "identity": data["identity"],
         }),
         frame: level.frame.clone(),

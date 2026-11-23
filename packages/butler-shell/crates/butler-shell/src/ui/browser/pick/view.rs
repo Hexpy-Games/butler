@@ -81,6 +81,7 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<An
             .child(cover().child(recorder))
             .child(outline)
             .children(marker)
+            .child(super::bar::bar(tab, cx))
             .into_any_element(),
     )
 }

@@ -5,6 +5,7 @@ pub(crate) mod context;
 mod controls;
 mod decision;
 pub(crate) mod editor;
+pub(crate) mod elements;
 mod files;
 mod inputs;
 mod library_drop;
@@ -152,6 +153,10 @@ impl Composer {
         let within = cx.focus_handle().tab_stop(false);
         let mut subscriptions = Self::focus_listeners(&handle, &within, window, cx);
         subscriptions.extend([
+            cx.observe_global::<elements::Drafts>(|this, cx| {
+                this.recompute(cx);
+                cx.notify();
+            }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
             }),
@@ -220,11 +225,12 @@ impl Composer {
             .map(|(id, refusal)| (id, image_refusal_label(refusal, lang).into()))
             .collect();
         let (open, remove) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let picked = elements::chips(&blocked, cx);
         let tiles = composer_attachments(
             &attached,
             &self.attachments,
             &blocked,
-            None,
+            picked,
             move |id, _, cx| {
                 let id = id.to_string();
                 let _ = open.update(cx, |_, cx| Self::open_attached(&id, cx));
@@ -370,8 +376,10 @@ impl Composer {
         // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
         // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
         let scoped = self.inputs.draft_key.is_some();
+        let picked = !elements::current(cx).is_empty();
         let fold = &self.fold;
-        let expanded = scoped || !self.collapse || fold.engaged || fold.decision || fold.protected;
+        let expanded =
+            scoped || !self.collapse || fold.engaged || fold.decision || fold.protected || picked;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if !scoped {
             card = card.large();

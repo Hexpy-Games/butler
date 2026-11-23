@@ -86,6 +86,10 @@ pub(super) fn call(frame: &Value, cx: &mut App) {
                 }
             });
         }
+        Some("page.selection") => {
+            let value = crate::ui::browser::pick::result(&tab_id(&args["tab"]), cx);
+            reply(id, value, cx);
+        }
         _ => {}
     }
 }

@@ -43,7 +43,7 @@ fn decode(url: &str) -> Option<Image> {
     ))
 }
 
-fn base64(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn base64(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
     let (mut bits, mut count) = (0u32, 0u32);
     for byte in text.bytes().filter(|byte| *byte != b'=') {

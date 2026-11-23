@@ -366,9 +366,7 @@ impl Headless {
         };
         let turn = frame["turn_id"].as_str().map(str::to_owned);
         match op {
-            "tab.selection" => {
-                return json!({"status":"ok","tab":id,"untrusted_content":{"kind":"web_page_data","elements":[]}});
-            }
+            "tab.selection" => return host::selection(&browser, &page).await,
             "tab.cancel" => {
                 page.shared.with_tab(id, |t| {
                     if t.call_id.as_ref() == args["call_id"].as_str().map(str::to_owned).as_ref() {

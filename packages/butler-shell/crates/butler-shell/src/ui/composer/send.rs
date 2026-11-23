@@ -44,6 +44,7 @@ impl Outgoing {
                 }
             }
         });
+        super::elements::restore(&self.submission, cx);
     }
 
     /// The `POST /messages` body of `sendMessage`: the text, content parts, attachments and
@@ -123,6 +124,7 @@ impl Composer {
             return;
         }
         ComposerState::update(cx, |draft| draft.submission_accepted(&outgoing.submission));
+        super::elements::sent(&outgoing.submission, cx);
         self.pull_state(window, cx);
         window.invalidate_character_coordinates();
         cx.emit(ComposerEvent::Send(Box::new(outgoing)));
@@ -144,6 +146,7 @@ impl Composer {
             active_turn,
             uploading_count,
             live_connection_lost: self.inputs.reconnecting,
+            elements: super::elements::current(cx),
         };
         let submission = ComposerState::update(cx, |draft| draft.begin_submit(input))?;
         let attachments = ComposerState::read(cx, |draft| draft.attachments.clone());
@@ -168,6 +171,7 @@ impl Composer {
                     ComposerState::update(cx, |draft| {
                         draft.submission_accepted(&outgoing.submission);
                     });
+                    super::elements::sent(&outgoing.submission, cx);
                 } else {
                     let lang = Ds::get(cx).lang();
                     toast::show(cx, Toast::error(words(lang).queue_failed));

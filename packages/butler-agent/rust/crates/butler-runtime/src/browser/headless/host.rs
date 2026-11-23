@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Where pages come from when an attached App owns them (signed-in profile, the user's tab list).
 pub trait PageHost: Send + Sync {
-    /// `page.open` | `page.close` | `page.hold`; answers the host's result object.
+    /// `page.open` | `page.close` | `page.hold` | `page.selection`; answers the host's result object.
     /// An implementation must answer or fail every call within 25 seconds; the
     /// executor does not add its own timeout.
     fn call(&self, op: &'static str, args: Value) -> PortFuture;
@@ -190,4 +190,15 @@ pub(super) async fn waiting(
             .await;
     }
     json!({"status":"ok"})
+}
+
+/// `tab.selection` (Electron `selection.result`): the App's picks on the tab; without the App there are none.
+pub(super) async fn selection(browser: &Browser, page: &Page) -> Value {
+    let id = page.tab.as_str();
+    let Some(host) = browser.host() else {
+        return json!({"status":"ok","tab":id,"untrusted_content":{"kind":"web_page_data","elements":[]}});
+    };
+    host.call("page.selection", json!({"tab":id}))
+        .await
+        .unwrap_or_else(|_| json!({"status":"unknown","reason":"browser_unavailable"}))
 }

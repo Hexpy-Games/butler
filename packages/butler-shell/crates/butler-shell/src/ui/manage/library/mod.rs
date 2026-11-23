@@ -8,7 +8,7 @@
 pub(crate) mod detail;
 mod filters;
 mod kind;
-mod main;
+pub(crate) mod main;
 pub(crate) use main::copy::get as card_words;
 pub(crate) use main::{CARD_COLUMNS, card::library_card, open::open_library_item};
 mod toolbar;

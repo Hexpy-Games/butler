@@ -188,7 +188,7 @@ fn settle(id: &TabId, cx: &mut App) {
             None
         }
     };
-    // CARVE-OUT(pick-slice-2): a drag carries the picks out or draws an area; until then it picks nothing.
+    // CARVE-OUT(pick-slice-2b): a drag carries the picks out (2b) or draws an area (slice 4); until then it picks nothing.
     let Some(Press {
         moved: false,
         item: Some(item),

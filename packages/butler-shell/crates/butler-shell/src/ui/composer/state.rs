@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use gpui::{App, Global};
 
+use crate::ui::composer::elements::{ElementAttachment, capture_content};
 use crate::ui::composer::menus::ModelChoice;
 use crate::ui::source::wire::{
     AccessMode, MessageContent, MessageContentPart, MessageFileKind, MessageFileRef,
@@ -305,6 +306,8 @@ pub(crate) struct SubmitInput {
     pub(crate) uploading_count: usize,
     /// `liveConnectionLost`
     pub(crate) live_connection_lost: bool,
+    /// The draft's picked page elements (useElementDraft).
+    pub(crate) elements: Vec<ElementAttachment>,
 }
 
 /// An accepted-to-send draft: its text, controls and where it came from.
@@ -315,6 +318,7 @@ pub(crate) struct Submission {
     session_id: String,
     revision: u64,
     attachments: Vec<ComposerAttachment>,
+    elements: Vec<ElementAttachment>,
 }
 
 impl Submission {
@@ -337,19 +341,25 @@ impl Submission {
             session_id: String::new(),
             revision: 0,
             attachments: Vec::new(),
+            elements: Vec::new(),
         }
+    }
+
+    pub(crate) fn elements(&self) -> (&str, &[ElementAttachment]) {
+        (&self.session_id, &self.elements)
     }
 }
 
 impl ComposerState {
     /// `useComposerSubmit`: the checks, then the submission to send (`onSend`). `None` when the
     /// draft is empty, blocked, or a send is already in flight without a running turn.
-    pub(crate) fn begin_submit(&mut self, input: SubmitInput) -> Option<Submission> {
+    pub(crate) fn begin_submit(&mut self, mut input: SubmitInput) -> Option<Submission> {
+        let elements = std::mem::take(&mut input.elements);
         if input.live_connection_lost {
             return None;
         }
         let value = input.text.trim();
-        if (value.is_empty() && self.attachments.is_empty())
+        if (value.is_empty() && self.attachments.is_empty() && elements.is_empty())
             || !self.blocked_attachments.is_empty()
             || (input.is_sending && !input.active_turn)
             || input.uploading_count > 0
@@ -366,10 +376,13 @@ impl ComposerState {
             } else {
                 QueuePolicy::SendNow
             },
-            attachments: (self.attachments.iter())
-                .map(|attachment| attachment.file.clone())
+            attachments: self
+                .attachments
+                .iter()
+                .map(|a| a.file.clone())
+                .chain(elements.iter().map(|e| e.file.clone()))
                 .collect(),
-            content_parts: self.content_parts.clone(),
+            content_parts: capture_content(self.content_parts.clone(), &input.text, &elements),
             workspace_mode: self.workspace_mode,
         };
         Some(Submission {
@@ -378,6 +391,7 @@ impl ComposerState {
             session_id: self.draft_session_id.clone(),
             revision: self.draft_revision,
             attachments: self.attachments.clone(),
+            elements,
         })
     }
 

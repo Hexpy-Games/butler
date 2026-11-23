@@ -112,6 +112,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         }),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
         "image-viewer" => open_image_viewer(h, arg),
+        "pick-attach" => pick_attach(h),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         // The main window closes; the tray's Open brings one back.
@@ -165,6 +166,19 @@ fn open_image_viewer(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     h.update(|_, _, cx| ui::shell::image_viewer::open(vec![entry], 0, cx))
 }
 
+/// `pick-attach`: what the selection bar's "Add to chat" runs (the DS gives no anchor per action).
+fn pick_attach(h: &mut Harness) -> anyhow::Result<()> {
+    h.update(|_, _, cx| {
+        if let Some(id) = cx
+            .global::<ui::browser::model::BrowserState>()
+            .active()
+            .cloned()
+        {
+            ui::browser::pick::attach(&id, cx);
+        }
+    })
+}
+
 /// `tick <ms>`: advances the clock and runs what is due, without `wait`'s settle.
 fn tick(h: &mut Harness, ms: &str) -> anyhow::Result<()> {
     h.cx.advance_clock(Duration::from_millis(ms.parse()?));
@@ -207,6 +221,7 @@ fn browser_report(h: &mut Harness, command: &str) -> anyhow::Result<()> {
     }
     super::settle(&mut h.cx, h.handle);
     h.update(|s, _, cx| {
+                let composer: Vec<_> = ui::composer::elements::current(cx).iter().map(|e| serde_json::json!({"title":e.title,"site":e.site,"image":e.preview.as_ref().map_or(0, |p| p.bytes().len())})).collect();
                 let model = cx.global::<ui::browser::model::BrowserState>();
                 let view = match s.view(cx) {
                     ui::manage::View::Browser => "browser", ui::manage::View::Session => "session",
@@ -221,7 +236,7 @@ fn browser_report(h: &mut Harness, command: &str) -> anyhow::Result<()> {
                 let download_events = cx.try_global::<ui::browser::downloads::Downloads>().map(ui::browser::downloads::Downloads::events).unwrap_or_default();
                 #[cfg(not(feature = "cef"))]
                 let download_events = serde_json::json!({});
-                println!("LIVE BROWSER {}", serde_json::json!({"view":view,"active":model.active().map(|id|id.0.as_ref()),"tabs":tabs,"download_events":download_events}));
+                println!("LIVE BROWSER {}", serde_json::json!({"view":view,"active":model.active().map(|id|id.0.as_ref()),"tabs":tabs,"download_events":download_events,"composer_elements":composer}));
             })
 }
 

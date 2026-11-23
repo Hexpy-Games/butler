@@ -138,6 +138,7 @@ impl Composer {
     /// `useComposerState`: the visible workers, the task rows of the active turn and the send
     /// and stop gates, from the shell's inputs and the draft.
     pub(super) fn recompute(&mut self, cx: &mut Context<Self>) {
+        let elements = super::elements::current(cx);
         let active_worker = !self.inputs.workers.is_empty();
         let turn_active = (self.inputs.turn_state.as_deref()).is_some_and(is_active_turn_state);
         let parent_active = turn_active || self.inputs.active_progress().is_some();
@@ -145,10 +146,16 @@ impl Composer {
         let latest_turn_cancellable = self.inputs.latest_turn_cancellable;
         let active_model = self.active_model().cloned();
         ComposerState::update(cx, |draft| {
+            let mut attachments = draft.attachments.clone();
+            attachments.extend(
+                elements
+                    .iter()
+                    .map(super::elements::ElementAttachment::attachment),
+            );
             let (send, blocked) = state::send_state(&state::SendInputs {
                 model_state,
                 text: &draft.text,
-                attachments: &draft.attachments,
+                attachments: &attachments,
                 is_sending: false,
                 uploading_count: draft.uploading_count,
                 active_model: active_model.as_ref(),

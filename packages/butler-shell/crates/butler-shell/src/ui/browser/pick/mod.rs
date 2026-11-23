@@ -1,5 +1,7 @@
 //! Isolated-world browser reader and selection wire types.
+mod bar;
 mod copy;
+mod crop;
 mod follow;
 mod geometry;
 mod input;
@@ -119,6 +121,35 @@ fn changed(id: &TabId, cx: &mut App) {
     model.publisher.changed(&model.tabs);
     follow::sync(id, cx);
     cx.refresh_windows();
+}
+/// The picks as Electron's `selection.result` lists them, each with its crop.
+fn elements(id: &TabId, cx: &App) -> Vec<Value> {
+    cx.global::<BrowserState>()
+        .tab(id)
+        .map(|t| t.selections.iter().map(|p| p.data.clone()).collect())
+        .unwrap_or_default()
+}
+/// Electron `selection.result`: the tab's picks as untrusted page data (`tab.selection`).
+pub(crate) fn result(id: &TabId, cx: &App) -> Value {
+    json!({"status":"ok","tab":id.0.as_ref(),"untrusted_content":{"kind":"web_page_data","elements":elements(id, cx)}})
+}
+/// Electron `selection.clear`.
+pub(crate) fn clear(id: &TabId, cx: &mut App) {
+    if let Some(tab) = cx
+        .global_mut::<BrowserState>()
+        .tabs
+        .iter_mut()
+        .find(|t| &t.id == id)
+    {
+        tab.selections.clear();
+    }
+    changed(id, cx);
+}
+/// Electron `command("attach")` → `attachElements(activeChatId, …)`: the picks join the
+/// composer's draft.
+pub(crate) fn attach(id: &TabId, cx: &mut App) {
+    let session = crate::ui::composer::elements::draft_key(cx);
+    crate::ui::composer::elements::attach(session, elements(id, cx), cx);
 }
 /// Electron `navigated`: every navigation clears the hover and the preferred level; a new main document also drops the worlds and the picks, a sub-frame only the frames' state.
 pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
