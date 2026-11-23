@@ -8,8 +8,9 @@
 pub(crate) mod detail;
 mod filters;
 mod kind;
-pub(crate) mod main;
+mod main;
 pub(crate) use main::copy::get as card_words;
+pub(crate) use main::media::base64;
 pub(crate) use main::{CARD_COLUMNS, card::library_card, open::open_library_item};
 mod toolbar;
 pub(crate) mod types;

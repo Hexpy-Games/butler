@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use super::attachments::upload_bytes;
 use super::state::{ComposerAttachment, ComposerState, Submission};
 use crate::ui::browser::pick::words;
-use crate::ui::manage::library::main::media::base64;
+use crate::ui::manage::library::base64;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{
     MessageContent, MessageContentPart, MessageFileKind, MessageFileRef,
@@ -144,7 +144,7 @@ pub(crate) fn sent(submission: &Submission, cx: &mut App) {
         return;
     }
     change(session, cx, |l| {
-        l.retain(|i| !sent.iter().any(|s| s.id == i.id))
+        l.retain(|i| !sent.iter().any(|s| s.id == i.id));
     });
 }
 
