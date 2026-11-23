@@ -8,7 +8,7 @@ pub(super) fn anchor_y(layout: &Value, anchor: &str) -> Option<f64> {
 }
 
 /// A number (`y`, `h`, …) of `anchor` in a layout report.
-fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
+pub(super) fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
     layout
         .as_array()?
         .iter()
@@ -50,6 +50,8 @@ fn visible_message(layout: &Value) -> String {
 /// press outside it still closes it. (A DOM overlay on top takes the wheel, and its scroller has
 /// `overscroll-behavior: contain`.) A wheel over the sidebar's peek card never scrolls the
 /// conversation under it.
+/// One mouse-wheel notch (in lines) moves the conversation Electron's distance: 40 px on macOS,
+/// 100 on Windows, 120 on Linux.
 #[tokio::test]
 async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -84,11 +86,27 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     shell.run(&["wheel chat-transcript 60", "wait 500"]).await?;
     let moved = layout(&mut shell, "moved", &message).await?;
     let control = anchor_y(&moved, &message).expect("message y") - y0;
+    // One wheel notch in lines moves Chromium's distance for this OS.
+    let (lines, notch) = match butler_platform::launcher::node_platform() {
+        "darwin" => (1., 40.),
+        "win32" => (3., 100.),
+        _ => (3., 120.),
+    };
+    shell
+        .run(&[
+            &format!("wheel chat-transcript {lines} 0.5 0.5 lines"),
+            "wait 500",
+        ])
+        .await?;
+    let notched = layout(&mut shell, "notched", &message).await?;
+    let notch_dy = anchor_y(&notched, &message).expect("message y")
+        - anchor_y(&moved, &message).expect("message y");
 
     let (list_dy, chat_dy) = popover_scroll(&mut shell).await?;
     let (peek_control, card_right, transcript_left, peek_dy) = peek_scroll(&mut shell).await?;
     let measured = format!(
-        "control (wheel over the chat) moved it {control}; capped list: chat moved {chat_dy}, \
+        "control (wheel over the chat) moved it {control}; one notch moved it {notch_dy} (Electron {notch}); \
+         capped list: chat moved {chat_dy}, \
          list moved {list_dy}; peek control {peek_control}; peek card right {card_right}, \
          transcript left {transcript_left}; peek chat moved {peek_dy}"
     );
@@ -96,6 +114,9 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     let mut failed = Vec::new();
     if control.abs() < 20. {
         failed.push("(control) the wheel over the chat did not move it");
+    }
+    if (notch_dy - notch).abs() > 1. {
+        failed.push("one wheel notch did not move the chat Electron's distance");
     }
     if chat_dy.abs() > 0.5 {
         failed.push("the chat scrolled behind a popover's list");
