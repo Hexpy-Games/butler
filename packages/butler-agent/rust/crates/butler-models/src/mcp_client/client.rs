@@ -5,13 +5,14 @@ use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    registry::{McpServerConfig, read_registry, redact_text, resolve_secrets},
+    registry::{McpServerConfig, read_registry, redact_text},
     session::Operation,
     transport::{project_resources, project_templates, project_tools, with_probe_error},
 };
 #[derive(Clone)]
 pub struct McpClient {
     pub(super) data_root: PathBuf,
+    pub(super) secrets: Arc<crate::models::McpSecretStore>,
     pub(super) overlay: Option<Arc<dyn super::McpOverlay>>,
     pub(super) environment: Arc<HashMap<String, String>>,
     pub(super) configuration_writes: Arc<butler_core::configuration::ConfigurationWrites>,
@@ -63,6 +64,7 @@ impl McpClient {
     #[cfg(any(test, feature = "test-support"))]
     pub fn new(data_root: PathBuf, environment: HashMap<String, String>) -> Self {
         Self {
+            secrets: Arc::new(crate::models::McpSecretStore::new(data_root.clone())),
             data_root,
             overlay: None,
             environment: Arc::new(environment),
@@ -78,6 +80,7 @@ impl McpClient {
         registry_path_guard: Arc<RegistryPathGuard>,
     ) -> Self {
         Self {
+            secrets: Arc::new(crate::models::McpSecretStore::new(data_root.clone())),
             data_root,
             overlay: None,
             environment: Arc::new(environment),
@@ -147,7 +150,7 @@ impl McpClient {
         if tool_name.is_empty() {
             return Ok(None);
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
+        let secrets = self.resolve(&server).await.map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
@@ -225,7 +228,7 @@ impl McpClient {
                 false,
             ));
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
+        let secrets = self.resolve(&server).await.map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
@@ -330,7 +333,7 @@ impl McpClient {
                 false,
             ));
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
+        let secrets = self.resolve(&server).await.map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
@@ -402,7 +405,7 @@ impl McpClient {
         if signal.is_cancelled() {
             return with_probe_error(base, "MCP discovery was cancelled.");
         }
-        let Ok(secrets) = resolve_secrets(server, &self.environment) else {
+        let Ok(secrets) = self.resolve(server).await else {
             return with_probe_error(base, "MCP server credentials are unavailable.");
         };
         let result = Box::pin(self.with_server(server, &secrets, Operation::Probe, signal)).await;

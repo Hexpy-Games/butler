@@ -13,6 +13,7 @@ mod management;
 mod registry;
 mod session;
 mod sse_transport;
+mod stored;
 #[cfg(test)]
 pub(crate) use sse_transport::parser_tests::parses_fragmented_multiline_events;
 mod transport;
