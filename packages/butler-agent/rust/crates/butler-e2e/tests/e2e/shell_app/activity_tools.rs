@@ -58,7 +58,6 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
     let sid = &child.session;
     let det = format!("work-details-{sid}");
     let edge = format!("work-details-edge-{sid}");
-    let act = format!("activity-{activity}");
     shell
         .run(&[
             &row,
@@ -68,9 +67,7 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
             &format!("reveal steward-disclosure-{sid} chat-transcript"),
             &format!("click steward-disclosure-{sid}"),
             &format!("wait-anchor {det}"),
-            &format!("click {act}-group-button"),
-            &format!("wait-anchor {act}-group-row-0"),
-            &format!("click {act}-group-row-0"),
+            &format!("wheel steward-observer-open-{sid} -120"),
             "wait 500",
             &format!("expect-anchor {edge}:start"),
         ])

@@ -267,13 +267,13 @@ fn follow_latest(
     canvas(
         |_, _, _| (),
         move |_, (), window, _| {
-            let mut before = handle.offset();
+            let mut before = handle.target_offset();
             window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
                 if phase.capture() {
-                    before = handle.offset();
+                    before = handle.target_offset();
                     return;
                 }
-                if handle.offset() == before {
+                if handle.target_offset() == before {
                     return;
                 }
                 let toward_start = event.delta.pixel_delta(window.line_height()).y > px(0.);
