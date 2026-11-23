@@ -2,8 +2,9 @@ use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::turn::{
     CanonicalMessageStore, ContinuationBudgetTransition, HostDependencies,
     ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, PortFuture, PreparedTurn,
-    ProgressEventRepository, ProgressWrite, StateExecutionClaim, StopPersistenceOutcome,
-    StorageReadiness, TransitionCommitError, TurnRecord, TurnStore, TurnTransition,
+    ProgressEventRepository, ProgressWrite, SettledTurn, StateExecutionClaim,
+    StopPersistenceOutcome, StorageReadiness, TransitionCommitError, TurnRecord, TurnStore,
+    TurnTransition,
 };
 use crate::btcc::{BtccError, ProgressDestination};
 use tokio_util::sync::CancellationToken;
@@ -125,31 +126,30 @@ impl TurnStore for BtccRepositories {
                 .map_err(BtccError::from)
         })
     }
-    fn answered_turns(&self, answer_turn_id: &str) -> PortFuture<'_, Vec<String>> {
+    fn settled_turns(&self, session_id: &str) -> PortFuture<'_, Vec<SettledTurn>> {
         let storage = self.storage.clone();
-        let id = answer_turn_id.to_owned();
+        let id = session_id.to_owned();
         Box::pin(async move {
             storage
-                .execute(move |db| transitions::answered::answered_turns(db, &id))
+                .execute(move |db| transitions::answered::settled_turns(db, &id))
                 .await
                 .map_err(BtccError::from)
         })
     }
-    fn close_answered(&self, parents: Vec<String>, answer_turn_id: &str) -> PortFuture<'_, ()> {
+    fn close_settled(&self, settled: Vec<SettledTurn>) -> PortFuture<'_, ()> {
         let storage = self.storage.clone();
-        let id = answer_turn_id.to_owned();
         Box::pin(async move {
             storage
-                .execute(move |db| transitions::answered::close_answered(db, &parents, &id))
+                .execute(move |db| transitions::answered::close_settled(db, &settled))
                 .await
                 .map_err(BtccError::from)
         })
     }
-    fn recovery_answers(&self) -> PortFuture<'_, Vec<String>> {
+    fn waiting_sessions(&self) -> PortFuture<'_, Vec<String>> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .execute(transitions::answered::recovery_answers)
+                .execute(transitions::answered::waiting_sessions)
                 .await
                 .map_err(BtccError::from)
         })

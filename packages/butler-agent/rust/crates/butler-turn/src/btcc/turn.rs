@@ -41,7 +41,7 @@ pub use contracts::{
 };
 pub use ports::{
     AgentLoop, AgentLoopError, AgentLoopProgress, CanonicalMessageStore, HostDependencies,
-    PortFuture, PreparedConversation, ProgressEventRepository, StorageReadiness,
+    PortFuture, PreparedConversation, ProgressEventRepository, SettledTurn, StorageReadiness,
     TransitionCommitError, TurnStore,
 };
 pub(crate) use ports::{PreparedExecution, TurnPreparation};
@@ -125,53 +125,36 @@ impl TurnFacade {
                     );
                 }
                 execution.conversation.complete(outcome.clone()).await?;
-                if let Err(error) = self
-                    .close_answered(&prepared.request.turn_id, &prepared.request.session_id)
-                    .await
-                {
-                    butler_core::diagnostic!(
-                        "warning: answered close failed for {}: {}",
-                        prepared.request.turn_id,
-                        error.code()
-                    );
+                if let Err(e) = self.close_settled(&prepared.request.session_id).await {
+                    log_close(&prepared.request.turn_id, &e);
                 }
             }
             TurnOutcomeKind::Cancelled { .. } | TurnOutcomeKind::AlreadyCancelled { .. } => {
                 execution.conversation.cancel().await?;
+                if let Err(e) = self.close_settled(&prepared.request.session_id).await {
+                    log_close(&prepared.request.turn_id, &e);
+                }
             }
             _ => {}
         }
         Ok(outcome)
     }
 
-    async fn close_answered(
-        &self,
-        answer_turn_id: &str,
-        session_id: &str,
-    ) -> Result<(), BtccError> {
-        let parents = self.store.answered_turns(answer_turn_id).await?;
-        if parents.is_empty() {
-            return Ok(());
+    async fn close_settled(&self, session_id: &str) -> Result<(), BtccError> {
+        loop {
+            let settled = self.store.settled_turns(session_id).await?;
+            if settled.is_empty() {
+                return Ok(());
+            }
+            self.preparation.close_settled(session_id, &settled).await?; // conversation first
+            self.store.close_settled(settled).await?; // BTCC last; recovery retries a gap
         }
-        self.preparation
-            .close_answered(session_id, &parents, answer_turn_id)
-            .await?;
-        self.store.close_answered(parents, answer_turn_id).await
     }
 
     async fn recover_answered(&self) -> Result<(), BtccError> {
-        for id in self.store.recovery_answers().await? {
-            let result = match self.store.find_turn(&id).await {
-                Ok(Some(turn)) => self.close_answered(&id, &turn.session_id).await,
-                Ok(None) => continue,
-                Err(error) => Err(error),
-            };
-            if let Err(error) = result {
-                butler_core::diagnostic!(
-                    "warning: answered close failed for {}: {}",
-                    id,
-                    error.code()
-                );
+        for session in self.store.waiting_sessions().await? {
+            if let Err(e) = self.close_settled(&session).await {
+                log_close(&session, &e);
             }
         }
         Ok(())
@@ -196,6 +179,9 @@ impl TurnFacade {
                     };
                 }
             };
+            if let Err(e) = self.close_settled(&turn.session_id).await {
+                log_close(turn_id, &e);
+            }
             let destination = match turn.progress_destination.clone() {
                 Some(value) => Some(value),
                 None => self.progress.first_destination(turn_id).await?,
@@ -226,6 +212,14 @@ impl TurnFacade {
         }
         Ok(outcome)
     }
+}
+
+fn log_close(turn_id: &str, error: &BtccError) {
+    butler_core::diagnostic!(
+        "warning: settled close failed for {}: {}",
+        turn_id,
+        error.code()
+    );
 }
 
 fn fenced(turn_id: &str) -> TurnOutcome {

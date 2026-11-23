@@ -12,7 +12,8 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use super::{
-    ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, TurnPreparation, TurnStore,
+    ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, SettledTurn,
+    TurnPreparation, TurnStore,
 };
 use crate::btcc::BtccCode;
 use crate::btcc::storage::{BtccRepositories, StorageCode, WakeAuthorization};
@@ -315,15 +316,9 @@ impl TurnPreparation for DefaultTurnPreparation {
         Box::pin(self.prepare_owned(request))
     }
 
-    fn close_answered(
-        &self,
-        session_id: &str,
-        parents: &[String],
-        answer_turn_id: &str,
-    ) -> PortFuture<'_, ()> {
+    fn close_settled(&self, session_id: &str, settled: &[SettledTurn]) -> PortFuture<'_, ()> {
         let session_id = session_id.to_owned();
-        let parents = parents.to_vec();
-        let answer_turn_id = answer_turn_id.to_owned();
+        let settled = settled.to_vec();
         Box::pin(async move {
             let binding = self
                 .binding_store
@@ -337,12 +332,11 @@ impl TurnPreparation for DefaultTurnPreparation {
                     )
                 })?;
             let now = self.conversation_store.identity_clock().now_iso();
-            for parent in parents {
+            for s in settled {
                 if let Some(answered) = self
                     .conversation_store
-                    .finalize_answered(&parent, &answer_turn_id, &now)
+                    .finalize_answered(&s.turn_id, s.answer_turn_id.as_deref(), &now)
                     .await?
-                    && let Some(out) = answered.assistant_message_id
                 {
                     let _ = self
                         .observer
@@ -350,9 +344,9 @@ impl TurnPreparation for DefaultTurnPreparation {
                             project_id: binding.project_id.clone(),
                             runtime_session_id: session_id.clone(),
                             conversation_session_id: answered.session_id,
-                            conversation_turn_id: parent,
+                            conversation_turn_id: s.turn_id,
                             inbound_message_id: answered.request_message_id,
-                            outbound_message_id: out,
+                            outbound_message_id: answered.assistant_message_id.unwrap_or_default(),
                             outcome_generation: answered.generation,
                             completed_at: now.clone(),
                         })

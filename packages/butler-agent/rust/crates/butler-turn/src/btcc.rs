@@ -67,8 +67,9 @@ pub use turn::{
     ContentRef, ContextAssembly, ContextSection, ContinuationBudgetTransition,
     DefaultTurnPreparation, DeliveryOutbox, ExecutionRoute, FinalDisposition, HostDependencies,
     ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, ModelRouteWrite, PortFuture,
-    PreparedConversation, ProgressEvent, StateExecutionClaim, SuspensionReason, TerminalOutcome,
-    TurnCheckpoint, TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
+    PreparedConversation, ProgressEvent, SettledTurn, StateExecutionClaim, SuspensionReason,
+    TerminalOutcome, TurnCheckpoint, TurnFacadeDependencies, TurnRecord, TurnSemanticState,
+    TurnStore, WakeIdentity,
 };
 pub use turn::{
     AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
@@ -241,7 +242,7 @@ impl Btcc {
         self.inner.run_turn(request).await
     }
 
-    /// Closes waiting turns whose result replies were already delivered.
+    /// Closes waiting turns whose children are all terminal.
     pub async fn recover_answered(&self) -> Result<(), BtccError> {
         self.inner.recover_answered().await
     }

@@ -50,78 +50,32 @@ impl AgentConversationStore {
     pub(crate) async fn finalize_answered(
         &self,
         turn_id: &str,
-        answer_turn_id: &str,
+        answer_turn_id: Option<&str>,
         completed_at: &str,
     ) -> ConversationResult<Option<AnsweredTurn>> {
         let clock = self.identity_clock().clone();
         let turn_id = turn_id.to_owned();
-        let answer_turn_id = answer_turn_id.to_owned();
+        let answer_turn_id = answer_turn_id.map(str::to_owned);
         let completed_at = completed_at.to_owned();
         self.execute(move |connection| {
-            let tx = connection.transaction().map_err(ConversationError::sqlite)?;
-            let answer = read_outcome(&tx, &answer_turn_id)?
-                .filter(|outcome| outcome.outcome == TurnOutcomeKind::Delivered)
-                .ok_or_else(|| {
-                    ConversationError::new(ConversationTurnNotFound, "answer outcome missing")
-                })?;
-            let generation = match read_outcome(&tx, &turn_id)? {
-                Some(outcome) if outcome.outcome == TurnOutcomeKind::Delivered => return Ok(None),
-                Some(outcome) => outcome.generation + 1.0,
-                None => 1.0,
-            };
-            let Some(turn) = get_turn(&tx, &turn_id)? else {
-                return Ok(None);
-            };
-            let Some(request_message_id): Option<String> = tx
-                .query_row(
-                    "SELECT id FROM conversation_messages WHERE session_id=?1 AND role='user'
-                     AND turn_id=?2 ORDER BY seq LIMIT 1",
-                    params![turn.session_id, turn_id],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(ConversationError::sqlite)?
-            else {
-                return Ok(None);
-            };
-            let assistant_message_id = answer.public_assistant_message_id;
-            if let Some(id) = &assistant_message_id {
-                tx.execute(
-                    "UPDATE conversation_messages SET origin_kind='assistant_public',
-                     origin_reason='verified_public_result_reply' WHERE id=?1 AND origin_kind='internal_control'",
-                    [id],
-                )
+            let tx = connection
+                .transaction()
                 .map_err(ConversationError::sqlite)?;
-            }
-            let input = FinalizeTurnInput {
-                turn_id: turn_id.clone(),
-                status: Some("complete".into()),
-                completed_at: Some(completed_at.clone()),
-                outcome_capsule: Some(TurnOutcomeCapsuleInput {
-                    session_id: turn.session_id.clone(),
-                    turn_id,
-                    generation,
-                    outcome: TurnOutcomeKind::Delivered,
-                    request_message_id: Some(request_message_id.clone()),
-                    public_assistant_message_id: assistant_message_id.clone(),
-                    provider_id: answer.provider_id,
-                    model_ref: answer.model_ref,
-                    evidence_refs: vec![],
-                    unresolved_obligations: vec![],
-                    continuation: None,
-                    safe_code: None,
-                    id: None,
-                    created_at: Some(completed_at.clone()),
-                }),
+            let answer = if let Some(id) = answer_turn_id.as_deref() {
+                let answer = read_outcome(&tx, id)?
+                    .filter(|outcome| outcome.outcome == TurnOutcomeKind::Delivered)
+                    .ok_or_else(|| {
+                        ConversationError::new(ConversationTurnNotFound, "answer outcome missing")
+                    })?;
+                Some(answer)
+            } else {
+                None
             };
-            finalize_in_transaction(&tx, clock.as_ref(), input, &completed_at)?;
-            tx.commit().map_err(ConversationError::sqlite)?;
-            Ok(Some(AnsweredTurn {
-                session_id: turn.session_id,
-                request_message_id,
-                assistant_message_id,
-                generation,
-            }))
+            let result = finalize_settled(&tx, clock.as_ref(), turn_id, answer, &completed_at)?;
+            if result.is_some() {
+                tx.commit().map_err(ConversationError::sqlite)?;
+            }
+            Ok(result)
         })
         .await
     }
@@ -267,6 +221,99 @@ fn bind_session(
         session_id,
         now,
     )
+}
+
+fn finalize_settled(
+    tx: &Connection,
+    clock: &dyn ConversationIdentityClock,
+    turn_id: String,
+    answer: Option<TurnOutcomeCapsule>,
+    completed_at: &str,
+) -> ConversationResult<Option<AnsweredTurn>> {
+    let (target, status, safe_code) = if answer.is_some() {
+        (TurnOutcomeKind::Delivered, "complete", None)
+    } else {
+        (
+            TurnOutcomeKind::Cancelled,
+            "aborted",
+            Some("turn_aborted".into()),
+        )
+    };
+    let generation = match read_outcome(tx, &turn_id)? {
+        Some(outcome) if outcome.outcome == target => return Ok(None),
+        Some(outcome) => outcome.generation + 1.0,
+        None => 1.0,
+    };
+    let Some(turn) = get_turn(tx, &turn_id)? else {
+        return Ok(None);
+    };
+    let Some((request_message_id, origin_kind)) =
+        settled_request_message(tx, &turn.session_id, &turn_id)?
+    else {
+        return Ok(None);
+    };
+    let (assistant_message_id, provider_id, model_ref) = answer
+        .map(|answer| {
+            (
+                answer.public_assistant_message_id,
+                answer.provider_id,
+                answer.model_ref,
+            )
+        })
+        .unwrap_or_default();
+    if origin_kind == "user_input"
+        && let Some(id) = &assistant_message_id
+    {
+        tx.execute(
+            "UPDATE conversation_messages SET origin_kind='assistant_public',
+             origin_reason='verified_public_result_reply' WHERE id=?1 AND origin_kind='internal_control'",
+            [id],
+        )
+        .map_err(ConversationError::sqlite)?;
+    }
+    let input = FinalizeTurnInput {
+        turn_id: turn_id.clone(),
+        status: Some(status.into()),
+        completed_at: Some(completed_at.to_owned()),
+        outcome_capsule: Some(TurnOutcomeCapsuleInput {
+            session_id: turn.session_id.clone(),
+            turn_id,
+            generation,
+            outcome: target,
+            request_message_id: Some(request_message_id.clone()),
+            public_assistant_message_id: assistant_message_id.clone(),
+            provider_id,
+            model_ref,
+            evidence_refs: vec![],
+            unresolved_obligations: vec![],
+            continuation: None,
+            safe_code,
+            id: None,
+            created_at: Some(completed_at.to_owned()),
+        }),
+    };
+    finalize_in_transaction(tx, clock, input, completed_at)?;
+    Ok(Some(AnsweredTurn {
+        session_id: turn.session_id,
+        request_message_id,
+        assistant_message_id,
+        generation,
+    }))
+}
+
+fn settled_request_message(
+    tx: &Connection,
+    session_id: &str,
+    turn_id: &str,
+) -> ConversationResult<Option<(String, String)>> {
+    tx.query_row(
+        "SELECT id, origin_kind FROM conversation_messages WHERE session_id=?1 AND role='user'
+         AND turn_id=?2 ORDER BY seq LIMIT 1",
+        params![session_id, turn_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(ConversationError::sqlite)
 }
 
 fn finalize(

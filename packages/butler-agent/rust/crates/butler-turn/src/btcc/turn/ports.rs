@@ -19,14 +19,16 @@ pub struct PreparedExecution {
     pub conversation: Box<dyn PreparedConversation>,
 }
 
+/// A waiting turn whose children are all terminal, with the result turn that answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettledTurn {
+    pub turn_id: String,
+    pub answer_turn_id: Option<String>,
+}
+
 pub trait TurnPreparation: Send + Sync {
     fn prepare(&self, request: TurnRequest) -> PortFuture<'_, PreparedExecution>;
-    fn close_answered(
-        &self,
-        _session_id: &str,
-        _parents: &[String],
-        _answer_turn_id: &str,
-    ) -> PortFuture<'_, ()> {
+    fn close_settled(&self, _session_id: &str, _settled: &[SettledTurn]) -> PortFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
 }
@@ -66,16 +68,16 @@ pub trait TurnStore: Send + Sync {
     fn activate_successor(&self, turn_id: &str) -> PortFuture<'_, TurnRecord>;
     /// Persists a stop request for the turn.
     fn stop(&self, turn_id: &str) -> PortFuture<'_, StopPersistenceOutcome>;
-    /// Finds waiting turns answered by a delivered result turn.
-    fn answered_turns(&self, _answer_turn_id: &str) -> PortFuture<'_, Vec<String>> {
+    /// Finds settled waiting turns in this session.
+    fn settled_turns(&self, _session_id: &str) -> PortFuture<'_, Vec<SettledTurn>> {
         Box::pin(async { Ok(vec![]) })
     }
-    /// Persists delivery of the answer for the waiting turns.
-    fn close_answered(&self, _parents: Vec<String>, _answer_turn_id: &str) -> PortFuture<'_, ()> {
+    /// Persists the terminal outcomes of settled waiting turns.
+    fn close_settled(&self, _settled: Vec<SettledTurn>) -> PortFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
-    /// Finds delivered result turns to replay through answered close.
-    fn recovery_answers(&self) -> PortFuture<'_, Vec<String>> {
+    /// Finds sessions with waiting turns for recovery.
+    fn waiting_sessions(&self) -> PortFuture<'_, Vec<String>> {
         Box::pin(async { Ok(vec![]) })
     }
     /// Records a model-route event under the turn claim.
