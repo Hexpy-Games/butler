@@ -1,4 +1,4 @@
-# The experimental gpui desktop shell (?ㅽ뿕). A separate workspace from
+# The experimental gpui desktop shell (실험). A separate workspace from
 # packages/butler-agent/rust: it pins gpui to the Butler fork of gpui-ce (branch
 # butler/lens, by the rev below) and adapts the UI-independent agent client.
 [workspace]
