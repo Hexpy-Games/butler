@@ -4,6 +4,7 @@
   "crates": [
     "packages/butler-agent/rust/crates/butler-agent",
     "packages/butler-agent/rust/crates/butler-agent-cli",
+    "packages/butler-agent/rust/crates/butler-backup",
     "packages/butler-agent/rust/crates/butler-canon",
     "packages/butler-agent/rust/crates/butler-core",
     "packages/butler-agent/rust/crates/butler-gateway",
