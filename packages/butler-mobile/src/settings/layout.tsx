@@ -1,5 +1,5 @@
-import { type ComponentRef, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { type ComponentRef, useEffect, useRef, useState } from "react";
+import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, type NativeStackNavigationOptions } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
@@ -15,12 +15,28 @@ export function SettingsScreen({ title, children, options }: {
   // KeyboardAvoidingView measures from its parent, not the window; offset by where the page starts on screen.
   const frame = useRef<ComponentRef<typeof View>>(null);
   const [top, setTop] = useState(0);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const offset = useRef(0);
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (event) => {
+      // Wait for the shrink above the keyboard, then move the focused field above it.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        TextInput.State.currentlyFocusedInput()?.measureInWindow((_x, y, _width, height) => {
+          const over = y + height + gutter - event.endCoordinates.screenY;
+          if (over > 0) scroll.current?.scrollTo({ y: offset.current + over, animated: true });
+        });
+      }));
+    });
+    return () => show.remove();
+  }, [gutter]);
+
   // iOS adds the bottom safe area through contentInsetAdjustmentBehavior; Android needs it in the content.
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...useHeaderOptions(), title, ...options }} />
     <View ref={frame} style={{ flex: 1 }} onLayout={() => frame.current?.measureInWindow((_x, y) => setTop(y))}>
       <KeyboardAvoidingView behavior="height" enabled={Platform.OS === "android"} keyboardVerticalOffset={top} style={{ flex: 1 }}>
-        <ScrollView automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
+        <ScrollView ref={scroll} scrollEventThrottle={16} onScroll={(event) => { offset.current = event.nativeEvent.contentOffset.y; }} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
