@@ -407,6 +407,7 @@ impl OsrRuntime {
             h.close_browser(1);
         }
     }
+    /// The frame a view last drew; it advances only through `next_frame` (one per display tick).
     pub fn frame(&self, page: u64) -> Option<Frame> {
         self.page(page).and_then(|p| p.borrow().frame.clone())
     }
