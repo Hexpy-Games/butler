@@ -298,19 +298,21 @@ impl QueuedMessage {
                 None => button.into_any_element(),
             }
         });
-        let action = |key: &'static str,
-                      (label, handler): &(SharedString, Option<Handler>),
-                      glyph| {
-            let mut button = IconButton::new((self.id.clone(), key), label.clone())
-                .icon(icon(glyph, IconSize::Sm, ds));
-            if busy {
-                button = button.disabled();
-            }
-            if let Some(handler) = handler.clone() {
-                button = button.on_click(move |event, window, cx| handler(event, window, cx));
-            }
-            button
-        };
+        let action =
+            |key: &'static str, (label, handler): &(SharedString, Option<Handler>), glyph| {
+                let mut button = IconButton::new((self.id.clone(), key), label.clone()).icon(icon(
+                    glyph,
+                    IconSize::Sm,
+                    ds,
+                ));
+                if busy {
+                    button = button.disabled();
+                }
+                if let Some(handler) = handler.clone() {
+                    button = button.on_click(move |event, window, cx| handler(event, window, cx));
+                }
+                button
+            };
         div()
             .flex()
             .items_center()
