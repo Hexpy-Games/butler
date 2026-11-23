@@ -366,7 +366,9 @@ impl TabStrip {
             .id((child_id(&self.id, "scroller"), "scroll"))
             .track_scroll(&fade.handle)
             .track_focus(&fade.focus)
+            // useTabStripScroller: a vertical wheel scrolls the strip sideways.
             .overflow_x_scroll()
+            .remap_wheel_axis()
             .children(fade.watch());
         fade.mask(row.into_any_element())
     }
