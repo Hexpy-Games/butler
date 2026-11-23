@@ -573,7 +573,7 @@ export const koKrCopy: AppCopy = {
     },
     outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다.", savedToLibrary: "서랍에 저장했습니다.", saveFailed: "서랍에 저장하지 못했습니다." },
     library: { changeFailed: "변경하지 못했습니다." },
-    automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다.", edit: "편집" },
+    automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다.", edit: "편집", allRuns: "모든 실행 기록" },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",

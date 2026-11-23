@@ -165,7 +165,7 @@ pub trait GatewayApplication:
     fn delete_automation(&self, id: String) -> ApplicationFuture<AutomationMutationResult>;
     fn run_automation(&self, id: String) -> ApplicationFuture<AutomationRunResult>;
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView>;
-    fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView>;
+    fn list_automation_runs(&self, q: RunsQuery) -> ApplicationFuture<AutomationRunListView>;
     fn image_usage(
         &self,
         _command: super::AppImageUsageCommand,

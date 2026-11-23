@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import type { AutomationDetail, AutomationRunSummary } from "../../../butler-protocol/src/index.ts";
+import type { AutomationDetail, AutomationRunPage, AutomationRunSummary } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { showToast } from "@/ds";
@@ -11,6 +11,7 @@ export function useAutomation(id: string) {
   const copy = getAppCopy(useAppLocale()).automations, M = useMobileCopy();
   const [automation, setAutomation] = useState<AutomationDetail | null>(null);
   const [runs, setRuns] = useState<AutomationRunSummary[]>([]);
+  const [moreRuns, setMoreRuns] = useState(false);
   const [error, setError] = useState(false), [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const path = `/automations/${encodeURIComponent(id)}`;
@@ -19,9 +20,10 @@ export function useAutomation(id: string) {
     try {
       const [detail, history] = await Promise.all([
         client!.request<{ automation: AutomationDetail }>(path),
-        client!.request<{ runs: AutomationRunSummary[] }>(`${path}/runs`),
+        client!.request<AutomationRunPage>(`${path}/runs?limit=6`),
       ]);
       setAutomation(detail.automation); setRuns(history.runs);
+      setMoreRuns(!!history.next_cursor);
     } catch { setError(true); }
   }, [client, path]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -40,5 +42,5 @@ export function useAutomation(id: string) {
     catch { showToast({ message: M.automations.deleteFailed, tone: "error" }); return false; }
     finally { setDeleting(false); }
   };
-  return { automation, runs, error, busy, deleting, load, act, remove };
+  return { automation, runs, moreRuns, error, busy, deleting, load, act, remove };
 }

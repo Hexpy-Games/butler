@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, read_body_with_limit};
 use crate::gateway::{
-    CreateAutomationRequest, UpdateAutomationRequest,
+    CreateAutomationRequest, RunsQuery, UpdateAutomationRequest,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 
@@ -81,7 +81,7 @@ pub(super) async fn route(
                 .await?,
         );
     }
-    if let Some(response) = route_action(&state, &method, suffix).await? {
+    if let Some(response) = route_action(&state, &method, suffix, uri).await? {
         return Ok(response);
     }
     route_item(state, request, method, suffix).await
@@ -107,14 +107,41 @@ async fn route_action(
     state: &Arc<HttpState>,
     method: &Method,
     suffix: &str,
+    uri: &Uri,
 ) -> Result<Option<Response>, HttpError> {
     if method == Method::GET
         && let Some(id) = suffix.strip_suffix("/runs")
     {
-        return Ok(Some(json(
-            StatusCode::OK,
-            state.application.list_automation_runs(decode(id)?).await?,
-        )?));
+        let mut query = super::params::query(uri);
+        let limit = query
+            .get("limit")
+            .map(|value| value.parse::<usize>())
+            .transpose()
+            .map_err(|_| HttpError::public(400, "invalid_limit", "Invalid page size."))?;
+        let cursor = query.remove("cursor");
+        if cursor
+            .as_ref()
+            .is_some_and(|value| value.is_empty() || value.len() > 128)
+        {
+            return Err(HttpError::public(
+                400,
+                "invalid_cursor",
+                "Invalid schedule runs page.",
+            ));
+        }
+        let paged = limit.is_some() || cursor.is_some();
+        let mut page = state
+            .application
+            .list_automation_runs(RunsQuery {
+                id: decode(id)?,
+                limit,
+                cursor,
+            })
+            .await?;
+        if !paged {
+            page.next_cursor = None;
+        }
+        return Ok(Some(json(StatusCode::OK, page)?));
     }
     if method == Method::POST
         && let Some(id) = suffix.strip_suffix("/run")

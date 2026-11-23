@@ -167,16 +167,37 @@ pub(in crate::gateway::application) fn queued(
         .map_err(AppStorageError::sqlite)
 }
 
+const RUN_PAGE: usize = 50;
+
 pub(in crate::gateway::application) fn runs(
     db: &Connection,
     id: &str,
-) -> Result<Vec<AutomationRunSummary>, AppStorageError> {
-    let mut statement = db.prepare("SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,safe_error_code,queued_message_id,turn_id,scheduled_at,late FROM app_automation_runs WHERE automation_id=?1 ORDER BY rowid DESC LIMIT 50").map_err(AppStorageError::sqlite)?;
-    statement
-        .query_map([id], run_row)
+    limit: Option<usize>,
+    cursor: Option<&str>,
+) -> Result<(Vec<AutomationRunSummary>, Option<String>), AppStorageError> {
+    let limit = limit.unwrap_or(RUN_PAGE).clamp(1, RUN_PAGE);
+    let mut statement = db
+        .prepare_cached(
+            "SELECT id,automation_id,target_session_id,state,trigger,started_at,completed_at,\
+             safe_error_code,queued_message_id,turn_id,scheduled_at,late \
+             FROM app_automation_runs WHERE automation_id=?1 AND (?2 IS NULL OR rowid<(\
+             SELECT rowid FROM app_automation_runs WHERE id=?2 AND automation_id=?1)) \
+             ORDER BY rowid DESC LIMIT ?3",
+        )
+        .map_err(AppStorageError::sqlite)?;
+    let mut rows = statement
+        .query_map(rusqlite::params![id, cursor, (limit + 1) as i64], run_row)
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(AppStorageError::sqlite)
+        .map_err(AppStorageError::sqlite)?;
+    let more = rows.len() > limit;
+    rows.truncate(limit);
+    let next = if more {
+        rows.last().map(|run| run.id.clone())
+    } else {
+        None
+    };
+    Ok((rows, next))
 }
 
 pub(in crate::gateway::application) fn run(

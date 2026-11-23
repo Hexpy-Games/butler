@@ -20,3 +20,4 @@ export interface AutomationRunSummary {
   id: string; automation_id: string; target_session_id: string; state: string; started_at: string;
   safe_error_code?: string; turn_id?: string;
 }
+export interface AutomationRunPage { runs: AutomationRunSummary[]; next_cursor?: string }

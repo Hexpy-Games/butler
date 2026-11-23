@@ -207,7 +207,10 @@ impl AppApplication {
         if batch_full && dispatched_queued > 0 {
             self.automation_wake.notify_one();
         }
-        Ok(AutomationRunListView { runs })
+        Ok(AutomationRunListView {
+            runs,
+            next_cursor: None,
+        })
     }
 
     async fn dispatch_queued(

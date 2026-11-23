@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { nextRunTime, runLabel, scheduleFrequency } from "@/automations/automationLabels";
 import { useAutomationModelOptions } from "@/automations/AutomationFormSections";
+import { RunRow } from "@/automations/RunRow";
 import { useAutomation } from "@/automations/useAutomation";
 import { timeLabel } from "@/conversation/sessions";
 import { Button, IconButton, icons, ListGroup, ListGroupItem, ListRow, Sheet, Text } from "@/ds";
@@ -14,7 +15,7 @@ import { accessModeOptions } from "@/settings/rows";
 export default function Automation() {
   const params = useLocalSearchParams<{ id: string; title: string }>();
   const locale = useAppLocale(), app = getAppCopy(locale), copy = app.automations, M = useMobileCopy();
-  const { automation: a, runs, error, busy, deleting: deletePending, load, act, remove } = useAutomation(params.id);
+  const { automation: a, runs, moreRuns, error, busy, deleting: deletePending, load, act, remove } = useAutomation(params.id);
   const models = useAutomationModelOptions();
   const [deleting, setDeleting] = useState(false);
   const now = new Date(), next = a ? nextRunTime(a, locale) : "";
@@ -52,9 +53,10 @@ export default function Automation() {
       </ListGroup>
       <ListGroup><ListRow icon={icons.Delete} destructive title={app.common.delete} onPress={() => setDeleting(true)} /></ListGroup>
       <ListGroup label={copy.fields.runs}>
-        {runs.length ? runs.map(run => <ListRow key={run.id} title={runLabel(run, copy.runs)} meta={timeLabel(run.started_at, locale, now)}
-          navigates={!!run.turn_id} onPress={run.turn_id ? () => router.push({ pathname: "/chat/[id]", params: { id: run.target_session_id, title: a.target_label } }) : undefined} />)
+        {runs.length ? runs.map(run => <RunRow key={run.id} run={run} target={a.target_label} now={now} />)
           : <ListGroupItem><Text variant="caption">{copy.runs.empty}</Text></ListGroupItem>}
+        {moreRuns ? <ListRow title={M.automations.allRuns} navigates
+          onPress={() => router.push({ pathname: "/automations/runs", params: { id: a.id, title: a.title, target: a.target_label } })} /> : null}
       </ListGroup>
       <Sheet open={deleting} onClose={() => setDeleting(false)} title={app.common.delete}
         description={app.settings.deleteSchedule(a.title)} cancelLabel={M.settings.cancel}

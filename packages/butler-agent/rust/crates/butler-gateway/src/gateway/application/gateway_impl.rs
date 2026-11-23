@@ -234,9 +234,9 @@ impl GatewayApplication for AppApplication {
         let this = self.clone_handle();
         Box::pin(async move { this.dispatch_due_request().await })
     }
-    fn list_automation_runs(&self, id: String) -> ApplicationFuture<AutomationRunListView> {
+    fn list_automation_runs(&self, q: RunsQuery) -> ApplicationFuture<AutomationRunListView> {
         let this = self.clone_handle();
-        Box::pin(async move { this.list_automation_runs_owned(id).await })
+        Box::pin(async move { this.list_automation_runs_owned(q).await })
     }
     fn upload_message_file(
         &self,

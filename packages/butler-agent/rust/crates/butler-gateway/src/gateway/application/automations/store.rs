@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use super::{
     AutomationDetail, AutomationDetailView, AutomationListView, AutomationMutationResult,
-    AutomationRunListView, AutomationSummary, CreateAutomationRequest, UpdateAutomationRequest,
-    records,
+    AutomationRunListView, AutomationSummary, CreateAutomationRequest, RunsQuery,
+    UpdateAutomationRequest, records,
 };
 use crate::gateway::AppIdentityClock;
 use crate::gateway::application::settings;
@@ -242,13 +242,12 @@ impl AppApplication {
 
     pub(crate) async fn list_automation_runs_owned(
         &self,
-        id: String,
+        q: RunsQuery,
     ) -> Result<AutomationRunListView, GatewayApplicationError> {
         self.storage
             .read(move |db| {
-                Ok(AutomationRunListView {
-                    runs: records::runs(db, &id)?,
-                })
+                let (runs, next_cursor) = records::runs(db, &q.id, q.limit, q.cursor.as_deref())?;
+                Ok(AutomationRunListView { runs, next_cursor })
             })
             .await
             .map_err(app_error)
