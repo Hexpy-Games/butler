@@ -22,6 +22,7 @@ import { anchoredStewardChildren } from "./stewardAnchors";
 import { latestStatus, turnStatusLabel } from "./workStatus";
 import { createSelectableRows } from "./selectableRows";
 import { SelectableRowsContext } from "@/ds/internal/textSelection";
+import { ImageSessionContext } from "./imageViewer";
 import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -30,7 +31,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
-  const options = useHeaderOptions(opaque(t.gradient("--conversation-bg").stops[0][0]));
+  const stops = t.gradient("--conversation-bg").stops;
+  const options = useHeaderOptions(opaque(stops[0][0]));
   const composer = useRef<ChatComposerHandle>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const session = useSessionView(id);
@@ -39,6 +41,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const [text, setText] = useState(initialText);
   const [pending, setPending] = useState<string | null>(null);
   const [dockHeight, setDockHeight] = useState(0);
+  const [keyboard, setKeyboard] = useState(0);
+  const [atEnd, setAtEnd] = useState(true);
   const [sends, setSends] = useState(0);
   const decision = view ? pendingDecision(view) : null;
   const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
@@ -54,7 +58,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
-      setText={setText} onSend={value => { void composer.current?.send(value); }} /> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
+      setText={setText} onSend={value => { void composer.current?.send(value); }} />
+      : <ConversationMessages {...session} dockHeight={dockHeight} keyboard={keyboard} sends={sends} onAtEndChange={setAtEnd}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -63,14 +68,16 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
     <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
-      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
-      onSend={() => setSends(value => value + 1)} />
+      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh}
+      onHeightChange={(height, covered) => { setDockHeight(height); setKeyboard(covered); }}
+      onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }} />
   </Surface>;
 }
 
-function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, children }: {
+function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, keyboard, sends, onAtEndChange, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
-  dockHeight: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  dockHeight: number; keyboard: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  onAtEndChange(atEnd: boolean): void;
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -87,19 +94,21 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const count = useRef(0);
   const atBottom = useRef(true);
   const dragging = useRef(false);
-  const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
+  // iOS adds the keyboard inset natively (automaticallyAdjustKeyboardInsets).
+  const inset = dockHeight + (Platform.OS === "android" ? keyboard : 0);
   const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
       || (view?.session_id !== "general" && (!!message.turn_activity_rows?.length || (message.status !== "streaming" && !!message.work_blocks?.length))))));
-  useEffect(() => { atBottom.current = true; setBottom(true); }, [sends]);
+  useEffect(() => { atBottom.current = true; onAtEndChange(true); }, [sends, onAtEndChange]);
   useEffect(() => {
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
     }
-  }, [dockHeight]);
+  }, [inset]);
   return <>
+    <ImageSessionContext.Provider value={view?.session_id}>
     <SelectableRowsContext.Provider value={selection}>
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
         renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
@@ -112,7 +121,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
         onViewableItemsChanged={selection?.onViewableItemsChanged}
         onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
         onScroll={({ nativeEvent }) => {
-          setBottom(nearEnd(nativeEvent));
+          onAtEndChange(nearEnd(nativeEvent));
           setScrolled(nativeEvent.contentOffset.y > 0);
         }}
         onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; selection?.begin(); }}
@@ -135,11 +144,11 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
           count.current = rows.length;
         }}
         ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-        ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
+        ListFooterComponent={<View style={{ paddingBottom: inset + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
       />
     </SelectableRowsContext.Provider>
+    </ImageSessionContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
-    <EdgeFade color={opaque(stops[stops.length - 1][0])} edge="bottom" offset={dockHeight} visible={!bottom} />
   </>;
 }
 
