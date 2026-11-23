@@ -304,6 +304,7 @@ async fn final_outbox_canonical_insert_and_observation_use_separate_transactions
         runtime_failure: None,
         execution_outcome: None,
         outputs: Vec::new(),
+        documents: Vec::new(),
         artifacts: vec![],
         changed_files: vec![],
         answer_blocks: Vec::new(),

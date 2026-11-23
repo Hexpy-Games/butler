@@ -41,6 +41,7 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
     let delivered = TurnOutcome {
         result: TurnOutcomeKind::Delivered(Box::new(DeliveredOutcome {
             outputs: Vec::new(),
+            documents: Vec::new(),
             turn_id: "turn-1".into(),
             message_id: "canonical-1".into(),
             content: "Done".into(),
@@ -98,6 +99,7 @@ fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
     let already = TurnOutcome {
         result: TurnOutcomeKind::AlreadyDelivered(Box::new(AlreadyDeliveredOutcome {
             outputs: Vec::new(),
+            documents: Vec::new(),
             turn_id: "turn-1".into(),
             message_id: "canonical-1".into(),
             content: "Done".into(),
