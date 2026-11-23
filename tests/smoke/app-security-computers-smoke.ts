@@ -1,10 +1,10 @@
 import { strict as assert } from "node:assert";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { computerAuthUrl, computerFingerprint, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
-import { createNativeAppServer } from "../support/native-app-server.ts";
+import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
 const language = process.env.COMPUTERS_SMOKE_LANGUAGE ?? "ko";
@@ -42,6 +42,105 @@ async function verifyLayouts(page: Page) {
   }
 }
 
+async function captureStates(page: Page, output: string, variant: string) {
+  const { computers: copy, common } = appCopy;
+  let captures = 0;
+  async function screenshot(state: string, target: Locator) {
+    await page.mouse.move(0, 0);
+    await target.scrollIntoViewIfNeeded({ timeout: 10_000 });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+    });
+    await page.getByRole("tooltip").waitFor({ state: "hidden" });
+    const path = join(output, `${state}-${variant}.png`);
+    await target.screenshot({ path, animations: "allow", timeout: 10_000 });
+    console.log(path);
+    captures++;
+  }
+
+  await assertVisible(section(page), copy.empty);
+  await screenshot("A1-empty", section(page));
+  await button(section(page), copy.add).click();
+  const dialog = addDialog(page);
+  const submit = button(dialog, copy.form.submit);
+  await screenshot("A3-form", dialog);
+
+  const name = copy.form.namePlaceholder;
+  await dialog.locator("#computer-name").fill(name);
+  await dialog.locator("#computer-address").fill(copy.form.addressPlaceholder);
+  await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
+  await dialog.locator("#computer-port").fill("22");
+  await dialog.locator("#computer-key-file").fill(copy.form.keyFilePlaceholder);
+  await submit.click();
+  const fingerprint = page.getByRole("alertdialog");
+  await assertVisible(fingerprint, computerFingerprint);
+  await screenshot("A4-fingerprint", fingerprint);
+
+  let release!: () => void;
+  fake.startHold = new Promise<void>((resolve) => { release = resolve; });
+  try {
+    const startRequest = page.waitForRequest((request) => /^\/computers\/[^/]+\/start$/u.test(new URL(request.url()).pathname));
+    await button(fingerprint, copy.fingerprint.confirm).click();
+    await startRequest;
+    await assertVisible(dialog.getByRole("status"), copy.form.preparing);
+    await screenshot("A5-preparing", dialog);
+  } finally {
+    release();
+    fake.startHold = undefined;
+  }
+
+  const ai = aiDialog(page);
+  await assertVisible(ai, copy.ai.sendKey);
+  await screenshot("M1-ai", ai);
+  await button(ai, appCopy.chatgptPlan.continue).click();
+  await assertVisible(ai, appCopy.chatgptSignIn.pending);
+  await page.waitForFunction((url) => (window as Window & { __opened?: string[] }).__opened?.includes(url), computerAuthUrl);
+  await screenshot("M2-chatgpt-waiting", ai);
+  await button(ai, common.cancel).click();
+  await ai.getByRole("combobox").click();
+  await page.getByRole("option", { name: "OpenAI", exact: true }).click();
+  assert(await button(ai, copy.ai.send).isEnabled());
+  await screenshot("M3-key-chosen", ai);
+  await button(ai, copy.ai.later).click();
+
+  await button(section(page), copy.add).click();
+  await dialog.locator("#computer-name").fill(name);
+  await dialog.locator("#computer-address").fill(copy.form.addressPlaceholder);
+  await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
+  for (const [state, step, code, message] of [
+    ["A6-key-login", "add", "ssh_auth_failed", copy.errors.keyLogin],
+    ["A6b-unreachable", "host-key", "ssh_unreachable", copy.errors.unreachable],
+    ["A6c-fingerprint-changed", "host-key", "host_key_changed", copy.errors.fingerprintChanged],
+    ["A7-unsupported", "add", "unsupported_computer", copy.errors.unsupported],
+  ] as const) {
+    fake.failNext(step, code);
+    await submit.click();
+    if (step === "add") await button(fingerprint, copy.fingerprint.confirm).click();
+    await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), message);
+    await screenshot(state, dialog);
+  }
+  await button(dialog, common.cancel).click();
+
+  fake.computers = [...computerFixtures.map((computer) => ({ ...computer })), ...fake.computers];
+  await page.reload();
+  const [connected, unreachable, logout] = computerFixtures;
+  await assertVisible(row(page, connected!.name), copy.status.connected);
+  await assertVisible(row(page, unreachable!.name), copy.status.disconnected);
+  await assertVisible(row(page, logout!.name), copy.status.stopsOnLogout);
+  await assertVisible(row(page, name), copy.status.aiNeeded);
+  await screenshot("A2-list", section(page));
+
+  fake.computers = computerFixtures.map((computer) => ({ ...computer }));
+  await page.reload();
+  const deleteDialog = page.locator('[data-test-class="computer-delete-dialog"]');
+  await button(row(page, connected!.name), copy.removeComputer(connected!.name)).click();
+  await screenshot("A8-delete", deleteDialog);
+  await deleteDialog.getByRole("checkbox", { name: copy.removeDialog.forget }).click();
+  await screenshot("A8-delete-forget", deleteDialog);
+  return captures;
+}
+
 const server = await createNativeAppServer({
   uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language } },
 });
@@ -53,30 +152,33 @@ try {
   const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
   browser = await launchSmokeBrowser();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await page.addInitScript(() => {
-    const urls: string[] = [];
-    Object.assign(window, { __opened: urls });
-    window.open = (url) => { urls.push(String(url)); return null; };
-  });
   let inventoryRevision: number | undefined;
-  await page.route(`${server.url}**`, async (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname;
-    const method = request.method();
-    if (path.startsWith("/computers") || (method === "GET" && path === "/credentials")) {
-      await route.fulfill(await fake.respond({ method, path, body: request.postDataJSON() }));
-      return;
-    }
-    const headers = { ...request.headers(), ...(path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders) };
-    if (path === "/memory/inventory" && method === "GET") {
-      const response = await route.fetch({ headers });
-      inventoryRevision = (await response.json()).data.revision;
-      await route.fulfill({ response });
-    } else {
-      if (path.startsWith("/memory/reset/computers/")) fake.calls.push({ method, path, body: request.postDataJSON() });
-      await route.continue({ headers });
-    }
-  });
+  async function configurePage(page: Page, server: NativeAppServerHandle, adminHeaders: Record<string, string>) {
+    await page.addInitScript(() => {
+      const urls: string[] = [];
+      Object.assign(window, { __opened: urls });
+      window.open = (url) => { urls.push(String(url)); return null; };
+    });
+    await page.route(`${server.url}**`, async (route) => {
+      const request = route.request();
+      const path = new URL(request.url()).pathname;
+      const method = request.method();
+      if (path.startsWith("/computers") || (method === "GET" && path === "/credentials")) {
+        await route.fulfill(await fake.respond({ method, path, body: request.postDataJSON() }));
+        return;
+      }
+      const headers = { ...request.headers(), ...(path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders) };
+      if (path === "/memory/inventory" && method === "GET") {
+        const response = await route.fetch({ headers });
+        inventoryRevision = (await response.json()).data.revision;
+        await route.fulfill({ response });
+      } else {
+        if (path.startsWith("/memory/reset/computers/")) fake.calls.push({ method, path, body: request.postDataJSON() });
+        await route.continue({ headers });
+      }
+    });
+  }
+  await configurePage(page, server, adminHeaders);
   await page.goto(server.url);
   await openSettings(page);
 
@@ -224,6 +326,48 @@ try {
   console.log(JSON.stringify({
     ok: true, checks: ["empty", "required", "home-folder", "fingerprint", "preparing", "later", "chatgpt", "send-key", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
   }));
+
+  const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
+  if (screenshots !== undefined) {
+    const output = resolve(screenshots);
+    mkdirSync(output, { recursive: true });
+    await page.close();
+    let captures = 0;
+    for (const [locale, variants] of [
+      ["ko", [["light", "desktop", 1280, 900], ["dark", "desktop", 1280, 900], ["light", "mobile", 375, 812]]],
+      ["en", [["light", "desktop", 1280, 900]]],
+    ] as const) {
+      setAppCopyLanguage(locale);
+      const captureServer = await createNativeAppServer({
+        uiRoot: resolve("packages/butler-app/client/ui/dist"), config: { user: { name: "Smoke", language: locale } },
+      });
+      let captureSecret = "";
+      try {
+        captureSecret = JSON.parse(readFileSync(join(captureServer.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret;
+        const headers = { ...captureServer.authHeaders, "x-butler-admin": captureSecret };
+        for (const [theme, size, width, height] of variants) {
+          fake.computers = [];
+          await captureServer.api("/settings", { method: "PATCH", headers, body: JSON.stringify({ appearance_theme: theme }) });
+          const context = await browser.newContext({ deviceScaleFactor: 2, viewport: { width, height } });
+          try {
+            const capturePage = await context.newPage();
+            await captureServer.signIn(capturePage);
+            await configurePage(capturePage, captureServer, headers);
+            await capturePage.goto(`${captureServer.url}?settings=security`, { waitUntil: "domcontentloaded" });
+            captures += await captureStates(capturePage, output, `${locale}-${theme}-${size}`);
+          } finally {
+            await context.close();
+          }
+        }
+      } catch (error) {
+        const message = String(error).replaceAll(captureServer.token, "[redacted]");
+        throw new Error(captureSecret ? message.replaceAll(captureSecret, "[redacted]") : message, { cause: error });
+      } finally {
+        await captureServer.stop();
+      }
+    }
+    console.log(JSON.stringify({ captures }));
+  }
 } catch (error) {
   const message = String(error).replaceAll(server.token, "[redacted]");
   console.error(secret ? message.replaceAll(secret, "[redacted]") : message);
