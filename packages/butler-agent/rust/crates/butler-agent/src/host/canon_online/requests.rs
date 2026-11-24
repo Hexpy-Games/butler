@@ -53,6 +53,9 @@ pub(super) async fn handle(
         let links: Vec<Value> = links.iter().map(|link| online.view(link)).collect();
         return Ok(json!({"links": links}));
     }
+    if let CanonOnlineRequest::Unlink { project_id } = request {
+        return unlink(online, project_id).await;
+    }
     let id = online.account.identity().await?.ok_or_else(signed_out)?;
     let account = &online.account;
     match request {
@@ -75,10 +78,13 @@ pub(super) async fn handle(
         CanonOnlineRequest::Join { project_id, token } => {
             join(online, &id, project_id, token).await
         }
-        CanonOnlineRequest::Unlink { project_id } => unlink(online, &id, project_id).await,
         CanonOnlineRequest::Leave { project_id } => {
-            let space = linked(online, &project_id).await?;
-            let member = format!("{}/members/{}", path(&space), encode(&id.account_id));
+            let link = link_row(online, &project_id)
+                .await?
+                .ok_or_else(not_linked)?;
+            same_account(&link, &id)?;
+            let space = link["space_id"].as_str().unwrap_or_default();
+            let member = format!("{}/members/{}", path(space), encode(&id.account_id));
             gone_ok(
                 account
                     .canon(&id.token, Method::DELETE, &member, None, 204)
@@ -325,20 +331,25 @@ async fn join(
     view(online, &project).await
 }
 
-async fn unlink(
-    online: &CanonOnline,
-    id: &CloudIdentity,
-    project: String,
-) -> Result<Value, GatewayApplicationError> {
+/// Leave and owner Unlink act on the server only as the link's own account.
+fn same_account(link: &Value, id: &CloudIdentity) -> Result<(), GatewayApplicationError> {
+    if link["account_id"] == id.account_id.as_str() {
+        return Ok(());
+    }
+    Err(public(
+        409,
+        "canon_online_account_mismatch",
+        "Sign in with the account that shared this project.",
+    ))
+}
+
+/// Owner Unlink deletes the space (needs the link's account); a detached or
+/// non-owner link is forgotten locally, signed in or not.
+async fn unlink(online: &CanonOnline, project: String) -> Result<Value, GatewayApplicationError> {
     let link = link_row(online, &project).await?.ok_or_else(not_linked)?;
     if link["state"] == "linked" && link["role"] == "owner" {
-        if link["account_id"] != id.account_id.as_str() {
-            return Err(public(
-                409,
-                "canon_online_account_mismatch",
-                "Sign in with the account that shared this project.",
-            ));
-        }
+        let id = online.account.identity().await?.ok_or_else(signed_out)?;
+        same_account(&link, &id)?;
         let space = link["space_id"].as_str().unwrap_or_default();
         gone_ok(
             online
