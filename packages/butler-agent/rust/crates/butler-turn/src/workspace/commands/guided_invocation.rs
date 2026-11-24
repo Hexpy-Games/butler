@@ -26,6 +26,28 @@ fn project_write_shell(
             vec![data.as_path()]
         };
     denied.extend(secrets.iter().map(PathBuf::as_path));
+    if !input.extra_write_roots.is_empty() {
+        denied.extend(input.installation_root.as_deref());
+        denied.extend(input.protected_roots.iter().map(PathBuf::as_path));
+    }
+    let roots = crate::workspace::FolderRoots {
+        butler_data: data,
+        protected_roots: &input.protected_roots,
+        installation_root: input.installation_root.as_deref(),
+    };
+    let extra: Vec<_> = input
+        .extra_write_roots
+        .iter()
+        .map(PathBuf::as_path)
+        .collect();
+    if extra.iter().any(|root| {
+        crate::workspace::allowed_folder(&root.to_string_lossy(), &roots)
+            .ok()
+            .as_deref()
+            != Some(*root)
+    }) {
+        return Err(command_sandbox::SandboxError::ProjectWriteUnavailable);
+    }
     let toolchain_roots =
         butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
             home: dirs.home,
@@ -36,6 +58,7 @@ fn project_write_shell(
         &input.command,
         environment,
         &input.workspace_root,
+        &extra,
         &writable,
         &denied,
         toolchain_roots.as_ref(),
@@ -72,12 +95,10 @@ pub(super) fn invocation(
     let shell = if input.access == GuidedAccess::ProjectWrite {
         project_write_shell(input, &environment, secrets)
     } else if input.access == GuidedAccess::ContainedObservation {
-        command_sandbox::login_shell_contained(
-            &input.command,
-            &environment,
-            &[],
-            &[input.workspace_root.as_path()],
-        )
+        let roots: Vec<_> = std::iter::once(input.workspace_root.as_path())
+            .chain(input.allowed_folders.iter().map(PathBuf::as_path))
+            .collect();
+        command_sandbox::login_shell_contained(&input.command, &environment, &[], &roots)
     } else if input.access == GuidedAccess::SecretReadsDenied {
         command_sandbox::login_shell(&input.command, access, &environment)
             .and_then(|shell| command_sandbox::deny_secret_reads(shell, &environment, None))
@@ -91,4 +112,52 @@ pub(super) fn invocation(
         )
     })?;
     Ok(invocation)
+}
+
+pub(super) async fn resolve_guided_cwd(
+    input: &GuidedCommandInput,
+    path_form: crate::workspace::PathForm,
+) -> Result<PathBuf, CommandError> {
+    use super::guided::guarded_directory;
+    let root = input.workspace_root.clone();
+    let cwd = input.cwd.clone();
+    let data = input.butler_data.clone();
+    let installation = input.installation_root.clone();
+    let protected = input.protected_roots.clone();
+    let allowed = input.allowed_folders.clone();
+    tokio::task::spawn_blocking(move || {
+        let Some(requested) = cwd.as_deref().filter(|value| !value.is_empty()) else {
+            return Ok(root);
+        };
+        if path_form.contained() && !allowed.is_empty() {
+            let absolute =
+                butler_platform::tool_paths::resolve(&root, requested).map_err(CommandError::io)?;
+            let roots = crate::workspace::ScopeRoots {
+                project: Some(&root),
+                allowed_folders: &allowed,
+                butler_data: &data,
+                protected_ledger_roots: &protected,
+                installation_root: installation.as_deref(),
+                attachments: &[],
+            };
+            if crate::workspace::classify_targets(&roots, &root, &[requested])
+                == crate::workspace::TargetScope::AllowedFolder
+            {
+                let real = crate::workspace::path_guard::realpath_or_nearest(&absolute);
+                if let Some(folder) = allowed.iter().find(|folder| {
+                    butler_platform::secure_fs::path_is_within(&real, folder)
+                        && butler_platform::secure_fs::canonicalize(folder)
+                            .as_ref()
+                            .is_ok_and(|path| path == *folder)
+                }) {
+                    return guarded_directory(folder, Some(&real.to_string_lossy()), path_form);
+                }
+            }
+        }
+        guarded_directory(&root, Some(requested), path_form)
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(CommandCode::CommandCwdFailed, error.to_string()).with_source(error)
+    })?
 }

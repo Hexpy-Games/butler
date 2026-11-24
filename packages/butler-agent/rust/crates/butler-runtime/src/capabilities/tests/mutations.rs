@@ -16,6 +16,7 @@ async fn rust(
         .invoke(
             name,
             CapabilityInvocation {
+                allowed_folders: &[],
                 contained: false,
                 call,
                 workspace_reference: None,

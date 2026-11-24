@@ -127,6 +127,7 @@ tool_names! {
     SteerSteward = "steer_steward",
     SteerWorker = "steer_worker",
     SummarizeUserProfile = "summarize_user_profile",
+    ProposePermissionRule = "propose_permission_rule",
     SwitchFolder = "switch_folder",
     ToolCall = "tool_call",
     ToolDescribe = "tool_describe",

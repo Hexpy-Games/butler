@@ -65,7 +65,9 @@ fn mutating(name: &str, args: &Map<String, Value>, catalog_effect: bool) -> bool
     catalog_effect
         || matches!(
             decision,
-            AccessDecision::Deny(DenyReason::ReadOnly | DenyReason::FullAccessRequired)
+            AccessDecision::Deny(
+                DenyReason::ReadOnly | DenyReason::FullAccessRequired | DenyReason::UserRule
+            )
         )
 }
 

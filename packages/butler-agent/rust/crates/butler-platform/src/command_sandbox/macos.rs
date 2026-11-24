@@ -53,6 +53,7 @@ pub(super) fn project_write(
     invocation: Invocation,
     environment: &std::collections::HashMap<String, String>,
     root: &Path,
+    extra_roots: &[&Path],
     writable: &[&Path],
     denied: &[&Path],
     _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
@@ -68,14 +69,19 @@ pub(super) fn project_write(
         }
         Ok::<_, SandboxError>(())
     };
-    rule(&mut profile, "allow file-write*", &[root])?;
+    let roots: Vec<_> = std::iter::once(root)
+        .chain(extra_roots.iter().copied())
+        .collect();
+    rule(&mut profile, "allow file-write*", &roots)?;
     rule(&mut profile, "deny file-write*", denied)?;
     rule(&mut profile, "allow file-write*", writable)?;
     profile.push_str("\n(allow file-write-data (literal \"/dev/null\"))");
-    let real = crate::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    for path in [root, real.as_path()] {
-        deny_project_secrets(&mut profile, path, "file-write*")?;
-        deny_project_secrets(&mut profile, path, "file-read*")?;
+    for root in roots {
+        let real = crate::secure_fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        for path in [root, real.as_path()] {
+            deny_project_secrets(&mut profile, path, "file-write*")?;
+            deny_project_secrets(&mut profile, path, "file-read*")?;
+        }
     }
     for credential in super::credentials::roots(environment) {
         rule(&mut profile, "deny file-read*", &[credential.as_path()])?;

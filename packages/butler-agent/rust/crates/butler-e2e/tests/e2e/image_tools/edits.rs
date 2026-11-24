@@ -150,7 +150,7 @@ async fn editor_authorizes_once_and_composites_for_both_providers() -> Result<()
             json!([image])
         );
         assert_eq!(cards[0]["approval"]["operation"]["image"]["mask"], mask);
-        approve(&f.s, "general", "deny").await?;
+        approve(&f.s, "general", "deny", None).await?;
         delivered(&f.s, "general", &turn).await?;
         // A later user turn edits the explicitly selected latest version.
         f.script(
@@ -162,7 +162,7 @@ async fn editor_authorizes_once_and_composites_for_both_providers() -> Result<()
             )],
         );
         let turn = paused(&f.s, "general", "Make it brighter").await?;
-        approve(&f.s, "general", "allow").await?;
+        approve(&f.s, "general", "allow", None).await?;
         delivered(&f.s, "general", &turn).await?;
         assert_eq!(f.output("followup")["parent"], id);
         f.finish().await?;

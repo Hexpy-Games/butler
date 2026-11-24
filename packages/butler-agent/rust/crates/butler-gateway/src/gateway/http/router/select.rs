@@ -99,7 +99,9 @@ fn commands(request: &Request<Body>) -> Option<Handler> {
             Handler::Subsessions,
         ),
         (
-            path.starts_with("/authority-requests") || path.starts_with("/authority-permissions"),
+            path.starts_with("/authority-requests")
+                || path.starts_with("/authority-permissions")
+                || family(path, "/allowed-folders"),
             Handler::Authority,
         ),
         (family(path, "/model-catalog"), Handler::Models),

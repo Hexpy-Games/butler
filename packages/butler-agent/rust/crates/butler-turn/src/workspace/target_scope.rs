@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 pub enum TargetScope {
     NoTarget,
     ProjectFolder,
+    AllowedFolder,
     Attachment,
     Outside,
     Protected,
@@ -17,6 +18,7 @@ pub enum TargetScope {
 pub struct ScopeRoots<'a> {
     pub attachments: &'a [PathBuf],
     pub project: Option<&'a Path>,
+    pub allowed_folders: &'a [PathBuf],
     pub butler_data: &'a Path,
     pub protected_ledger_roots: &'a [PathBuf],
     pub installation_root: Option<&'a Path>,
@@ -30,14 +32,20 @@ pub fn classify_targets(roots: &ScopeRoots<'_>, base: &Path, targets: &[&str]) -
         .project
         .and_then(|root| canonicalize(root).ok())
         .filter(|project| !path_is_within(&data, project));
+    let allowed: Vec<_> = roots
+        .allowed_folders
+        .iter()
+        .filter_map(|folder| canonicalize(folder).ok())
+        .filter(|folder| !path_is_within(&data, folder))
+        .collect();
     targets
         .iter()
-        .map(|target| classify(roots, base, target, project.as_deref(), &data))
+        .map(|target| classify(roots, base, target, project.as_deref(), &allowed, &data))
         .reduce(|scope, next| match (scope, next) {
             // Attachment execution is uncontained only when every target
             // is an exact attachment, including in mixed project reads.
-            (TargetScope::Attachment, TargetScope::ProjectFolder)
-            | (TargetScope::ProjectFolder, TargetScope::Attachment) => TargetScope::Outside,
+            (TargetScope::Attachment, TargetScope::ProjectFolder | TargetScope::AllowedFolder)
+            | (TargetScope::ProjectFolder | TargetScope::AllowedFolder, TargetScope::Attachment) => TargetScope::Outside,
             _ => scope.max(next),
         })
         .unwrap_or(TargetScope::NoTarget)
@@ -75,6 +83,7 @@ fn classify(
     base: &Path,
     target: &str,
     project: Option<&Path>,
+    allowed: &[PathBuf],
     data: &Path,
 ) -> TargetScope {
     let Ok(target) = butler_platform::tool_paths::parse(base, target) else {
@@ -104,28 +113,27 @@ fn classify(
     {
         return TargetScope::Protected;
     }
-    let Some(project) = project else {
+    if path_is_within(&real, data)
+        || roots
+            .installation_root
+            .is_some_and(|root| path_is_within(&real, &realpath_or_nearest(root)))
+        || roots
+            .protected_ledger_roots
+            .iter()
+            .any(|root| path_is_within(&real, &realpath_or_nearest(root)))
+    {
+        return TargetScope::Protected;
+    }
+    let (project, scope) = if let Some(project) = project.filter(|root| path_is_within(&real, root))
+    {
+        (project, TargetScope::ProjectFolder)
+    } else if let Some(folder) = allowed.iter().find(|root| path_is_within(&real, root)) {
+        (folder.as_path(), TargetScope::AllowedFolder)
+    } else {
         return TargetScope::Outside;
     };
-    let installed = roots
-        .installation_root
-        .is_some_and(|root| path_is_within(&real, &realpath_or_nearest(root)));
-    if !path_is_within(&real, project) {
-        return if path_is_within(&real, data)
-            || installed
-            || roots
-                .protected_ledger_roots
-                .iter()
-                .any(|root| path_is_within(&real, &realpath_or_nearest(root)))
-        {
-            TargetScope::Protected
-        } else {
-            TargetScope::Outside
-        };
-    }
     if inside_relative(project, &real).is_none_or(|rel| looks_sensitive(&rel.to_string_lossy()))
         || protected_path(project, &real, roots.protected_ledger_roots)
-        || installed
         // A hard link may alias a file outside the project (for example a
         // key linked in by a command); treat it like the outside original.
         || std::fs::symlink_metadata(&real)
@@ -133,6 +141,25 @@ fn classify(
     {
         TargetScope::Protected
     } else {
-        TargetScope::ProjectFolder
+        scope
     }
+}
+
+/// Keep relative paths based at the session workspace. Absolute paths in a
+/// consented folder use that folder's containment guard for the actual open.
+pub fn contained_target<'a>(
+    root: &'a Path,
+    requested: &str,
+    folders: &'a [PathBuf],
+) -> (&'a Path, String) {
+    if folders.is_empty() {
+        return (root, requested.to_owned());
+    }
+    if let Ok(path) = butler_platform::tool_paths::resolve(root, requested)
+        && !path_is_within(&path, root)
+        && let Some(folder) = folders.iter().find(|folder| path_is_within(&path, folder))
+    {
+        return (folder, path.to_string_lossy().into_owned());
+    }
+    (root, requested.to_owned())
 }

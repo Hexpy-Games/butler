@@ -60,7 +60,7 @@ async fn changed_parent(mode: &str) -> Result<(), HarnessError> {
                 cards[0]["approval"]["operation"]["command"],
                 "printf reviewed"
             );
-            crate::access_tiers::approve(&s, "general", "deny").await?;
+            crate::access_tiers::approve(&s, "general", "deny", None).await?;
             break;
         }
         assert!(Instant::now() < deadline, "child command did not ask");

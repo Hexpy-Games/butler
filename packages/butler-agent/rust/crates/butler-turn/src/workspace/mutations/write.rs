@@ -32,7 +32,12 @@ pub(super) fn execute(
         io::Replacement::RequiresExpectedDigest,
     )?;
     if input.create_parents {
-        let root = (input.context.path_form.contained()).then_some(input.context.root.as_path());
+        let root = prepared
+            .before
+            .path
+            .read_scope
+            .as_ref()
+            .map(|scope| scope.0.as_path());
         io::ensure_parent(&prepared, root)?;
     } else {
         // The observation checked an existing parent; recheck after preparation.

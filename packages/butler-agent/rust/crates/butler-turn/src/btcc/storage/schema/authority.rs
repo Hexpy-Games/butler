@@ -78,4 +78,18 @@ CREATE TABLE IF NOT EXISTS btcc_conversation_permissions (
 );
 CREATE INDEX IF NOT EXISTS idx_btcc_conversation_permissions_owner
 ON btcc_conversation_permissions(owner_session_id, revoked_at);
+
+CREATE TABLE IF NOT EXISTS btcc_permission_rules (
+  rule_id TEXT PRIMARY KEY,
+  effect TEXT NOT NULL CHECK (effect IN ('allow','deny')),
+  kind TEXT NOT NULL CHECK (kind IN ('command_prefix','folder')),
+  pattern TEXT NOT NULL,
+  owner_session_id TEXT,
+  created_at TEXT NOT NULL, revoked_at TEXT,
+  CHECK (kind = 'command_prefix' OR (effect = 'allow' AND owner_session_id IS NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_permission_rules_active
+ON btcc_permission_rules(effect, kind, pattern, IFNULL(owner_session_id,'')) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_btcc_permission_rules_owner
+ON btcc_permission_rules(owner_session_id, revoked_at);
 ";

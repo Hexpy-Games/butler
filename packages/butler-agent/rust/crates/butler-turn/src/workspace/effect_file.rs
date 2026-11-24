@@ -12,6 +12,7 @@ use super::path_guard::{MutationGuardInput, resolve_workspace_mutation_guard};
 /// Where effect file writes may land.
 #[derive(Clone, Debug)]
 pub struct EffectFileScope {
+    pub allowed_folders: Vec<PathBuf>,
     pub inventory: Option<Arc<butler_platform::secure_fs::SecretInventory>>,
     pub workspace: PathBuf,
     pub butler_data: PathBuf,
@@ -130,10 +131,11 @@ pub async fn guard_effect_file(
     let scope = scope.clone();
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || {
-        let protected = scope.protected_roots.clone();
+        let (root, path) = super::contained_target(&scope.workspace, &path, &scope.allowed_folders);
+        let protected = &scope.protected_roots;
         let guarded = resolve_workspace_mutation_guard(MutationGuardInput {
             butler_data: Some(&scope.butler_data),
-            root: &scope.workspace,
+            root,
             requested: &path,
             path_form: if scope.contained {
                 super::path_guard::PathForm::Contained
@@ -142,7 +144,7 @@ pub async fn guard_effect_file(
             },
             leaf: super::path_guard::Leaf::MayBeMissing,
             installation_root: scope.installation_root.as_deref(),
-            protected_roots: &protected,
+            protected_roots: protected,
         })
         .map_err(EffectFileError::containment)?;
         if let Some(reason) = guarded.reason {

@@ -1,29 +1,7 @@
-//! Only simple, known read-only command forms are low risk. Anything the
-//! classifier cannot prove from this explicit table is high risk. `echo` and
-//! `printf` only print their words, so quotes may group them; any other shell
-//! syntax still makes them high risk.
-use super::ApprovalRisk;
+use super::{ApprovalRisk, command_words::is_read_only};
 
 pub(in crate::btcc) fn command_risk(line: &str) -> ApprovalRisk {
-    let words: Vec<_> = line.split_ascii_whitespace().collect();
-    let prints = matches!(words.first(), Some(&("echo" | "printf")));
-    // Fail closed on shell evaluation, redirection, quoting and control syntax.
-    if line.chars().any(|c| {
-        c.is_control() || "|&;<>$`\\(){}*?[]~!%^@".contains(c) || !prints && "\"'".contains(c)
-    }) {
-        return ApprovalRisk::High;
-    }
-    let low = match words.as_slice() {
-        ["echo" | "printf", ..] | ["ls" | "cat" | "head" | "tail" | "wc" | "pwd"] => true,
-        // File operands require filesystem knowledge (including symlinks),
-        // which this lexical classifier cannot prove. Git also executes
-        // configured external diffs, textconv and filesystem monitors.
-        ["ls", args @ ..] => args
-            .iter()
-            .all(|arg| matches!(*arg, "-a" | "-l" | "-h" | "-la" | "-al" | "--all")),
-        _ => false,
-    };
-    if low {
+    if is_read_only(line) {
         ApprovalRisk::Low
     } else {
         ApprovalRisk::High
@@ -43,6 +21,15 @@ pub(super) mod pinned {
             "echo",
             "echo \"hello world\"",
             "printf 'done'",
+            "printf '%s' x",
+            "echo ~",
+            "cat 'README.md'",
+            "ls -la src",
+            "cat README.md",
+            "cat ../private",
+            "cat /etc/passwd",
+            "cat symlink-to-private",
+            "ls ~",
         ] {
             assert_eq!(command_risk(line), ApprovalRisk::Low, "{line}");
         }
@@ -55,10 +42,7 @@ pub(super) mod pinned {
             "echo \"$(id)\"",
             "echo `id`",
             "echo ok\nrm x",
-            "printf '%s' x",
-            "echo ~",
             "\"echo\" ok",
-            "cat 'README.md'",
             "kubectl delete pod app",
             "kubectl apply -f app.yaml",
             "npm publish",
@@ -75,12 +59,6 @@ pub(super) mod pinned {
             "",
             "npm test",
             "git push",
-            "ls -la src",
-            "cat README.md",
-            "cat ../private",
-            "cat /etc/passwd",
-            "cat symlink-to-private",
-            "ls ~",
             "ls %USERPROFILE%",
             "ls !USERPROFILE!",
             "ls *",

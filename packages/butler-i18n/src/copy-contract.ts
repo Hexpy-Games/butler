@@ -171,6 +171,7 @@ type CountFormatter = (count: number) => string;
  * (#235). `workspace` is the workspace label; `null` reads as "this workspace".
  */
 export interface ApprovalRequestCopy {
+  proposeRule: { title: string; effect: Record<"allow" | "deny", Record<"conversation" | "always", string>>; folder: string };
   browserMode: { signed_out: string; signed_in: string };
   signInStep: (reason: string) => string;
   /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
@@ -944,6 +945,12 @@ export interface AppCopy {
     paymentSkipped: (site: string, amount: string) => string;
     allowScope: string;
     allowConversation: string;
+    allowAlways: string;
+    allowAlwaysDescription: string;
+    denyAlways: string;
+    denyAlwaysDescription: string;
+    denyScope: string;
+    rulePrefixes: (list: string) => string;
     allowDescription: string;
     branchFailed: string;
     questionPanel: {
@@ -1234,6 +1241,7 @@ export interface AppCopy {
     projectDeleteConfirm: (projectName: string) => string;
   };
   composer: {
+    sandboxStatus: Record<"on" | "off" | "writesOnly" | "unavailable", string>;
     workspace: string;
     workspaceLocal: string;
     workspaceWorktree: string;
@@ -1636,10 +1644,12 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"mail" | "connectorRules" | "noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites" | "hooks" | "mcpServers" | "updateVersions" | "updateChannel" | "browsing" | "systemEvents" | "archived" | "modelProvider" | "coreSkills" | "userSkills" | "projectSkills", string>;
-    pageSectionDescriptions: Record<"noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
+    pageSections: Record<"commandIsolation" | "allowedFolders" | "mail" | "connectorRules" | "noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites" | "hooks" | "mcpServers" | "updateVersions" | "updateChannel" | "browsing" | "systemEvents" | "archived" | "modelProvider" | "coreSkills" | "userSkills" | "projectSkills", string>;
+    pageSectionDescriptions: Record<"allowedFolders" | "noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
+    allowedFolders: Record<"add" | "remove" | "empty" | "refused", string>;
     grants: {
+      denied: string;
       kind: Record<"command" | "fileWrite" | "network" | "tool" | "other", string>;
       scope: Record<"conversation" | "project" | "always", string>;
       conversations: (count: number) => string; cwd: (path: string) => string;

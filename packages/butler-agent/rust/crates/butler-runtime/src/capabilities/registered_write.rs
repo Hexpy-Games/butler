@@ -10,6 +10,7 @@ use butler_turn::workspace::WorkspaceReference;
 
 #[derive(Clone)]
 pub struct RegisteredWriteContext {
+    pub allowed_folders: Vec<std::path::PathBuf>,
     pub workspace_reference: Option<WorkspaceReference>,
     pub workspace_path: PathBuf,
     pub butler_data: PathBuf,
@@ -50,6 +51,7 @@ impl RegisteredWritePort for RegisteredWrite {
                 .invoke(
                     "write_file",
                     CapabilityInvocation {
+                        allowed_folders: &self.context.allowed_folders,
                         contained: self.context.contained,
                         call: &call,
                         workspace_reference: self.context.workspace_reference.as_ref(),

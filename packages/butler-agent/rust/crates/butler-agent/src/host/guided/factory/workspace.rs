@@ -77,6 +77,7 @@ impl GuidedTurnFactoryAdapter {
         crate::host::GuidedFileEffects::new(
             self.capabilities.clone(),
             crate::host::RegisteredWriteContext {
+                allowed_folders: Vec::new(),
                 workspace_reference: Some(workspace.clone()),
                 workspace_path: workspace_path.to_path_buf(),
                 butler_data: self.butler_data.clone(),
@@ -87,6 +88,7 @@ impl GuidedTurnFactoryAdapter {
                 contained: false,
             },
             butler_turn::workspace::EffectFileScope {
+                allowed_folders: Vec::new(),
                 inventory: workspace.read_inventory(),
                 workspace: workspace_path.to_path_buf(),
                 butler_data: self.butler_data.clone(),

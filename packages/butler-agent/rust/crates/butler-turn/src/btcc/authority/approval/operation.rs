@@ -10,6 +10,10 @@ pub struct ApprovalOperation {
     pub targets: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule_prefixes: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_rule: Option<PermissionRuleOperation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_conversation: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -28,6 +32,14 @@ pub struct ApprovalOperation {
     pub wait_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<ImageApprovalOperation>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionRuleOperation {
+    pub effect: String,
+    pub kind: String,
+    pub scope: String,
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +80,7 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
     }
     let command = input["command"].as_str().map(str::to_owned);
     let paths = match facts.capability {
+        "propose_permission_rule" => input["pattern"].as_str().into_iter().collect(),
         "read_file" => paths(input, "requests"),
         "write_file" | "edit_file" => {
             if input["edits"].is_array() {
@@ -82,7 +95,46 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
         }
         _ => Vec::new(),
     };
-    let targets = if paths.is_empty() {
+    let targets = display_targets(&facts, paths);
+    let read_only = matches!(
+        facts.capability,
+        "read_file" | "list_files" | "grep_files" | "browser_read" | "web_read" | "web_search"
+    ) || matches!(
+        input["state_effect"].as_str(),
+        Some("read_only" | "validation")
+    );
+    ApprovalOperation {
+        tool: facts.capability.into(),
+        access: if read_only { "read_only" } else { "change" }.into(),
+        targets,
+        rule_prefixes: command
+            .as_deref()
+            .filter(|_| facts.capability == "run_command")
+            .and_then(super::command_words::rule_prefixes),
+        permission_rule: (facts.capability == "propose_permission_rule")
+            .then(|| serde_json::from_value(input.clone()).ok())
+            .flatten(),
+        command,
+        // R5 web requests are never covered by a standing permission.
+        allow_conversation: matches!(
+            facts.capability,
+            "web_read" | "web_search" | "generate_image" | "edit_image" | "propose_permission_rule"
+        )
+        .then_some(false),
+        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
+        browser_tab: None,
+        browser_mode: None,
+        browser_steps: Vec::new(),
+        sign_in_step: None,
+        wait_reason: None,
+        image: image_operation(&facts),
+    }
+}
+
+fn display_targets(facts: &ApprovalFacts<'_>, paths: Vec<&str>) -> Vec<String> {
+    if facts.capability == "propose_permission_rule" {
+        paths.into_iter().map(str::to_owned).collect()
+    } else if paths.is_empty() {
         vec![facts.target.to_owned()]
     } else {
         paths
@@ -97,32 +149,6 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
                 },
             )
             .collect()
-    };
-    let read_only = matches!(
-        facts.capability,
-        "read_file" | "list_files" | "grep_files" | "browser_read" | "web_read" | "web_search"
-    ) || matches!(
-        input["state_effect"].as_str(),
-        Some("read_only" | "validation")
-    );
-    ApprovalOperation {
-        tool: facts.capability.into(),
-        access: if read_only { "read_only" } else { "change" }.into(),
-        targets,
-        command,
-        // R5 web requests are never covered by a standing permission.
-        allow_conversation: matches!(
-            facts.capability,
-            "web_read" | "web_search" | "generate_image" | "edit_image"
-        )
-        .then_some(false),
-        allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
-        browser_tab: None,
-        browser_mode: None,
-        browser_steps: Vec::new(),
-        sign_in_step: None,
-        wait_reason: None,
-        image: image_operation(&facts),
     }
 }
 
@@ -187,6 +213,8 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
         .into(),
         targets,
         command: None,
+        rule_prefixes: None,
+        permission_rule: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
@@ -260,6 +288,8 @@ fn signed_in_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         access: access.into(),
         targets,
         command: None,
+        rule_prefixes: None,
+        permission_rule: None,
         allow_conversation: Some(false),
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
@@ -321,6 +351,8 @@ fn pay_operation(facts: &ApprovalFacts<'_>) -> Option<ApprovalOperation> {
         access: access.into(),
         targets,
         command: None,
+        rule_prefixes: None,
+        permission_rule: None,
         allow_conversation: Some(false),
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),
@@ -346,6 +378,8 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .into_iter()
             .collect(),
         command: None,
+        rule_prefixes: None,
+        permission_rule: None,
         allow_conversation: Some(false),
         allow_site: facts.input["allow_site"].as_str().map(str::to_owned),
         browser_tab: facts.input["tab"].as_str().map(str::to_owned),

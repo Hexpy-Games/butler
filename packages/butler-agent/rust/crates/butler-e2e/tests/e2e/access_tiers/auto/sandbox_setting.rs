@@ -33,7 +33,7 @@ pub(super) async fn verify(
     let id = paused(s, chat, prompt).await?;
     assert_counts(s, &id, 1, 1)?;
     assert!(!project.join("src/disabled.txt").exists());
-    approve(s, chat, "deny").await?;
+    approve(s, chat, "deny", None).await?;
     delivered(s, chat, &id).await?;
     assert!(!project.join("src/disabled.txt").exists());
     let output = outputs(s, chat, &id, script, prompt).await?;
@@ -71,7 +71,7 @@ async fn low_risk_asks(
         );
         let id = paused(s, chat, &prompt).await?;
         assert_counts(s, &id, 1, 1)?;
-        approve(s, chat, "deny").await?;
+        approve(s, chat, "deny", None).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
         let output = outputs(s, chat, &id, script, &prompt).await?;

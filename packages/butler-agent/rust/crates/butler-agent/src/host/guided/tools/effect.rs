@@ -74,7 +74,7 @@ async fn execute_effect(
     call: &ModelRoundToolCall,
     occurrence: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let scope = command_scope(owner, invocation.cancellation.clone());
+    let mut scope = command_scope(owner, invocation.cancellation.clone());
     if let Some(result) = observation::execute(owner, call, occurrence, &scope).await? {
         return Ok(result);
     }
@@ -95,7 +95,9 @@ async fn execute_effect(
         .await
         .map_err(ToolExecutionError::Integrity)?
         .unwrap_or_else(|| runtime_work::untracked(owner));
-    let contained = contained_run(owner, occurrence, decision, kind);
+    let contained = contained_run(owner, occurrence, &access, kind);
+    scope.allowed_folders = access.allowed_folders;
+    scope.extra_write_roots = contained.extra_write_roots.clone();
     let prepared = prepare(owner, call, occurrence, (scope, contained), &work).await;
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
@@ -115,32 +117,45 @@ async fn execute_effect(
 /// How an approval-free call outside full access runs: file effects re-check
 /// project containment at use, and an Auto mutation runs in the
 /// project-write sandbox when the decision allowed it because of that sandbox.
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 struct Contained {
     files: bool,
     project_write: bool,
+    extra_write_roots: Vec<std::path::PathBuf>,
 }
 
 fn contained_run(
     owner: &GuidedTools,
     occurrence: &str,
-    decision: butler_turn::btcc::AccessDecision,
+    access: &super::access::ClassifiedAccess,
     kind: butler_turn::btcc::CapabilityKind,
 ) -> Contained {
     let mode = &owner.access_mode();
-    if decision != butler_turn::btcc::AccessDecision::Allow
+    if access.decision != butler_turn::btcc::AccessDecision::Allow
         || *mode == AccessMode::FullAccess
         || super::access::resumes(owner, occurrence)
     {
         return Contained::default();
     }
+    use butler_turn::btcc::{CapabilityKind::CommandMutation, CommandSandbox, TargetScope};
+    let project_write = *mode == AccessMode::Auto
+        && match kind {
+            CommandMutation {
+                sandbox: CommandSandbox::ProjectWrite | CommandSandbox::ProjectAndFolders,
+            } if access.scope == TargetScope::ProjectFolder => true,
+            CommandMutation {
+                sandbox: CommandSandbox::ProjectAndFolders,
+            } if access.scope == TargetScope::AllowedFolder => true,
+            _ => false,
+        };
     Contained {
         files: true,
-        project_write: *mode == AccessMode::Auto
-            && kind
-                == (butler_turn::btcc::CapabilityKind::CommandMutation {
-                    sandbox: butler_turn::btcc::CommandSandbox::ProjectWrite,
-                }),
+        project_write,
+        extra_write_roots: if project_write && access.scope == TargetScope::AllowedFolder {
+            access.allowed_folders.clone()
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -234,7 +249,7 @@ async fn prepare(
     } else {
         let contained_effects;
         let effects = if contained.files {
-            contained_effects = owner.file_effects.contained();
+            contained_effects = owner.file_effects.contained(&scope.allowed_folders);
             &contained_effects
         } else {
             &owner.file_effects
@@ -250,6 +265,14 @@ async fn prepare(
             .await
             .map(|prepared| (prepared.target, prepared.input, prepared.adapter))
     }
+}
+
+fn denied_by_rule() -> Result<JsonDocument, ToolExecutionError> {
+    ordinary(
+        "denied_by_rule",
+        "The user's permission rules block this command. Do not run it another way.",
+        None,
+    )
 }
 
 fn ordinary(
@@ -370,6 +393,10 @@ async fn admission_refusal(
     call: &ModelRoundToolCall,
     decision: butler_turn::btcc::AccessDecision,
 ) -> Result<Option<JsonDocument>, ToolExecutionError> {
+    if decision == butler_turn::btcc::AccessDecision::Deny(butler_turn::btcc::DenyReason::UserRule)
+    {
+        return denied_by_rule().map(Some);
+    }
     if matches!(decision, butler_turn::btcc::AccessDecision::Deny(_)) && owner.unattended() {
         return super::turn_guard::unattended_denial(owner, call)
             .await
@@ -413,6 +440,9 @@ fn command_scope(
     signal: tokio_util::sync::CancellationToken,
 ) -> CommandScope<'_> {
     CommandScope {
+        allowed_folders: Vec::new(),
+        extra_write_roots: Vec::new(),
+        protected_roots: &owner.binding.protected_ledger_roots,
         workspace_reference: owner.binding.workspace_reference.as_ref(),
         workspace_path: &owner.binding.workspace_path,
         butler_data: &owner.binding.butler_data,

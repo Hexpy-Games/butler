@@ -8,6 +8,7 @@ async fn native(fixture: &Fixture, call: &Value) -> Value {
         .invoke(
             "list_files",
             CapabilityInvocation {
+                allowed_folders: &[],
                 contained: false,
                 call,
                 workspace_reference: None,

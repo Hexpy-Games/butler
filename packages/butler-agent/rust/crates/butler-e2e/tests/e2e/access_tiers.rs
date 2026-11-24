@@ -1,5 +1,6 @@
 //! PERM-01: project reads, exact approvals, real-path sensitivity and normal-chat isolation.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod approval_rules;
 mod authority;
 mod auto;
 mod composer_mode;
@@ -97,7 +98,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     }
     assert_eq!(script.requests_for(MIXED).len(), 1);
     assert_counts(&s, &id, expected as u64, expected as u64)?;
-    approve(&s, &chat, "allow").await?;
+    approve(&s, &chat, "allow", None).await?;
     delivered(&s, &chat, &id).await?;
     assert_counts(&s, &id, expected as u64, 0)?;
     assert_eq!(
@@ -158,7 +159,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     let id = paused(&s, &chat, WRITE).await?;
     assert_eq!(s.gw.approval_requests(&chat).await?.len(), 1);
     assert_counts(&s, &id, 1, 1)?;
-    approve(&s, &chat, "allow").await?;
+    approve(&s, &chat, "allow", None).await?;
     delivered(&s, &chat, &id).await?;
     assert_eq!(
         std::fs::read_to_string(project.join("b.txt"))?,
@@ -200,7 +201,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
             .unwrap()
             .insert(prompt.into(), vec![call("command", "run_command", &args)]);
         let id = paused(&s, &chat, prompt).await?;
-        approve(&s, &chat, "allow").await?;
+        approve(&s, &chat, "allow", None).await?;
         delivered(&s, &chat, &id).await?;
         assert_counts(&s, &id, 1, 0)?;
         assert!(
@@ -219,7 +220,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     );
     let id = paused(&s, "general", NORMAL).await?;
     assert_counts(&s, &id, 1, 1)?;
-    approve(&s, "general", "allow").await?;
+    approve(&s, "general", "allow", None).await?;
     delivered(&s, "general", &id).await?;
     assert_counts(&s, &id, 1, 0)?;
     script.rounds.lock().unwrap().insert(
@@ -254,7 +255,7 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
     );
     let id = paused(&s, "general", "List the data folder.").await?;
     assert_counts(&s, &id, 1, 1)?;
-    approve(&s, "general", "allow").await?;
+    approve(&s, "general", "allow", None).await?;
     delivered(&s, "general", &id).await?;
     assert_counts(&s, &id, 1, 0)?;
     schedule_clamp(&s, &chat, &script).await?;
@@ -336,7 +337,7 @@ async fn guarded_reads(
             .insert(prompt.clone(), vec![read("guarded", path)]);
         let id = paused(s, chat, &prompt).await?;
         assert_counts(s, &id, 1, 1)?;
-        approve(s, chat, "deny").await?;
+        approve(s, chat, "deny", None).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
         assert!(
@@ -432,7 +433,7 @@ async fn guarded_commands(
         );
         let id = paused(s, chat, &prompt).await?;
         assert_counts(s, &id, 1, 1)?;
-        approve(s, chat, "deny").await?;
+        approve(s, chat, "deny", None).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
         let output = outputs(s, chat, &id, script, &prompt).await?;
@@ -477,7 +478,7 @@ async fn guarded_commands(
             )],
         );
         let id = paused(s, chat, prompt).await?;
-        approve(s, chat, "allow").await?;
+        approve(s, chat, "allow", None).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
         let output = outputs(s, chat, &id, script, prompt).await?;

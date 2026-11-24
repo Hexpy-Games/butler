@@ -42,6 +42,7 @@ pub enum CommandSandbox {
     Disabled,
     None,
     ProjectWrite,
+    ProjectAndFolders,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FullOnlyAction {
@@ -73,6 +74,7 @@ pub enum GrantUse {
 pub enum DenyReason {
     ReadOnly,
     FullAccessRequired,
+    UserRule,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessDecision {
@@ -129,6 +131,7 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         };
     }
     let project = request.scope == TargetScope::ProjectFolder;
+    let in_scope = project || request.scope == TargetScope::AllowedFolder;
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
@@ -136,22 +139,22 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
-        FileRead if first && (project || request.scope == TargetScope::Attachment) => Allow,
+        FileRead if first && (in_scope || request.scope == TargetScope::Attachment) => Allow,
         // A folder switch within the consented folder or its repository.
-        FolderSwitch | CommandObservation { sandboxed: true } if project => Allow,
+        FolderSwitch if project => Allow,
+        CommandObservation { sandboxed: true } if in_scope => Allow,
         CommandObservation { sandboxed: false } | CommandMutation { .. }
-            if first && project && request.risk == ApprovalRisk::Low =>
+            if first && in_scope && request.risk == ApprovalRisk::Low =>
         {
             Allow
         }
         CommandMutation {
-            sandbox: CommandSandbox::ProjectWrite,
-        }
-        | FileEdit
-            if auto && project =>
-        {
-            Allow
-        }
+            sandbox: CommandSandbox::ProjectWrite | CommandSandbox::ProjectAndFolders,
+        } if auto && project => Allow,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        } if auto && request.scope == TargetScope::AllowedFolder => Allow,
+        FileEdit if auto && in_scope => Allow,
         CapabilityKind::CanonProposal if auto && request.taint == TurnTaint::Clean => Allow,
         CapabilityKind::CanonProposal if request.taint == TurnTaint::External => {
             Ask(GrantUse::Ignore)
@@ -167,9 +170,9 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
 pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
     let first = matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto);
     match kind {
-        CapabilityKind::FileRead | CapabilityKind::CommandMutation { .. } => first,
-        CapabilityKind::CommandObservation { sandboxed } => {
-            first || sandboxed && *mode == AccessMode::AskAlways
+        CapabilityKind::FileRead => first,
+        CapabilityKind::CommandObservation { .. } | CapabilityKind::CommandMutation { .. } => {
+            *mode != AccessMode::FullAccess
         }
         CapabilityKind::FileEdit => *mode == AccessMode::Auto,
         CapabilityKind::FolderSwitch => *mode != AccessMode::FullAccess,
@@ -298,7 +301,9 @@ impl CapabilityKind {
             CreateAutomation | UpdateAutomation | DeleteAutomation | RunDueAutomations => {
                 Self::Schedule
             }
-            SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
+            SetWallpaper | SaveWallpaperModule | ToolName::ProposePermissionRule => {
+                Self::SettingsWrite
+            }
             StartTopicConversation => Self::CrossConversation,
             ToolName::ControlWork
                 if arguments.get("action").and_then(Value::as_str) == Some("view_result") =>
@@ -327,7 +332,11 @@ fn mutation_sandbox(arguments: &Map<String, Value>) -> CommandSandbox {
     if butler_platform::command_sandbox::project_write_available()
         && matches!(requested, None | Some("project"))
     {
-        CommandSandbox::ProjectWrite
+        if butler_platform::command_sandbox::folder_write_available() {
+            CommandSandbox::ProjectAndFolders
+        } else {
+            CommandSandbox::ProjectWrite
+        }
     } else {
         CommandSandbox::None
     }
@@ -389,7 +398,9 @@ fn unresolved_words(command: &str, check_escapes: bool) -> bool {
 }
 
 fn unresolved_word(word: &str, program: &mut bool) -> bool {
-    if word.starts_with('~') || word.split(['/', '\\']).any(|part| part == "..") {
+    if (word.starts_with('~') && word != "~" && !word.starts_with("~/") && !word.starts_with("~\\"))
+        || word.split(['/', '\\']).any(|part| part == "..")
+    {
         return true;
     }
     if word.is_empty() || !*program {

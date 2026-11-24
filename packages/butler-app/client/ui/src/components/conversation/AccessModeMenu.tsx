@@ -3,6 +3,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
+  Typo,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -27,6 +28,11 @@ export function AccessModeMenu() {
     (store) => store.handleAccessModeChange,
   );
   const settings = useButlerStore((store) => store.settings);
+
+  const status = appCopy.composer.sandboxStatus;
+  const sandboxStatus = !settings.command_sandbox_available ? status.unavailable
+    : settings.command_sandbox_enabled === false ? status.off
+      : !settings.command_sandbox_reads ? status.writesOnly : status.on;
 
   return (
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
@@ -57,6 +63,7 @@ export function AccessModeMenu() {
             setAccessMenuOpen(false);
           }}
         />
+        <Typo.Caption tone="secondary">{sandboxStatus}</Typo.Caption>
       </PopoverContent>
     </Popover>
   );

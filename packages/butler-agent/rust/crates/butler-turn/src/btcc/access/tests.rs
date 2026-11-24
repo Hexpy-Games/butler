@@ -10,7 +10,7 @@ use CapabilityKind::{
     Exempt, FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect,
     ProjectRecord, Schedule, SettingsWrite, WebRequest,
 };
-use TargetScope::{Attachment, NoTarget, Outside, ProjectFolder, Protected};
+use TargetScope::{AllowedFolder, Attachment, NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
 
 // Independent owner cells; None is a wildcard, not an implementation branch.
@@ -134,6 +134,9 @@ const KINDS: &[CapabilityKind] = &[
     CommandMutation {
         sandbox: CommandSandbox::ProjectWrite,
     },
+    CommandMutation {
+        sandbox: CommandSandbox::ProjectAndFolders,
+    },
     Network,
     Connector,
     FileEdit,
@@ -172,10 +175,24 @@ fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode != ReadOnly && matches!(request.kind, Exempt(_)) {
         return Allow;
     }
+    if request.kind
+        == (CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        })
+        && (*mode == Auto && matches!(request.scope, ProjectFolder | AllowedFolder)
+            || *mode == AskExceptReads
+                && matches!(request.scope, ProjectFolder | AllowedFolder)
+                && request.risk == ApprovalRisk::Low)
+    {
+        return Allow;
+    }
     if ALLOW.iter().any(|(m, k, s, r)| {
         m == mode
             && *k == request.kind
-            && s.is_none_or(|s| s == request.scope)
+            && s.is_none_or(|s| {
+                s == request.scope
+                    || s == ProjectFolder && request.scope == AllowedFolder && *k != FolderSwitch
+            })
             && r.is_none_or(|r| r == request.risk)
     }) {
         return Allow;
@@ -201,6 +218,9 @@ fn order(decision: AccessDecision) -> u8 {
 #[test]
 fn access_boundary_matches_the_owner_table() {
     classification::contained_read_rechecks_swapped_secret();
+    rules::tests::rule_verdict_table();
+    rules::tests::proposal_shape_table();
+    rules::tests::allow_preserves_stronger_decisions();
     web::boundaries();
     assert_eq!(
         AccessMode::ALL.map(|mode| mode.as_str()),
@@ -208,7 +228,14 @@ fn access_boundary_matches_the_owner_table() {
     );
     for mode in AccessMode::ALL {
         for &kind in KINDS {
-            for scope in [NoTarget, ProjectFolder, Attachment, Outside, Protected] {
+            for scope in [
+                NoTarget,
+                ProjectFolder,
+                AllowedFolder,
+                Attachment,
+                Outside,
+                Protected,
+            ] {
                 for risk in [ApprovalRisk::Low, ApprovalRisk::Medium, ApprovalRisk::High] {
                     for taint in [TurnTaint::Clean, TurnTaint::External] {
                         let request = AccessRequest {
@@ -257,7 +284,9 @@ fn access_boundary_matches_the_owner_table() {
         (
             serde_json::json!({"state_effect":"mutation"}),
             CommandMutation {
-                sandbox: if butler_platform::command_sandbox::project_write_available() {
+                sandbox: if butler_platform::command_sandbox::folder_write_available() {
+                    CommandSandbox::ProjectAndFolders
+                } else if butler_platform::command_sandbox::project_write_available() {
                     CommandSandbox::ProjectWrite
                 } else {
                     CommandSandbox::None
