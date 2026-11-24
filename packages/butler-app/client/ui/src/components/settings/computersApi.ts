@@ -26,6 +26,12 @@ export async function addComputer(input: HostTarget & { name: string; folder: st
   return (await api<{ computer: Computer }>("/computers", { method: "POST", body: JSON.stringify(input) })).computer;
 }
 
+export async function editComputer(id: string, input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource }): Promise<Computer> {
+  return (await api<{ computer: Computer }>(`/computers/${encodeURIComponent(id)}`, {
+    method: "PUT", body: JSON.stringify(input),
+  })).computer;
+}
+
 export function startComputer(id: string) {
   return api<{ state: "ready" | "busy"; version: string }>(`/computers/${encodeURIComponent(id)}/start`, { method: "POST" });
 }

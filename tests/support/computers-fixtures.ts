@@ -27,7 +27,7 @@ const credentials: CredentialListView = {
 
 export const computerAuthUrl = "http://127.0.0.1:9/oauth";
 type ComputerCall = { method: string; path: string; body: unknown };
-type ComputerStep = "host-key" | "add" | "start";
+type ComputerStep = "host-key" | "add" | "start" | "edit";
 
 export function computersFocusResponse(path: string): unknown {
   if (path === "/security") {
@@ -57,7 +57,9 @@ export function createComputersFake() {
   async function respond(call: ComputerCall) {
     calls.push(call);
     const { method, path, body } = call;
-    const step = method !== "POST" ? undefined : path === "/computers/host-key" ? "host-key"
+    const [, id, action] = path.match(/^\/computers\/([^/]+)(?:\/(.*))?$/u) ?? [];
+    const step = method === "PUT" && id && !action ? "edit"
+      : method !== "POST" ? undefined : path === "/computers/host-key" ? "host-key"
       : path === "/computers" ? "add" : /^\/computers\/[^/]+\/start$/u.test(path) ? "start" : undefined;
     const failure = step && failures.get(step);
     if (step && failure) {
@@ -73,9 +75,17 @@ export function createComputersFake() {
       fake.computers.push(computer);
       return ok({ computer }, 201);
     }
-    const [, id, action] = path.match(/^\/computers\/([^/]+)(?:\/(.*))?$/u) ?? [];
     const computer = fake.computers.find((entry) => entry.id === id);
     if (!computer) return error("computer_not_found");
+    if (step === "edit") {
+      const { name, address, port, key_file, folder, model_source } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source">;
+      const edited = {
+        ...computer, name, address, folder, port: port ?? null, key_file: key_file ?? null, model_source,
+        ai_connected: model_source !== "none" && model_source !== "chatgpt",
+      };
+      fake.computers = fake.computers.map((entry) => entry.id === id ? edited : entry);
+      return ok({ computer: edited });
+    }
     if (method === "DELETE" && !action) {
       fake.computers = fake.computers.filter((entry) => entry.id !== id);
       return ok({ deleted: true, remote_cleaned: true });

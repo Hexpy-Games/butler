@@ -86,23 +86,25 @@ async function captureStates(page: Page, output: string, variant: string) {
   }
 
   await dialog.waitFor({ state: "hidden" });
-  await button(row(page, name), copy.modelSettings).click();
-  const ai = aiDialog(page);
-  await assertVisible(ai, copy.model.field);
-  await screenshot("M1-ai", ai);
-  await ai.getByRole("combobox").first().click();
+  await button(row(page, name), copy.edit).click();
+  await assertVisible(dialog, copy.form.editTitle);
+  await screenshot("E2-edit", dialog);
+  const save = button(dialog, copy.form.save);
+  fake.failNext("edit", "computer_host_different");
+  await save.click();
+  await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), copy.errors.otherComputer);
+  await screenshot("E3-other-machine", dialog);
+  await dialog.getByRole("combobox").first().click();
   await page.getByRole("option", { name: copy.model.options.chatgpt, exact: true }).click();
+  await save.click();
+  await dialog.waitFor({ state: "hidden" });
+  const ai = aiDialog(page);
   await button(ai, appCopy.chatgptPlan.continue).click();
   await assertVisible(ai, appCopy.chatgptSignIn.pending);
   await page.waitForFunction((url) => (window as Window & { __opened?: string[] }).__opened?.includes(url), computerAuthUrl);
   await screenshot("M2-chatgpt-waiting", ai);
   await button(ai, common.cancel).click();
-  await ai.getByRole("combobox").first().click();
-  await page.getByRole("option", { name: copy.model.options.key, exact: true }).click();
-  await ai.getByRole("combobox").nth(1).click();
-  await page.getByRole("option", { name: "OpenAI", exact: true }).click();
-  assert(await button(ai, copy.model.save).isEnabled());
-  await screenshot("M3-key-chosen", ai);
+  await assertVisible(ai, copy.model.field);
   await button(ai, common.cancel).click();
 
   await button(section(page), copy.add).click();
@@ -232,12 +234,32 @@ try {
   await row(page, name).waitFor();
   await assertVisible(row(page, name), copy.status.connected);
 
-  // M1, M2 and M3.
+  // E2, M2 and E3.
   const computerPath = `/computers/${fake.computers[0]!.id}`;
-  await button(row(page, name), copy.modelSettings).click();
-  const ai = aiDialog(page);
-  await ai.getByRole("combobox").first().click();
+  await button(row(page, name), copy.edit).click();
+  await assertVisible(dialog, copy.form.editTitle);
+  for (const [field, value] of [
+    ["name", name], ["address", address], ["port", "22"], ["key-file", keyFile], ["folder", folder],
+  ]) {
+    assert.equal(await dialog.locator(`#computer-${field}`).inputValue(), value);
+  }
+  await assertVisible(dialog.getByRole("combobox").first(), copy.model.options.follow);
+  const editedName = `${name} 2`;
+  await dialog.locator("#computer-name").fill(editedName);
+  const save = button(dialog, copy.form.save);
+  await save.click();
+  await dialog.waitFor({ state: "hidden" });
+  assert.deepEqual(lastCall("PUT", computerPath)?.body, {
+    name: editedName, address, port: 22, key_file: keyFile, folder, model_source: "follow",
+  });
+
+  await button(row(page, editedName), copy.edit).click();
+  await dialog.getByRole("combobox").first().click();
   await page.getByRole("option", { name: copy.model.options.chatgpt, exact: true }).click();
+  await save.click();
+  await dialog.waitFor({ state: "hidden" });
+  assert.equal((lastCall("PUT", computerPath)?.body as { model_source?: string } | undefined)?.model_source, "chatgpt");
+  const ai = aiDialog(page);
   await button(ai, appCopy.chatgptPlan.continue).click();
   await assertVisible(ai, appCopy.chatgptSignIn.pending);
   await page.waitForFunction((url) => (window as Window & { __opened?: string[] }).__opened?.includes(url), computerAuthUrl);
@@ -247,19 +269,13 @@ try {
   await button(ai, common.cancel).click();
   assert.equal((await cancelled).status(), 200);
   await assertVisible(ai, copy.model.field);
-  await ai.getByRole("combobox").first().click();
-  await page.getByRole("option", { name: copy.model.options.key, exact: true }).click();
-  const save = button(ai, copy.model.save);
-  assert(await save.isDisabled());
-  await save.hover({ force: true });
-  await assertVisible(page.getByRole("tooltip"), copy.model.chooseKeyFirst);
-  await ai.getByRole("combobox").nth(1).click();
-  await page.getByRole("option", { name: "OpenAI", exact: true }).click();
-  assert(await save.isEnabled());
-  await save.click();
+  await button(ai, common.cancel).click();
   await ai.waitFor({ state: "hidden" });
-  assert.deepEqual(lastCall("PATCH", computerPath)?.body, { model_source: { key: "openai" } });
-  await assertVisible(page, copy.model.saved);
+  await button(row(page, editedName), copy.edit).click();
+  fake.failNext("edit", "computer_host_different");
+  await save.click();
+  await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), copy.errors.otherComputer);
+  await button(dialog, common.cancel).click();
 
   // A6, A6b, A6c and A7.
   await button(section(page), copy.add).click();
@@ -327,7 +343,7 @@ try {
   await verifyLayouts(page);
   assert.equal(server.stubModelCalls.length, 0);
   console.log(JSON.stringify({
-    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "model-settings", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
+    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
   }));
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;

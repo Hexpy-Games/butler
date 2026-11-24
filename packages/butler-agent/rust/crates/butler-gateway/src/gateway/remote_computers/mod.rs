@@ -1,5 +1,7 @@
 //! Owner-confirmed SSH computers and their main-managed remote service.
 mod deploy;
+mod edit;
+pub(super) use edit::edit;
 mod forward;
 mod live;
 mod live_pump;
@@ -8,7 +10,7 @@ mod memory;
 mod model_sync;
 pub(super) use model_sync::{ModelInput, ModelSource, update as update_model};
 mod pending;
-pub(super) use live::LiveRelays;
+pub(super) use live::{Connection, LiveRelays};
 pub(super) use live_records::names_running_turn;
 pub(in crate::gateway) use pending::{
     decide as decide_pending, get as get_pending, list as list_pending,

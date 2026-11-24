@@ -11,10 +11,11 @@ import { defaultSource, useComputerModelChoice } from "./hooks/useComputerModelC
 
 const EMPTY_FORM: ComputerForm = { name: "", address: "", port: "", keyFile: "", folder: "" };
 
-export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys }: {
+export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys, editing }: {
   open: boolean;
   mainModel: MainModelKind;
   savedKeys: SavedCredentialView[];
+  editing?: Computer | null;
   onOpenChange(open: boolean): void;
   onAdded(computer: Computer, failure?: string): void;
 }) {
@@ -22,17 +23,27 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   const add = useComputerAdd(onAdded);
   const model = useComputerModelChoice(defaultSource(mainModel));
   const [form, setForm] = useState(EMPTY_FORM);
+  const [lastEditing, setLastEditing] = useState<Computer | null>(null);
   useEffect(() => {
     if (open) {
-      setForm(EMPTY_FORM);
+      setLastEditing(editing ?? null);
+      setForm(editing ? {
+        name: editing.name,
+        address: editing.address,
+        port: editing.port?.toString() ?? "",
+        keyFile: editing.key_file ?? "",
+        folder: editing.folder,
+      } : EMPTY_FORM);
       add.reset();
-      model.reset(defaultSource(mainModel));
+      model.reset(editing?.model_source ?? defaultSource(mainModel));
     }
-  }, [open]);
+  }, [open, editing?.id]);
   useEffect(() => {
     if (add.error) document.getElementById(COMPUTER_FIELD_IDS[add.error.field])?.focus();
   }, [add.error]);
   const required = !form.name.trim() || !form.address.trim() || !form.folder.trim();
+  const isEditing = Boolean(open ? editing : lastEditing);
+  const busyLabel = isEditing ? appCopy.settings.security.working : copy.preparing;
   const fields = [
     { field: "name", placeholder: copy.namePlaceholder, autoFocus: true, maxLength: 80 },
     { field: "address", placeholder: copy.addressPlaceholder, description: copy.addressHint },
@@ -45,13 +56,14 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!add.busy) onOpenChange(next); }}>
       <DialogContent closeLabel={appCopy.common.close} showCloseButton={!add.busy} data-test-class="computer-add-dialog">
-        <DialogForm dialog title={copy.title} onSubmit={() => void add.submit(form, model.source)} footer={
+        <DialogForm dialog title={isEditing ? copy.editTitle : copy.title}
+          onSubmit={() => void add.submit(form, model.source, editing ?? undefined)} footer={
           <ButtonContainer size="default" justify="end">
-            <Tooltip label={add.busy ? copy.preparing : undefined}>
+            <Tooltip label={add.busy ? busyLabel : undefined}>
               <Button type="button" variant="outline" disabled={add.busy} onClick={() => onOpenChange(false)}>{appCopy.common.cancel}</Button>
             </Tooltip>
-            <Tooltip label={add.busy ? copy.preparing : required ? copy.required : !model.ready ? appCopy.computers.model.chooseKeyFirst : undefined}>
-              <Button type="submit" aria-busy={add.busy} disabled={add.busy || required || !model.ready}>{copy.submit}</Button>
+            <Tooltip label={add.busy ? busyLabel : required ? copy.required : !model.ready ? appCopy.computers.model.chooseKeyFirst : undefined}>
+              <Button type="submit" aria-busy={add.busy} disabled={add.busy || required || !model.ready}>{isEditing ? copy.save : copy.submit}</Button>
             </Tooltip>
           </ButtonContainer>
         }>
@@ -66,8 +78,8 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
               />
             );
           })}
-          <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={add.busy ? appCopy.computers.form.preparing : undefined} />
-          {add.busy && <ProgressMeter indeterminate label={copy.preparing} />}
+          <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={add.busy ? busyLabel : undefined} />
+          {add.busy && <ProgressMeter indeterminate label={busyLabel} />}
         </DialogForm>
       </DialogContent>
     </Dialog>

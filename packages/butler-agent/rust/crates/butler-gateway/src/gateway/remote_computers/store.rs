@@ -109,6 +109,41 @@ pub(super) async fn update(
     .map_err(|_| HttpError::Internal)?
 }
 
+pub(super) async fn edit(
+    path: PathBuf,
+    id: String,
+    name: String,
+    change: impl FnOnce(&mut Computer) + Send + 'static,
+) -> Result<Computer, HttpError> {
+    let guard = lock_file_async(&path)
+        .await
+        .map_err(|_| HttpError::Internal)?;
+    tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        let mut records = read_sync(&path)?;
+        let others: Vec<_> = records
+            .iter()
+            .filter(|record| record.id != id)
+            .cloned()
+            .collect();
+        unique_name(&others, &name)?;
+        let computer = records
+            .iter_mut()
+            .find(|record| record.id == id)
+            .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+        change(computer);
+        let updated = computer.clone();
+        write_json_atomic(
+            &path,
+            &serde_json::json!({"version": 1, "computers": records}),
+        )
+        .map_err(|_| HttpError::Internal)?;
+        Ok(updated)
+    })
+    .await
+    .map_err(|_| HttpError::Internal)?
+}
+
 pub(super) struct KnownHosts(pub PathBuf);
 
 impl KnownHosts {

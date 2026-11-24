@@ -1452,6 +1452,7 @@ const butlerApp = Object.freeze({
   startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
   getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
   updateComputerModel: ({ id, payload } = {}) => requestSecurity("updateComputerModel", { id, payload }),
+  editComputer: ({ id, payload } = {}) => requestSecurity("editComputer", { id, payload }),
   startComputerOauth: ({ id, payload } = {}) => requestSecurity("startComputerOauth", { id, payload }),
   getComputerOauth: ({ id, flow } = {}) => requestSecurity("getComputerOauth", { id, flow }),
   cancelComputerOauth: ({ id, flow } = {}) => requestSecurity("cancelComputerOauth", { id, flow }),

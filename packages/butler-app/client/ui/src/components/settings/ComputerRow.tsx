@@ -3,11 +3,11 @@ import { Button, ButtonContainer, ListRow, Monitor, Stack, Tooltip } from "@/but
 import type { Computer } from "./computersApi";
 import type { ComputerStatus } from "./hooks/useComputers";
 
-export function ComputerRow({ computer, status, busy, onModelSettings, onRemove }: {
+export function ComputerRow({ computer, status, busy, onEdit, onRemove }: {
   computer: Computer;
   status: ComputerStatus;
   busy: boolean;
-  onModelSettings(): void;
+  onEdit(): void;
   onRemove(): void;
 }) {
   const copy = appCopy.computers;
@@ -25,7 +25,7 @@ export function ComputerRow({ computer, status, busy, onModelSettings, onRemove 
       </Stack>
       <ButtonContainer size="sm">
         <Tooltip label={busy ? working : undefined}>
-          <Button size="sm" variant="outline" disabled={busy} onClick={onModelSettings}>{copy.modelSettings}</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={onEdit}>{copy.edit}</Button>
         </Tooltip>
         {remove}
       </ButtonContainer>

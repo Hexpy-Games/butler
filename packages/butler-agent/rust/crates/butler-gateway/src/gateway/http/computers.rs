@@ -42,6 +42,7 @@ pub(super) async fn route(
                 serde_json::json!({"computer": computer.wire()?}),
             )
         }
+        (Method::PUT, p) if p.starts_with("/computers/") => edit(&state, request, root, p).await?,
         (_, p) if p.starts_with("/computers/") && p.contains("/oauth/") => {
             oauth(&state, request, root, p).await?
         }
@@ -78,6 +79,40 @@ pub(super) async fn route(
             data,
         },
     )
+}
+
+async fn edit(
+    state: &HttpState,
+    request: Request<Body>,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let id = path
+        .strip_prefix("/computers/")
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
+    let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
+    let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let (computer, target_changed) = remote_computers::edit(
+        &state.application.setup()?,
+        root,
+        id,
+        &state.agent_version,
+        input,
+        state.shutdown.clone(),
+    )
+    .await?;
+    if target_changed && state.remote_live.connection(id).0 != remote_computers::Connection::Idle {
+        state.remote_live.reconnect(
+            super::remote_sessions::link(state)?,
+            state.application.clone(),
+            id,
+        );
+    }
+    Ok((
+        StatusCode::OK,
+        serde_json::json!({"computer": computer.wire()?}),
+    ))
 }
 
 async fn delete(

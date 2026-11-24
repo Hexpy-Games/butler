@@ -131,6 +131,90 @@ async fn computer_add_checks_the_users_known_hosts_then_lists_and_removes()
 }
 
 #[tokio::test]
+async fn computer_edit_keeps_the_same_machine() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    let setup = Setup::new("COMPUTER-EDIT")?;
+    let home = setup.sandbox.home.clone();
+    fs::create_dir_all(home.join(".ssh"))?;
+    let key = home.join(".ssh/id_ed25519");
+    let generated = Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+        .arg(&key)
+        .output()?;
+    assert!(generated.status.success());
+    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"), Some(&home))?;
+    let folder = home.join("projects");
+    fs::create_dir(&folder)?;
+    let setup = setup.env(
+        butler_platform::remote_ssh::CONFIG_FIXTURE,
+        user_ssh_config(&home)?.to_string_lossy(),
+    );
+    let s = setup.start().await?;
+    let api = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut input = json!({
+        "name": "Remote", "address": "127.0.0.1", "port": sshd.port,
+        "key_file": key, "folder": home, "model_source": "none",
+    });
+    let added = api
+        .send(Method::POST, "/computers", Some(input.clone()), &[])
+        .await?;
+    assert_eq!(added.status, 201, "{added:?}");
+    let id = added.data()["computer"]["id"].as_str().unwrap();
+    let path = format!("/computers/{id}");
+    input["name"] = json!("Studio");
+    input["folder"] = json!(folder);
+    let edited = api
+        .send(Method::PUT, &path, Some(input.clone()), &[])
+        .await?;
+    assert_eq!(edited.status, 200, "{edited:?}");
+    let listed = api.send(Method::GET, "/computers", None, &[]).await?;
+    assert_eq!(listed.status, 200, "{listed:?}");
+    assert_eq!(listed.data()["computers"][0]["name"], "Studio");
+    assert_eq!(listed.data()["computers"][0]["folder"], json!(folder));
+
+    input["address"] = json!("localhost");
+    let edited = api
+        .send(Method::PUT, &path, Some(input.clone()), &[])
+        .await?;
+    assert_eq!(edited.status, 200, "{edited:?}");
+    let studio = &edited.data()["computer"];
+    assert_eq!(studio["address"], "localhost");
+
+    let sshd2 = TestSshd::start(&home.join("sshd2"), &key.with_extension("pub"), Some(&home))?;
+    let mut other = input.clone();
+    other["port"] = json!(sshd2.port);
+    let refused = api
+        .send(Method::PUT, &path, Some(other.clone()), &[])
+        .await?;
+    assert_eq!(refused.status, 409, "{refused:?}");
+    assert_eq!(refused.error_code(), Some("computer_host_different"));
+    let listed = api.send(Method::GET, "/computers", None, &[]).await?;
+    assert_eq!(listed.status, 200, "{listed:?}");
+    assert_eq!(listed.data()["computers"], json!([studio]));
+
+    other["name"] = json!("Other");
+    let added = api
+        .send(Method::POST, "/computers", Some(other), &[])
+        .await?;
+    assert_eq!(added.status, 201, "{added:?}");
+    let mut duplicate = input.clone();
+    duplicate["name"] = json!("other");
+    let refused = api.send(Method::PUT, &path, Some(duplicate), &[]).await?;
+    assert_eq!(refused.status, 409, "{refused:?}");
+    assert_eq!(refused.error_code(), Some("computer_name_taken"));
+
+    input["folder"] = json!(home.join("missing"));
+    let refused = api.send(Method::PUT, &path, Some(input), &[]).await?;
+    assert_eq!(refused.status, 422, "{refused:?}");
+    assert_eq!(refused.error_code(), Some("computer_folder_missing"));
+    s.finish().await
+}
+
+#[tokio::test]
 async fn computer_add_reports_each_ssh_failure() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(

@@ -70,6 +70,7 @@ const SECURITY_ROUTES = Object.freeze({
   startComputer: { method: "POST", path: "/computers", entry: true, suffix: "/start" },
   getComputerConnection: { method: "GET", path: "/computers", entry: true, suffix: "/connection" },
   updateComputerModel: { method: "PATCH", path: "/computers", entry: true, payload: true },
+  editComputer: { method: "PUT", path: "/computers", entry: true, payload: true },
   startComputerOauth: { method: "POST", path: "/computers", entry: true, suffix: "/oauth/start", payload: true },
   getComputerOauth: { method: "GET", path: "/computers", entry: true, flow: true },
   cancelComputerOauth: { method: "POST", path: "/computers", entry: true, flow: true, suffix: "/cancel" },

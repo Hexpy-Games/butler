@@ -23,6 +23,7 @@ export type SecurityBridgeRoute =
   | "startComputer"
   | "getComputerConnection"
   | "updateComputerModel"
+  | "editComputer"
   | "startComputerOauth"
   | "getComputerOauth"
   | "cancelComputerOauth"
