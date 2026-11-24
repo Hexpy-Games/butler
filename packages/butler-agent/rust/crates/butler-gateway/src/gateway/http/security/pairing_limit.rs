@@ -45,6 +45,13 @@ impl PairingLimits {
 }
 
 pub(in crate::gateway::http) fn client_key(request: &Request<Body>) -> String {
+    if request
+        .extensions()
+        .get::<super::super::listeners::TunnelPeer>()
+        .is_some()
+    {
+        return "tunnel".into();
+    }
     request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

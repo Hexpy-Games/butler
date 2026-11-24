@@ -2061,6 +2061,11 @@ export interface AppCopy {
     security: {
       remoteAccess: string;
       remoteAccessDescription: string;
+      tunnel: string;
+      tunnelDescription: string;
+      tunnelConnected: string;
+      tunnelQrNote: string;
+      tunnelPlusOnly: string;
       addresses: string;
       noAddresses: string;
       bindErrors: {

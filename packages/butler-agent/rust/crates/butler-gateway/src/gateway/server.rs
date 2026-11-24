@@ -38,6 +38,7 @@ pub struct GatewayConfig {
     /// The host side of Settings → Security. Without one, exposure changes
     /// live in memory only and the connection code cannot rotate.
     pub security_store: Option<Arc<dyn GatewaySecurityStore>>,
+    pub tunnel: Option<Arc<dyn super::GatewayTunnelPort>>,
     /// Lifetime of the signed message-file URLs in JSON responses.
     pub signed_url_ttl: std::time::Duration,
     pub message_rate_limit_max: u64,
@@ -82,6 +83,7 @@ impl Default for GatewayConfig {
             remote_access_enabled: false,
             admin_credential: None,
             security_store: None,
+            tunnel: None,
             signed_url_ttl: std::time::Duration::from_secs(600),
             message_rate_limit_max: 60,
             message_rate_limit_window: std::time::Duration::from_secs(60),

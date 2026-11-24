@@ -2432,6 +2432,11 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     security: {
       remoteAccess: "Allow access from other computers",
       remoteAccessDescription: "Devices on your network enter the connection code to connect.",
+      tunnel: "Connect from anywhere",
+      tunnelDescription: "Connects your phone through your Butler account, even away from home.",
+      tunnelConnected: "Connected",
+      tunnelQrNote: "Pair phones again with the QR code.",
+      tunnelPlusOnly: "Available with Plus.",
       addresses: "Addresses",
       noAddresses: "No network address",
       bindErrors: {

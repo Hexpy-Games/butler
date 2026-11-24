@@ -6,9 +6,9 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use axum::Extension;
 use axum::extract::DefaultBodyLimit;
 use axum::serve::ListenerExt;
+use axum::{Extension, Router};
 use parking_lot::Mutex;
 use serde::Serialize;
 use tokio::net::TcpListener;
@@ -28,19 +28,21 @@ pub(super) struct ListenerScope {
     pub(super) closed: CancellationToken,
 }
 
+pub(super) fn api_router(state: Arc<HttpState>, closed: CancellationToken) -> Router {
+    super::router::routes()
+        .with_state(state)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+        .layer(Extension(ListenerScope { closed }))
+}
+
 /// Serves `listener` until `closed` fires.
 pub(super) fn spawn(
     listener: TcpListener,
     state: Arc<HttpState>,
     closed: CancellationToken,
 ) -> JoinHandle<std::io::Result<()>> {
-    let service = super::router::routes()
-        .with_state(state)
-        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
-        .layer(Extension(ListenerScope {
-            closed: closed.clone(),
-        }))
-        .into_make_service_with_connect_info::<SocketAddr>();
+    let service =
+        api_router(state, closed.clone()).into_make_service_with_connect_info::<SocketAddr>();
     tokio::spawn(async move {
         // Small JSON/SSE tails must not wait for an acknowledgement of a
         // preceding packet. Apply to loopback and dynamically bound LAN peers.
@@ -59,18 +61,19 @@ pub(super) fn spawn(
 #[derive(Clone)]
 pub(super) struct LocalSocketPeer;
 
+/// The request came through the built-in tunnel; Noise authenticated this phone key.
+#[derive(Clone)]
+pub(super) struct TunnelPeer {
+    pub(super) remote_static: [u8; 32],
+}
+
 pub(super) fn spawn_local(
     listener: LocalListener,
     socket: RemoteSocket,
     state: Arc<HttpState>,
     closed: CancellationToken,
 ) -> JoinHandle<std::io::Result<()>> {
-    let service = super::router::routes()
-        .with_state(state)
-        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
-        .layer(Extension(ListenerScope {
-            closed: closed.clone(),
-        }))
+    let service = api_router(state, closed.clone())
         .layer(Extension(LocalSocketPeer))
         .into_make_service();
     let listener = CountedListener::new(listener, socket.activity);

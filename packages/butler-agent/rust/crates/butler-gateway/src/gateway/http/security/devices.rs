@@ -117,6 +117,7 @@ impl DeviceRegistry {
         name: &str,
         ip: &str,
         kind: DeviceKind,
+        noise_static: Option<[u8; 32]>,
     ) -> Result<(String, String), HttpError> {
         let _change = self.changes.lock().await;
         let now = self.now();
@@ -131,6 +132,7 @@ impl DeviceRegistry {
             last_seen_at: now,
             revoked_at: None,
             kind,
+            noise_static,
         };
         self.application.save_device(device.clone()).await?;
         let entry = Arc::new(Entry {
@@ -151,7 +153,7 @@ impl DeviceRegistry {
         ip: &str,
         secure: bool,
     ) -> Result<(HeaderValue, String), HttpError> {
-        let (id, secret) = self.insert(name, ip, DeviceKind::Browser).await?;
+        let (id, secret) = self.insert(name, ip, DeviceKind::Browser, None).await?;
         let name = if secure {
             &self.host_cookie_name
         } else {
@@ -170,8 +172,9 @@ impl DeviceRegistry {
         name: &str,
         ip: &str,
         kind: DeviceKind,
+        noise_static: Option<[u8; 32]>,
     ) -> Result<(String, String), HttpError> {
-        let (id, secret) = self.insert(name, ip, kind).await?;
+        let (id, secret) = self.insert(name, ip, kind, noise_static).await?;
         let token = format!("{DEVICE_TOKEN_PREFIX}{id}.{secret}");
         Ok((id, token))
     }
@@ -194,6 +197,32 @@ impl DeviceRegistry {
             closed: entry.closed.clone(),
             token: false,
         })
+    }
+
+    pub(in crate::gateway::http) fn token_noise_static(
+        &self,
+        headers: &HeaderMap,
+    ) -> Option<[u8; 32]> {
+        self.token_entry(headers)?.device.noise_static
+    }
+
+    pub(in crate::gateway::http) fn knows_noise_static(&self, key: &[u8; 32]) -> bool {
+        let snapshot = self.entries.read().clone();
+        snapshot.values().any(|entry| {
+            entry
+                .device
+                .noise_static
+                .is_some_and(|stored| constant_time_eq(&stored, key))
+                && !entry.closed.is_cancelled()
+        })
+    }
+
+    pub(in crate::gateway::http) fn noise_device_count(&self) -> usize {
+        self.entries
+            .read()
+            .values()
+            .filter(|entry| entry.device.noise_static.is_some())
+            .count()
     }
 
     fn token_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {

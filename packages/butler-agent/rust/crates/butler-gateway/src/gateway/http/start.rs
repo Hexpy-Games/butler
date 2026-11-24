@@ -43,6 +43,7 @@ pub(in crate::gateway) fn serve(
             preview_lifetime_started: parking_lot::Mutex::new(false),
             application,
             devices,
+            tunnel: config.tunnel.map(super::tunnel::Tunnel::new),
             security: security::GatewaySecurity::new(security::SecurityConfig {
                 auth: config.local_auth,
                 admin: config.admin_credential,
@@ -74,6 +75,7 @@ pub(in crate::gateway) fn serve(
         // Publish the saved exposure before loopback admission: a successful
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
+        super::tunnel::Tunnel::start(&state).await;
         browser_ports(&state);
         super::content::spawn(listeners.content, state.clone(), shutdown.clone());
         let local = listeners.local.map(|(listener, socket)| {

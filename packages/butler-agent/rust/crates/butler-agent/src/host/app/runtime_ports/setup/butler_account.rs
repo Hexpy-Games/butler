@@ -17,17 +17,17 @@ const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
 
 pub(crate) struct ButlerAccount {
     http: Client,
-    pub(super) base_url: String,
+    pub(crate) base_url: String,
     pub(super) data: PathBuf,
     pub(super) uploads: Client,
     file: PathBuf,
 }
 
 #[derive(Deserialize, Serialize)]
-pub(super) struct StoredAccount {
+pub(crate) struct StoredAccount {
     schema_version: u32,
     api_url: String,
-    pub(super) device_token: String,
+    pub(crate) device_token: String,
     account_id: String,
     pub(super) device_id: String,
 }
@@ -84,6 +84,14 @@ impl ButlerAccount {
             ButlerAccountRequest::Verify { email, code } => self.verify(email, code).await,
             ButlerAccountRequest::SignOut => {
                 if let Some(stored) = self.read().await? {
+                    let _ = self
+                        .send(
+                            Method::DELETE,
+                            "/v1/tunnel",
+                            Some(&stored.device_token),
+                            None,
+                        )
+                        .await;
                     let response = self
                         .send(
                             Method::POST,
@@ -133,7 +141,7 @@ impl ButlerAccount {
         }
     }
 
-    async fn status(&self) -> Result<Value, GatewayApplicationError> {
+    pub(crate) async fn status(&self) -> Result<Value, GatewayApplicationError> {
         let Some(stored) = self.read().await? else {
             return Ok(json!({"signed_in": false}));
         };
@@ -208,7 +216,7 @@ impl ButlerAccount {
         &self.base_url
     }
 
-    pub(super) async fn read(&self) -> Result<Option<StoredAccount>, GatewayApplicationError> {
+    pub(crate) async fn read(&self) -> Result<Option<StoredAccount>, GatewayApplicationError> {
         let file = self.file.clone();
         let base_url = self.base_url.clone();
         tokio::task::spawn_blocking(move || {
@@ -233,7 +241,7 @@ impl ButlerAccount {
         }
     }
 
-    pub(super) async fn send(
+    pub(crate) async fn send(
         &self,
         method: Method,
         path: &str,
@@ -254,7 +262,7 @@ impl ButlerAccount {
     }
 }
 
-pub(super) async fn check(
+pub(crate) async fn check(
     response: Response,
     expected: u16,
 ) -> Result<Response, GatewayApplicationError> {
@@ -277,7 +285,7 @@ pub(super) async fn check(
     })
 }
 
-pub(super) fn unavailable() -> GatewayApplicationError {
+pub(crate) fn unavailable() -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 502,
         code: "cloud_unavailable".into(),
@@ -286,7 +294,7 @@ pub(super) fn unavailable() -> GatewayApplicationError {
     }
 }
 
-pub(super) fn signed_out() -> GatewayApplicationError {
+pub(crate) fn signed_out() -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 401,
         code: "butler_account_signed_out".into(),

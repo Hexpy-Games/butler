@@ -11,12 +11,18 @@ use std::{
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, State as AxumState},
+    extract::{
+        DefaultBodyLimit, State as AxumState,
+        ws::{WebSocket, WebSocketUpgrade, rejection::WebSocketUpgradeRejection},
+    },
     http::{HeaderMap, Method, StatusCode, Uri},
     response::{IntoResponse, Response},
 };
 use serde_json::{Value, json};
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::{Mutex as AsyncMutex, mpsc},
+    task::JoinHandle,
+};
 
 use super::HarnessError;
 
@@ -30,18 +36,21 @@ struct State {
     backup: Mutex<Backup>,
     blobs: Mutex<BTreeSet<String>>,
     page: Mutex<Option<(String, u64)>>,
+    tunnel: mpsc::UnboundedSender<WebSocket>,
 }
 
 pub struct FakeButlerCloud {
     pub url: String,
     state: Arc<State>,
     task: JoinHandle<()>,
+    tunnel: AsyncMutex<mpsc::UnboundedReceiver<WebSocket>>,
 }
 
 impl FakeButlerCloud {
     pub async fn start() -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let url = format!("http://{}", listener.local_addr()?);
+        let (sender, tunnel) = mpsc::unbounded_channel();
         let state = Arc::new(State {
             seen: Mutex::new(Vec::new()),
             plan: Mutex::new("free".into()),
@@ -49,6 +58,7 @@ impl FakeButlerCloud {
             backup: Mutex::default(),
             blobs: Mutex::new(BTreeSet::new()),
             page: Mutex::new(None),
+            tunnel: sender,
         });
         let router = Router::new()
             .fallback(route)
@@ -57,7 +67,25 @@ impl FakeButlerCloud {
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, router).await;
         });
-        Ok(Self { url, state, task })
+        Ok(Self {
+            url,
+            state,
+            task,
+            tunnel: AsyncMutex::new(tunnel),
+        })
+    }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Tunnel scenarios fetch the accepted desktop socket"
+    )]
+    pub async fn tunnel_socket(&self) -> WebSocket {
+        self.tunnel
+            .lock()
+            .await
+            .recv()
+            .await
+            .expect("desktop tunnel socket")
     }
 
     pub fn seen(&self) -> Vec<String> {
@@ -104,6 +132,7 @@ async fn route(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
+    upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     body: Bytes,
 ) -> Response {
     let path = uri.path();
@@ -158,6 +187,17 @@ async fn route(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .route(&method, path, &headers, body, quota);
     }
+    if method == Method::GET && path == "/v1/tunnel/connect" {
+        return match upgrade {
+            Ok(upgrade) => {
+                let tunnel = state.tunnel.clone();
+                upgrade.on_upgrade(move |socket| async move {
+                    let _ = tunnel.send(socket);
+                })
+            }
+            Err(rejection) => rejection.into_response(),
+        };
+    }
     authenticated(&state, method, path, &account, &device(device_id), &body)
 }
 
@@ -179,10 +219,19 @@ fn authenticated(
     body: &[u8],
 ) -> Response {
     match (method, path) {
+        (Method::POST, "/v1/tunnel") => {
+            let plan = state.plan.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if plan.as_str() == "plus" {
+                Json(json!({"tunnel_id": "tun_0123456789ABCDEFGHJKMNPQRS"})).into_response()
+            } else {
+                failure(StatusCode::FORBIDDEN, "tunnel_not_in_plan")
+            }
+        }
+        (Method::DELETE, "/v1/tunnel") => StatusCode::NO_CONTENT.into_response(),
         (Method::GET, "/v1/me") => {
             let plan = state.plan.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
             Json(json!({"account": account, "device": device,
-                "entitlements": {"plan": plan, "status": "active", "renews_at": null, "features": {}}})).into_response()
+                "entitlements": {"plan": plan, "status": "active", "renews_at": null, "features": {"tunnel": plan != "free"}}})).into_response()
         }
         (Method::GET, "/v1/devices") => Json(json!({"devices": [
             {"id": "dev_fake", "name": "Butler", "platform": "macos", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": true},

@@ -38,9 +38,10 @@ export const SecuritySettings = memo(function SecuritySettings() {
   const { view, load, busy } = security;
   const refused = load === "host-only" || load === "admin-required" || load === "error";
   const remoteEnabled = !refused && Boolean(view?.remote_access_enabled);
-  const pairing = usePairingSession(remoteEnabled);
-  const devices = usePairedDevices(remoteEnabled);
-  const now = useMinuteClock(remoteEnabled && devices.devices.length > 0);
+  const pairingEnabled = remoteEnabled || Boolean(view?.tunnel?.enabled);
+  const pairing = usePairingSession(pairingEnabled);
+  const devices = usePairedDevices(pairingEnabled);
+  const now = useMinuteClock(pairingEnabled && devices.devices.length > 0);
   const panelId = useId();
   const hintId = useId();
   const contentHintId = useId();
@@ -71,14 +72,17 @@ export const SecuritySettings = memo(function SecuritySettings() {
         {view && (
           <SecurityRemoteAccessFields
             view={view}
+            account={security.account}
+            justEnabled={security.justEnabled}
+            onTunnelChange={(enabled) => void security.toggleTunnel(enabled)}
             disabled={busy !== null}
             onChange={(enabled) => void security.toggleRemoteAccess(enabled)}
           />
         )}
       </SettingsSection>
-      {view?.remote_access_enabled && (
+      {view && pairingEnabled && (
         <>
-          {securityPairingSection({ disabled: busy !== null, addresses: view.lan_urls, pairing })}
+          {securityPairingSection({ disabled: busy !== null, addresses: view.lan_urls, pairing, tunnel: view.tunnel })}
           {securityDevicesSection({ disabled: busy !== null, devices, now })}
         </>
       )}

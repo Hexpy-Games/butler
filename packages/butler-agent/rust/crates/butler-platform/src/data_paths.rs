@@ -88,13 +88,14 @@ macro_rules! folder_secret_dir {
         "state/app-gateway"
     };
 }
-/// Folder of the gateway and local admin credentials, their locks and
-/// rotation temporaries; it holds nothing else.
+/// Folder of the gateway and local admin credentials, tunnel static key,
+/// and their locks and rotation temporaries.
 pub const LOCAL_AUTH_DIR: &str = local_auth_dir!();
 /// Local administrator credential.
 pub const LOCAL_ADMIN: &str = concat!(local_auth_dir!(), "/local-admin.json");
 /// Local gateway authentication credential.
 pub const LOCAL_AUTH: &str = concat!(local_auth_dir!(), "/local-agent-auth.json");
+pub const TUNNEL_NOISE_KEY: &str = concat!(local_auth_dir!(), "/tunnel-noise-key.json");
 /// Folder of the project-folder token secret, its lock and rotation
 /// temporaries; it holds nothing else.
 pub const FOLDER_SECRET_DIR: &str = folder_secret_dir!();

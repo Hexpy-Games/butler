@@ -34,6 +34,7 @@ const ROTATED_EVENT: &str = "security.connection_code_rotated";
 /// `GET /security`.
 #[derive(Debug, Serialize)]
 struct SecurityView {
+    tunnel: Option<super::tunnel::TunnelView>,
     remote_access_enabled: bool,
     /// Every address the gateway listens on, loopback first.
     bind_addresses: Vec<String>,
@@ -102,6 +103,7 @@ pub(super) async fn route(
     }
     match (request.method().clone(), request.uri().path()) {
         (Method::GET, "/security") => ok(view(&state)?),
+        (Method::PUT, "/security/tunnel") => super::tunnel::set(&state, request).await,
         (Method::POST, "/security/pairing") => {
             let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
             ok(keyed
@@ -212,6 +214,7 @@ fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let connection_code = None;
     let lan_urls = links::connection_urls(&remote, state.security.port());
     Ok(SecurityView {
+        tunnel: state.tunnel.as_ref().map(super::tunnel::Tunnel::view),
         remote_access_enabled: remote.exposure.remote_access_enabled,
         bind_addresses,
         content_addresses,
@@ -367,7 +370,7 @@ fn normalized_hosts(hosts: &[String]) -> Result<Vec<String>, HttpError> {
     Ok(normalized)
 }
 
-fn ok<T: Serialize>(data: T) -> Result<Response, HttpError> {
+pub(super) fn ok<T: Serialize>(data: T) -> Result<Response, HttpError> {
     json(
         StatusCode::OK,
         ApiEnvelope {

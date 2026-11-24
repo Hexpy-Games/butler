@@ -24,10 +24,12 @@ use tokio_util::sync::CancellationToken;
 
 pub(super) const OUTPUT_CHUNK: u64 = 3 * 1024 * 1024;
 
+pub(super) fn router(state: Arc<HttpState>) -> Router {
+    Router::new().fallback(any(dispatch)).with_state(state)
+}
+
 pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: CancellationToken) {
-    let router = Router::new()
-        .fallback(any(dispatch))
-        .with_state(state.clone());
+    let router = router(state.clone());
     drop(tokio::spawn(async move {
         let _ = axum::serve(
             listener,
@@ -85,7 +87,12 @@ fn content_host(state: &HttpState, value: &str) -> bool {
                 })))
 }
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let result = if !content_host(&state, host(request.headers()).unwrap_or("")) {
+    let result = if request
+        .extensions()
+        .get::<super::listeners::TunnelPeer>()
+        .is_none()
+        && !content_host(&state, host(request.headers()).unwrap_or(""))
+    {
         Err(refused())
     } else if request.uri().path().starts_with("/__o/") {
         serve(&state, request).await
@@ -105,7 +112,12 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
 }
 async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, HttpError> {
     let (parts, _) = request.into_parts();
-    if !content_host(state, host(&parts.headers)?) {
+    if parts
+        .extensions
+        .get::<super::listeners::TunnelPeer>()
+        .is_none()
+        && !content_host(state, host(&parts.headers)?)
+    {
         return Err(refused());
     }
     if parts.method != Method::GET {

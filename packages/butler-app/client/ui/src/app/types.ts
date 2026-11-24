@@ -643,6 +643,12 @@ export interface SecuritySettingsView {
  * `loopback_required` or `admin_credential_required` otherwise).
  */
 export interface SecurityView {
+  tunnel?: {
+    enabled: boolean;
+    state: "off" | "connecting" | "connected";
+    public_key: string | null;
+    tunnel_id: string | null;
+  } | null;
   remote_access_enabled: boolean;
   /** Every listen address, loopback first. */
   bind_addresses: string[];

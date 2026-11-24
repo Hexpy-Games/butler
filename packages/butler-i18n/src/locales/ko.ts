@@ -2436,6 +2436,11 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     security: {
       remoteAccess: "다른 컴퓨터에서 접속 허용",
       remoteAccessDescription: "같은 네트워크의 기기에서 연결 코드를 입력해 접속합니다.",
+      tunnel: "밖에서 연결",
+      tunnelDescription: "버틀러 계정으로 집 밖에서도 휴대폰과 연결합니다.",
+      tunnelConnected: "연결됨",
+      tunnelQrNote: "휴대폰은 QR로 다시 연결해야 합니다.",
+      tunnelPlusOnly: "Plus에서 쓸 수 있습니다.",
       addresses: "접속 주소",
       noAddresses: "네트워크 주소 없음",
       bindErrors: {
