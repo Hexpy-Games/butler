@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
 use butler_runtime::context::ToolOutput;
-use butler_turn::btcc::BtccError;
+use butler_turn::btcc::{BtccError, TargetScope};
 use butler_turn::workspace::{
     Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
     WorkspaceReference,
@@ -46,6 +46,7 @@ pub(crate) enum CommandExecution {
 
 #[derive(Clone)]
 pub(crate) struct CommandScope<'a> {
+    pub target_scope: TargetScope,
     pub allowed_folders: Vec<PathBuf>,
     pub extra_write_roots: Vec<PathBuf>,
     pub protected_roots: &'a [PathBuf],

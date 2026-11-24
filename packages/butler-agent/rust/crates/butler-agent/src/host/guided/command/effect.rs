@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use butler_runtime::context::ToolOutput;
 use butler_turn::btcc::{
     AdapterOutcome, BtccError, EffectAdapter, EffectAdapterError, EffectError, EffectFuture,
-    PlanBinding,
+    PlanBinding, TargetScope,
 };
 use butler_turn::workspace::Commands;
 
@@ -24,7 +24,7 @@ pub(super) async fn prepare(
 ) -> Result<PreparedCommandEffect, BtccError> {
     let workspace = active_root(&scope)?;
     let guarded_root = workspace.clone();
-    let allowed_cwd = !scope.allowed_folders.is_empty();
+    let allowed_cwd = scope.target_scope == TargetScope::AllowedFolder;
     let requested = args.get("cwd").and_then(Value::as_str).map(str::to_owned);
     let path_form = super::directory_path_form(scope.contained_reads && !allowed_cwd);
     let (cwd, root_identity, cwd_identity) = owner
@@ -243,6 +243,7 @@ impl CommandEffectAdapter {
                 .execute_observation(
                     args,
                     CommandScope {
+                        target_scope: TargetScope::NoTarget,
                         allowed_folders: self.allowed_folders.clone(),
                         extra_write_roots: Vec::new(),
                         protected_roots: &self.protected_roots,
@@ -268,6 +269,7 @@ impl CommandEffectAdapter {
             .check_paths(
                 args,
                 &CommandScope {
+                    target_scope: TargetScope::NoTarget,
                     allowed_folders: self.allowed_folders.clone(),
                     extra_write_roots: Vec::new(),
                     protected_roots: &self.protected_roots,

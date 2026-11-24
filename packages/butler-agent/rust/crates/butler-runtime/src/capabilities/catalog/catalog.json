@@ -14864,7 +14864,6 @@
       "project_ledger_attempt_fail"
     ],
     "workspace": [
-      "propose_permission_rule",
       "run_command",
       "switch_folder",
       "read_file",

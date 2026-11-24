@@ -223,7 +223,7 @@ async fn read_only_pipeline_without_read_sandbox() -> Result<(), HarnessError> {
         (
             "grep",
             "Count matching lines.",
-            "grep -rn marker src | wc -l",
+            "grep -n marker src/a.txt | wc -l",
             "1",
         ),
         (

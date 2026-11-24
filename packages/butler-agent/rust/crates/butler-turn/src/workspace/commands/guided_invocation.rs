@@ -31,24 +31,11 @@ fn project_write_shell(
         denied.extend(input.installation_root.as_deref());
         denied.extend(input.protected_roots.iter().map(PathBuf::as_path));
     }
-    let roots = crate::workspace::FolderRoots {
-        butler_data: data,
-        protected_roots: &input.protected_roots,
-        installation_root: input.installation_root.as_deref(),
-    };
     let extra: Vec<_> = input
         .extra_write_roots
         .iter()
         .map(PathBuf::as_path)
         .collect();
-    if extra.iter().any(|root| {
-        crate::workspace::allowed_folder(&root.to_string_lossy(), &roots)
-            .ok()
-            .as_deref()
-            != Some(*root)
-    }) {
-        return Err(command_sandbox::SandboxError::ProjectWriteUnavailable);
-    }
     let toolchain_roots =
         butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
             home: dirs.home,

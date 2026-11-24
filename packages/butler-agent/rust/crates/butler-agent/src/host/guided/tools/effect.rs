@@ -96,6 +96,7 @@ async fn execute_effect(
         .map_err(ToolExecutionError::Integrity)?
         .unwrap_or_else(|| runtime_work::untracked(owner));
     let contained = contained_run(owner, occurrence, &access, kind);
+    scope.target_scope = access.scope;
     scope.allowed_folders = access.allowed_folders;
     scope.extra_write_roots = contained.extra_write_roots.clone();
     let prepared = prepare(owner, call, occurrence, (scope, contained), &work).await;
@@ -440,6 +441,7 @@ fn command_scope(
     signal: tokio_util::sync::CancellationToken,
 ) -> CommandScope<'_> {
     CommandScope {
+        target_scope: butler_turn::btcc::TargetScope::NoTarget,
         allowed_folders: Vec::new(),
         extra_write_roots: Vec::new(),
         protected_roots: &owner.binding.protected_ledger_roots,

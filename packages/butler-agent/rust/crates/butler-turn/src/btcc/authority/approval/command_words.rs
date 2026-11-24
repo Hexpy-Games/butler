@@ -191,7 +191,7 @@ fn option_hits(word: &str, forbidden: &str) -> bool {
             .is_some_and(|flag| flag.eq_ignore_ascii_case(forbidden))
 }
 
-pub(in crate::btcc) fn read_only(words: &[Word]) -> bool {
+pub(in crate::btcc) fn read_only(words: &[Word], first_segment: bool) -> bool {
     let Some((first, args)) = words.split_first() else {
         return false;
     };
@@ -212,13 +212,19 @@ pub(in crate::btcc) fn read_only(words: &[Word]) -> bool {
     let forbidden: &[&str] = match name.as_str() {
         "ls" | "dir" | "pwd" | "echo" | "cat" | "type" | "head" | "tail" | "wc" | "nl" | "cut"
         | "tr" | "basename" | "dirname" | "realpath" | "readlink" | "stat" | "du" | "df"
-        | "which" | "where" | "whoami" | "grep" | "egrep" | "fgrep" | "findstr"
-        | "get-childitem" | "gci" | "get-content" | "gc" | "select-string" | "sls"
-        | "get-location" | "test-path" | "resolve-path" | "measure-object" | "select-object"
-        | "sort-object" => &[],
-        // Compiling magic databases and assigning a shell variable have effects.
+        | "which" | "where" | "whoami" | "get-childitem" | "gci" | "get-location" | "test-path"
+        | "resolve-path" | "measure-object" | "select-object" | "sort-object" => &[],
+        "grep" | "egrep" | "fgrep" => &[
+            "-r",
+            "-R",
+            "--recursive",
+            "--dereference-recursive",
+            "-d",
+            "--directories",
+        ],
+        "findstr" => &["/S"],
+        "get-content" | "gc" | "select-string" | "sls" if first_segment => &[],
         "file" => &["-C", "--compile"],
-        "printf" => &["-v"],
         "tree" => &["-o"],
         "sort" => &["-o", "--output", "--compress-program", "/O"],
         "uniq" => {
@@ -235,9 +241,7 @@ pub(in crate::btcc) fn read_only(words: &[Word]) -> bool {
                 .count()
                 <= 1;
         }
-        "date" if args.iter().any(|word| !word.text.starts_with(['-', '+'])) => return false,
         "date" => &["-s", "--set"],
-        "rg" => &["--pre", "--hostname-bin"],
         "fd" => &["-x", "-X", "--exec", "--exec-batch"],
         "find" => {
             return !args.iter().any(|word| {
@@ -256,7 +260,12 @@ pub(in crate::btcc) fn read_only(words: &[Word]) -> bool {
 }
 
 pub(in crate::btcc) fn is_read_only(line: &str) -> bool {
-    segments(line).is_some_and(|segments| segments.iter().all(|words| read_only(words)))
+    segments(line).is_some_and(|segments| {
+        segments
+            .iter()
+            .enumerate()
+            .all(|(index, words)| read_only(words, index == 0))
+    })
 }
 
 pub(in crate::btcc) fn rule_prefix(words: &[String]) -> Option<Vec<String>> {
@@ -327,8 +336,8 @@ pub(in crate::btcc) fn normalize_prefix(text: &str) -> Option<Vec<String>> {
 
 pub(in crate::btcc) fn rule_prefixes(line: &str) -> Option<Vec<String>> {
     let mut prefixes = Vec::new();
-    for words in segments(line)? {
-        if !read_only(&words) {
+    for (index, words) in segments(line)?.into_iter().enumerate() {
+        if !read_only(&words, index == 0) {
             let prefix = segment_prefix(&words)?.join(" ");
             if !prefixes.contains(&prefix) {
                 prefixes.push(prefix);

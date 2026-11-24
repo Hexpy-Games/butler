@@ -56,6 +56,54 @@ const ALLOW: &[(
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
     ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
     // A folder switch within the consented folder or its repository.
     (AskAlways, FolderSwitch, Some(ProjectFolder), None),
     (AskExceptReads, FolderSwitch, Some(ProjectFolder), None),
@@ -78,6 +126,54 @@ const ALLOW: &[(
         CommandObservation { sandboxed: false },
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(ProjectFolder),
+        None,
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(ProjectFolder),
+        None,
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(AllowedFolder),
+        None,
     ),
     (Auto, FileEdit, Some(ProjectFolder), None),
     (Auto, ProjectRecord, None, None),
@@ -143,28 +239,14 @@ fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode != ReadOnly && matches!(request.kind, Exempt(_)) {
         return Allow;
     }
-    if let CommandMutation { sandbox } = request.kind
-        && match (mode, request.scope, sandbox) {
-            (
-                Auto,
-                ProjectFolder,
-                CommandSandbox::ProjectWrite | CommandSandbox::ProjectAndFolders,
-            )
-            | (Auto, AllowedFolder, CommandSandbox::ProjectAndFolders) => true,
-            (AskExceptReads | Auto, ProjectFolder | AllowedFolder, _) => {
-                request.risk == ApprovalRisk::Low
-            }
-            _ => false,
-        }
-    {
-        return Allow;
-    }
     if ALLOW.iter().any(|(m, k, s, r)| {
         m == mode
             && *k == request.kind
             && s.is_none_or(|s| {
                 s == request.scope
-                    || s == ProjectFolder && request.scope == AllowedFolder && *k != FolderSwitch
+                    || s == ProjectFolder
+                        && request.scope == AllowedFolder
+                        && !matches!(k, FolderSwitch | CommandMutation { .. })
             })
             && r.is_none_or(|r| r == request.risk)
     }) {

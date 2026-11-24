@@ -34,7 +34,7 @@ pub(in crate::btcc) fn segment_table() {
 pub(in crate::btcc) fn read_only_table() {
     for (line, expected) in [
         ("git status && git log --oneline -3 | head -1", false),
-        ("grep -rn x src | wc -l", true),
+        ("grep -rn x src | wc -l", false),
         ("ls 2>/dev/null", true),
         ("find . -name a -delete", false),
         ("find . -exec rm {} ;", false),

@@ -96,8 +96,8 @@ pub fn rule_verdict(command: &str, rules: &[CommandRule]) -> RuleVerdict {
         return RuleVerdict::Deny;
     }
     let mut matched = false;
-    for words in parsed {
-        if !read_only(&words) {
+    for (index, words) in parsed.into_iter().enumerate() {
+        if !read_only(&words, index == 0) {
             let Some(prefix) = segment_prefix(&words) else {
                 return RuleVerdict::NoRule;
             };

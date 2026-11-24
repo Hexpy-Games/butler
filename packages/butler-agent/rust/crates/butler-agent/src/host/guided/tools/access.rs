@@ -138,13 +138,6 @@ pub(super) async fn decision_for_kind(
     Ok(ClassifiedAccess {
         decision: if unsandboxed {
             AccessDecision::Ask(GrantUse::Ignore)
-        } else if matches!(
-            kind,
-            CapabilityKind::CommandMutation {
-                sandbox: CommandSandbox::Disabled
-            }
-        ) {
-            decision
         } else {
             apply_allow(decision, verdict, scope)
         },
