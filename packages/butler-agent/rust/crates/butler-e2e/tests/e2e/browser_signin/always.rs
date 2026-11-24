@@ -257,3 +257,54 @@ async fn browser_read_asks_for_a_signed_in_site() -> Result<(), HarnessError> {
     assert!(host.last("tab.read").is_some());
     s.finish().await
 }
+
+#[tokio::test]
+async fn user_visit_lets_agent_tabs_open_signed_in() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-SIGNIN-USER-VISIT")?
+        .stub_cassette(observe()?)
+        .start()
+        .await?;
+    let admin = admin(&s);
+    let host = attach(
+        &s,
+        Arc::new(|frame: Value| {
+            Box::pin(
+                async move { json!({"status":"ok","tab":"opened","url":frame["args"]["url"]}) },
+            )
+        }),
+    )
+    .await?;
+    snapshot(
+        &admin,
+        json!([tab(
+            "identity",
+            "conversation:general",
+            "https://start.fixture-other.test/",
+            "user"
+        )]),
+    )
+    .await?;
+    snapshot(
+        &admin,
+        json!([tab("identity", "conversation:general", URL, "user")]),
+    )
+    .await?;
+    call(&admin, "general", "tab.open", "", json!({"url":URL})).await?;
+    let opened = host.last("tab.open").unwrap();
+    assert_eq!(opened["args"]["profile"], "signed_in");
+    assert_eq!(opened["args"]["policy"]["mode"], "signed_in");
+    call(
+        &admin,
+        "general",
+        "tab.open",
+        "",
+        json!({"url":"https://research.fixture-news.test/a"}),
+    )
+    .await?;
+    assert_ne!(
+        host.last("tab.open").unwrap()["args"]["profile"],
+        "signed_in"
+    );
+    s.finish().await
+}

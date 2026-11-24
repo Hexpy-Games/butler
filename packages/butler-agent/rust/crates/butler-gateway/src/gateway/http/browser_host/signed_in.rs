@@ -1,6 +1,6 @@
 //! Signed-in tabs: every call re-reads the conversation's live site grants,
 //! sends the resulting policy for main to enforce, and re-checks what main
-//! reports. A tab the user drags in from their own tabs grants its site.
+//! reports. Sites the user brings into a conversation grant signed-in access.
 use super::{HttpError, HttpState, error};
 use crate::gateway::AppSignInCommand;
 use butler_runtime::browser::{
@@ -58,18 +58,25 @@ pub(super) async fn admit(
 ) -> Result<Option<Value>, HttpError> {
     let turn = frame["turn_id"].as_str().map(str::to_owned);
     if op == "tab.open" {
-        if frame["args"]["signed_in"] != true {
+        let explicit = frame["args"]["signed_in"] == true;
+        if let Some(refusal) = schedule_refusal(frame) {
+            return Ok(explicit.then_some(refusal));
+        }
+        let url = frame["args"]["url"].as_str().unwrap_or("");
+        let Some(site) = site_of(url) else {
+            return if explicit {
+                Err(error(400, "navigation_denied"))
+            } else {
+                Ok(None)
+            };
+        };
+        if !explicit && butler_runtime::browser::public_url(url).is_err() {
             return Ok(None);
         }
-        if let Some(refusal) = schedule_refusal(frame) {
-            return Ok(Some(refusal));
-        }
-        let url = frame["args"]["url"].as_str().unwrap_or("").to_owned();
-        let site = site_of(&url).ok_or_else(|| error(400, "navigation_denied"))?;
         let sites =
             granted_sites(state, session, turn.as_deref(), &frame["schedule_browser"]).await?;
-        if signed_in_place(&url, &sites) != SignedInPlace::Granted {
-            return Ok(Some(grant_required(&site)));
+        if signed_in_place(url, &sites) != SignedInPlace::Granted {
+            return Ok(explicit.then(|| grant_required(&site)));
         }
         frame["args"]["profile"] = json!("signed_in");
         if let Some(origin) = content_origin(state) {
@@ -167,8 +174,8 @@ pub(super) async fn grant(
     Ok(json!({"status":"ok","site":site}))
 }
 
-/// Grants the site of every signed-in tab the user dragged from their own tabs
-/// into a conversation (spec Q3). Page content cannot cause a move.
+/// Grants a site the user brings into a conversation by dragging a tab in
+/// or by going there in one of the conversation's signed-in tabs.
 pub(super) async fn record_handovers(
     state: &Arc<HttpState>,
     handovers: Vec<(String, String)>,

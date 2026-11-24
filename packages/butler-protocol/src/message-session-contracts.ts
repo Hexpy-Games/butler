@@ -84,6 +84,8 @@ export interface MessageContent {
   parts: MessageContentPart[];
   /** Quoted source data keyed by the attached image file id; never rendered as a file. */
   attachment_metadata?: Record<string, unknown>;
+  /** The conversation's active tab at send time. URL and title are untrusted page data. */
+  browser_view?: { tab: string; url: string; title: string };
 }
 
 export function isMessageContent(value: unknown): value is MessageContent {
