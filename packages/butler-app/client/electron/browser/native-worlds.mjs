@@ -35,10 +35,10 @@ export function nativeWorldOf(tab,target,wait=false) {
 }
 function worldOf(tab,frame,wait=false) {
   if(!frame || frame.isDestroyed() || frame.detached)return undefined;
-  return {executeJavaScriptInIsolatedWorld:(_world,scripts)=>new Promise((resolve,reject)=>{
+  return {executeJavaScriptInIsolatedWorld:(world,scripts)=>new Promise((resolve,reject)=>{
     const id=randomUUID(),timer=wait?null:setTimeout(()=>{pending.delete(id);reject(new Error('frame_unavailable'))},5000);
     pending.set(id,{frame,contentsId:tab.view.webContents.id,timer,resolve,reject});
-    try{frame.send('butler-browser-world:call',id,scripts[0].code)}catch(error){clearTimeout(timer);pending.delete(id);reject(error)}
+    try{frame.send('butler-browser-world:call',id,scripts[0].code,world)}catch(error){clearTimeout(timer);pending.delete(id);reject(error)}
   })};
 }
 

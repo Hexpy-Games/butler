@@ -3,30 +3,51 @@ import { ipcMain } from "electron";
 /** "로그인 저장" after the user signs in in a signed-in tab they hold (their own tab,
  * or a conversation tab they took over); not offered when the site already has this exact sign-in saved.
  * The page's own form values reach main only from signed-in tabs, are kept
- * in memory for at most two minutes, and leave main only to the keychain store. */
+ * in memory for at most two minutes, and leave main only to the keychain store.
+ * A username step is remembered per tab and origin for five minutes, in memory only. */
 const OFFER_MS = 120_000;
+const USERNAME_MS = 300_000;
 
 export function installSignInOffers(browser) {
+  ipcMain.on("butler-browser:signin-username", (event, input) => {
+    const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
+    const frame = event.senderFrame;
+    if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user") return;
+    let origin;
+    try { origin = new URL(tab.view.webContents.getURL()).origin; } catch { return; }
+    const username = typeof input?.username === "string" ? input.username.trim().slice(0, 256) : "";
+    if (!username) return;
+    clearPending(tab);
+    tab.pendingUsername = { origin, frameOrigin: frame.origin, username, timer: setTimeout(() => clearPending(tab), USERNAME_MS) };
+  });
   ipcMain.on("butler-browser:signin-candidate", async (event, input) => {
     const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
     const frame = event.senderFrame;
     if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user") return;
     let origin;
     try { origin = new URL(tab.view.webContents.getURL()).origin; } catch { return; }
-    // Only the top-level page's own origin, never a framed form.
-    if (frame.origin !== origin) return;
-    const username = typeof input?.username === "string" ? input.username.slice(0, 256) : "";
+    const frameOrigin = frame.parent ? frame.origin : undefined;
+    const pending = tab.pendingUsername;
+    const username = (typeof input?.username === "string" ? input.username.slice(0, 256) : "") ||
+      (pending?.origin === origin && pending.frameOrigin === frame.origin ? pending.username : "");
     const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : "";
     if (!username || !password) return;
     // The Agent checks store availability and whether this exact sign-in is already saved.
-    if (!await browser.signInOfferWanted?.({ origin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
+    if (!await browser.signInOfferWanted?.({ origin, frame_origin: frameOrigin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
     clearOffer(tab);
     tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
     browser.publish();
   });
 }
 
+function clearPending(tab) {
+  if (!tab?.pendingUsername) return;
+  clearTimeout(tab.pendingUsername.timer);
+  tab.pendingUsername = null;
+}
+
 export function clearOffer(tab) {
+  clearPending(tab);
   if (!tab?.saveOffer) return;
   clearTimeout(tab.saveOffer.timer);
   tab.saveOffer.password = null;

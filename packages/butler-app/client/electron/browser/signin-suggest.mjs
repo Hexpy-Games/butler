@@ -2,9 +2,20 @@ import { ipcMain, nativeTheme, WebContentsView } from "electron";
 import { fileURLToPath } from "node:url";
 import { overlaySession } from "./overlay-session.mjs";
 import { fillOffer } from "./signin-autofill.mjs";
+import { frameAt } from "./selection.mjs";
 
 /** Shadow room around the list; the same margins as SignInSuggestions.tsx. */
 const MARGIN = { top: 4, side: 36, bottom: 48 };
+
+const framePath = frame => {
+  const path = [];
+  for (let f = frame; f.parent; f = f.parent) {
+    const index = f.parent.frames.findIndex(child => child.processId === f.processId && child.routingId === f.routingId);
+    if (index < 0) return null;
+    path.unshift(index);
+  }
+  return path;
+};
 
 export class SignInSuggest {
   constructor(browser) {
@@ -35,13 +46,27 @@ export class SignInSuggest {
     const url = tab.view.webContents.getURL();
     let origin;
     try { origin = new URL(url).origin; } catch { return; }
-    if (frame.origin !== origin || tab.fillDismissed === url) return;
+    if (tab.fillDismissed === url) return;
+    const offer = tab.fillOffer;
+    const key = `${frame.processId}:${frame.routingId}`, frameOrigin = frame.origin;
+    const same = offer?.url === url && offer.frameKey === key && offer.frameOrigin === frameOrigin;
     // A scroll or resize only moves an open list; it never opens one.
-    if (tab.fillOffer?.url === url) { tab.fillOffer.rect = box; this.sync(tab); return; }
-    if (rect.moved) return;
-    const accounts = await browser.signInAccounts?.(origin).catch(() => []);
-    if (!accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
-    tab.fillOffer = { url, origin, accounts, rect: box, active: -1, error: false };
+    if (!same && rect.moved) return;
+    if (!same) {
+      tab.fillLookupSequence = (tab.fillLookupSequence ?? 0) + 1;
+      this.close(tab);
+    }
+    const sequence = tab.fillLookupSequence;
+    const subframe = frame.parent ? frame : null;
+    if (subframe) {
+      const path = framePath(frame), at = path && await frameAt(tab, path);
+      if (!at || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
+      box.x += at.offset.x; box.y += at.offset.y;
+    }
+    if (same) { if (tab.fillOffer === offer) { offer.rect = box; this.sync(tab); } return; }
+    const accounts = await browser.signInAccounts?.(origin, subframe ? frameOrigin : undefined).catch(() => []);
+    if (tab.fillLookupSequence !== sequence || !accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
+    tab.fillOffer = { url, origin, accounts, rect: box, active: -1, error: false, frame: subframe, frameKey: key, frameOrigin };
     this.sync(tab);
   }
   create() {

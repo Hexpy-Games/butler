@@ -113,9 +113,9 @@ webFrame.setIsolatedWorldInfo(9001, { name });
 void webFrame.executeJavaScriptInIsolatedWorld(9001, [{ code:"void 0" }]).then(()=>{
   ipcRenderer.send("butler-browser-world:ready", name);
 });
-ipcRenderer.on("butler-browser-world:call", async(_event, id, code)=>{
+ipcRenderer.on("butler-browser-world:call", async(_event, id, code, world)=>{
   try {
-    const value=await webFrame.executeJavaScriptInIsolatedWorld(9001, [{ code }]);
+    const value=await webFrame.executeJavaScriptInIsolatedWorld(world === 9002 ? 9002 : 9001, [{ code }]);
     ipcRenderer.send("butler-browser-world:result", id, true, value);
   }catch{ipcRenderer.send("butler-browser-world:result", id, false, null);}
 });
@@ -131,7 +131,13 @@ window.addEventListener("dragend", event => {
 // Signed-in tabs only: a submitted sign-in may be offered for saving ("로그인 저장").
 // Main keeps it only for a tab the user holds, and only in memory.
 if (process.argv.includes("--butler-signin-capture")) {
-  const loginInput = t => t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (t.type === "password" || (t.form ?? document).querySelector('input[type="password"]')) ? t : null;
+  // Same rule as detectSource's named in signin-fill.mjs.
+  const named = input => /username|email/u.test(input.autocomplete || "") || input.type === "email" ||
+    /user|login|email|account|identifier|아이디|이메일/u.test([input.id, input.getAttribute("name"), input.getAttribute("class"), input.getAttribute("placeholder"), input.getAttribute("aria-label")].join(" ").toLowerCase());
+  const loginInput = t => t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (
+    t.type === "password" || (t.form ?? document).querySelector('input[type="password"]') ||
+    named(t) && [...document.querySelectorAll("input")].filter(i => /^(text|email|tel|)$/u.test(i.type) && !i.disabled && i.getClientRects().length).length <= 2
+  ) ? t : null;
   const sendField = (input, moved) => { const { x, y, width, height } = input.getBoundingClientRect(); ipcRenderer.send("butler-browser:signin-field", { x, y, width, height, moved }); };
   window.addEventListener("focusin", event => { const input = event.isTrusted && loginInput(event.target); if (input) sendField(input, false); }, true);
   // Focus leaving the page (to the suggestion list or the App) is main's call; here only a move to another page element closes it.
@@ -146,15 +152,19 @@ if (process.argv.includes("--butler-signin-capture")) {
   };
   window.addEventListener("scroll", follow, { capture: true, passive: true });
   window.addEventListener("resize", follow, true);
-  const capture = scope => {
+  const capture = (scope, step = true) => {
     const root = scope?.querySelectorAll ? scope : document;
     const password = [...root.querySelectorAll('input[type="password"]')].find(input => input.value);
-    if (!password) return;
-    const fields = [...(password.form ?? document).querySelectorAll("input")].filter(input => /^(text|email|tel|)$/u.test(input.type) && input.value);
-    const username = fields.filter(input => input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1)?.value ?? "";
-    if (username) ipcRenderer.send("butler-browser:signin-candidate", { username, password: password.value });
+    if (password) {
+      const fields = [...(password.form ?? document).querySelectorAll("input")].filter(input => /^(text|email|tel|)$/u.test(input.type) && input.value);
+      const username = fields.filter(input => input.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).at(-1)?.value ?? "";
+      ipcRenderer.send("butler-browser:signin-candidate", { username, password: password.value });
+      return;
+    }
+    const users = [...root.querySelectorAll("input")].filter(input => /^(text|email|tel|)$/u.test(input.type) && input.value && input.getClientRects().length && named(input));
+    if (step && users.length === 1) ipcRenderer.send("butler-browser:signin-username", { username: users[0].value });
   };
   window.addEventListener("submit", event => { if (event.isTrusted) capture(event.target); }, true);
-  window.addEventListener("keydown", event => { if (event.isTrusted && event.key === "Enter" && event.target?.type === "password") capture(event.target.form ?? document); }, true);
-  window.addEventListener("click", event => { const button = event.isTrusted && event.target?.closest?.('button,input[type="submit"]'); if (button) capture(button.form ?? document); }, true);
+  window.addEventListener("keydown", event => { if (event.isTrusted && event.key === "Enter" && event.target?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(event.target.type)) capture(event.target.form ?? document); }, true);
+  window.addEventListener("click", event => { const button = event.isTrusted && event.target?.closest?.('button,input[type="submit"]'); if (button) capture(button.form ?? document, !!button.form); }, true);
 }

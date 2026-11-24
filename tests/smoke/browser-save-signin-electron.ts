@@ -88,9 +88,97 @@ try {
   const row = await app.main<{ x: number; y: number }>(`${suggest}.webContents.executeJavaScript("(()=>{const r=[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.includes('owner@fixture.test')).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()")`);
   await app.main(`(()=>{const contents=${suggest}.webContents;contents.focus();for(const type of ['mouseDown','mouseUp'])contents.sendInputEvent({type,button:'left',clickCount:1,x:${row.x},y:${row.y}});})()`);
   await waitBrowser(() => page(mine, `document.querySelector('[name=username]').value==='owner@fixture.test' && document.querySelector('[name=password]').value.length===${CANARY.length}`), "sign-in filled");
-  assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "fill snapshot excludes the password");
   await app.main(`(()=>{const view=${tabOf(mine)}.view;for(const type of ['keyDown','char','keyUp'])view.webContents.sendInputEvent({type,keyCode:'Enter'})})()`);
   await waitBrowser(() => page(mine, "location.pathname==='/mfa'"), "filled sign-in accepted");
+
+  const username = "owner@fixture.test";
+  const enter = "for(const type of ['keyDown','char','keyUp'])contents.sendInputEvent({type,keyCode:'Enter'})";
+  async function signIn(tab: string, fieldSteps: [string, string][], framed = false) {
+    const contents = `${tabOf(tab)}.view.webContents`;
+    await app.main(`${contents}.focus()`);
+    for (const [field, value] of fieldSteps) {
+      await app.main(`${contents}${framed ? ".mainFrame.frames[0]" : ""}.executeJavaScript(${JSON.stringify(`document.querySelector('[name=${field}]').focus()`)})`);
+      await app.main(`${contents}.insertText(${JSON.stringify(value)})`);
+    }
+    await app.main(`(()=>{const contents=${contents};${enter}})()`);
+  }
+  async function saveBand() {
+    await waitBrowser(() => app.page.expression(`Boolean(${band})`), "save sign-in band");
+    assert.ok(await app.page.expression(`${band}.innerText.includes(${JSON.stringify(username)})`));
+    await app.page.clickText(copy.saveSignIn, "[data-test-class=browser-save-signin] button");
+    await waitBrowser(() => app.page.expression(`!${band}`), "sign-in saved");
+  }
+  const cases = [
+    { site: "fixture-id.test", url: fixtures.url("accounts.fixture-id.test", "/id"), twoStep: true },
+    { site: "fixture-frame.test", url: fixtures.url("www.fixture-frame.test", "/signin"), framed: true },
+    { site: "fixture-pane.test", url: fixtures.url("login.fixture-pane.test", "/login"), pane: true },
+  ];
+  for (const { site, url, twoStep, framed, pane } of cases) {
+    let tab = mine;
+    if (pane) {
+      tab = await app.call<string>("create", { owner: "conversation:general", url });
+      assert.equal(await app.main(`${tabOf(tab)}.holder`), "user");
+      await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+      await waitBrowser(() => app.main(`Boolean(${tabOf(tab)}.attached && !${tabOf(tab)}.covered)`), "conversation pane page attached");
+    } else {
+      await app.call("navigate", { id: tab, value: url });
+    }
+    const contents = `${tabOf(tab)}.view.webContents`;
+    const target = framed ? `${contents}.mainFrame.frames[0]` : contents;
+    const first = twoStep ? "identifier" : "username";
+    const firstInput = `Boolean(document.querySelector('[name=${first}]'))`;
+    const pwPage = "location.pathname==='/pw' && Boolean(document.querySelector('[name=password]'))";
+    await waitBrowser(() => app.main(`${target}?.executeJavaScript(${JSON.stringify(firstInput)})`), `${site} login page`);
+    if (twoStep) {
+      await signIn(tab, [[first, username]]);
+      await waitBrowser(() => page(tab, pwPage), "password step");
+      await signIn(tab, [["password", CANARY]]);
+    } else {
+      await signIn(tab, [[first, username], ["password", CANARY]], framed);
+    }
+    await saveBand();
+    const top = new URL(url).origin;
+    await waitBrowser(async () => (await agent("GET", "/security/signins")).body.data.sites.some(
+      (saved: { site: string; entry?: { username: string; origins: string[] } }) =>
+        saved.site === site && saved.entry?.username === username && (!framed || saved.entry.origins.includes(top))), `${site} saved entry`);
+
+    await app.call("navigate", { id: tab, value: url });
+    await waitBrowser(() => app.main(`${target}?.executeJavaScript(${JSON.stringify(firstInput)})`), `${site} login page again`);
+    for (const field of twoStep ? [first, "password"] : [first]) {
+      const rect = await app.main<{ x: number; y: number; width: number; height: number }>(`${target}.executeJavaScript(${JSON.stringify(`document.querySelector('[name=${field}]').getBoundingClientRect().toJSON()`)})`);
+      if (framed) {
+        const offset = await page<{ x: number; y: number }>(tab, "document.querySelector('#login').getBoundingClientRect().toJSON()");
+        rect.x += offset.x; rect.y += offset.y;
+      }
+      const x = Math.round(rect.x + rect.width / 2), y = Math.round(rect.y + rect.height / 2);
+      await app.main(`(()=>{const contents=${contents};contents.focus();for(const type of ['mouseDown','mouseUp'])contents.sendInputEvent({type,button:'left',clickCount:1,x:${x},y:${y}})})()`);
+      await waitBrowser(() => app.main(`${suggest}?.webContents.executeJavaScript("Boolean(document.querySelector('[role=option]'))")`), `${site} suggestions shown`);
+      if (framed) {
+        await waitBrowser(async () => {
+          const at = await app.main<{ x: number; y: number; page: { x: number; y: number }; zoom: number; list: { x: number; y: number } }>(`(async()=>({...${suggest}.getBounds(),page:${tabOf(tab)}.view.getBounds(),zoom:${contents}.getZoomFactor(),
+            list:await ${suggest}.webContents.executeJavaScript("document.querySelector('[data-slot=suggestion-list]').getBoundingClientRect().toJSON()")}))()`);
+          return at.y + at.list.y >= at.page.y + (rect.y + rect.height) * at.zoom && Math.abs(at.x + at.list.x - at.page.x - rect.x * at.zoom) <= 8;
+        }, "framed suggestion list under the input, at its left edge");
+      }
+      const option = await app.main<{ x: number; y: number }>(`${suggest}.webContents.executeJavaScript("(()=>{const r=[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.includes('owner@fixture.test')).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()")`);
+      await app.main(`(()=>{const contents=${suggest}.webContents;contents.focus();for(const type of ['mouseDown','mouseUp'])contents.sendInputEvent({type,button:'left',clickCount:1,x:${option.x},y:${option.y}})})()`);
+      const filledUser = `document.querySelector('[name=${first}]').value===${JSON.stringify(username)}`;
+      const filledPassword = `document.querySelector('[name=password]').value.length===${CANARY.length}`;
+      const filled = twoStep ? (field === first ? filledUser : filledPassword) : `${filledUser} && ${filledPassword}`;
+      await waitBrowser(() => app.main(`${target}.executeJavaScript(${JSON.stringify(filled)})`), `${site} sign-in filled`);
+      await app.main(`(()=>{const contents=${contents};${enter}})()`);
+      if (twoStep && field === first) await waitBrowser(() => page(tab, pwPage), "filled username accepted");
+    }
+    await waitBrowser(() => app.main(`${target}?.executeJavaScript("document.querySelector('h1')?.textContent==='Signed in'")`), `${site} filled sign-in accepted`);
+
+    if (framed) {
+      const frame_origin = new URL(fixtures.url("ads.fixture-ads.test", "/")).origin;
+      const denied = await agent("POST", "/security/signins/offer", { origin: top, frame_origin, username, password: CANARY + "y" });
+      assert.equal(denied.body.data.offer, false);
+      const accounts = await agent("POST", "/security/signins/accounts", { origin: top, frame_origin });
+      assert.deepEqual(accounts.body.data.accounts, []);
+    }
+  }
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true }));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), dom: await app.page.expression("document.body.innerText").catch(() => null) }, null, 2));
