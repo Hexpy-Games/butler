@@ -56,22 +56,6 @@ const ALLOW: &[(
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
     ),
-    (
-        AskExceptReads,
-        CommandMutation {
-            sandbox: CommandSandbox::None,
-        },
-        Some(ProjectFolder),
-        Some(ApprovalRisk::Low),
-    ),
-    (
-        AskExceptReads,
-        CommandMutation {
-            sandbox: CommandSandbox::ProjectWrite,
-        },
-        Some(ProjectFolder),
-        Some(ApprovalRisk::Low),
-    ),
     // A folder switch within the consented folder or its repository.
     (AskAlways, FolderSwitch, Some(ProjectFolder), None),
     (AskExceptReads, FolderSwitch, Some(ProjectFolder), None),
@@ -94,22 +78,6 @@ const ALLOW: &[(
         CommandObservation { sandboxed: false },
         Some(ProjectFolder),
         Some(ApprovalRisk::Low),
-    ),
-    (
-        Auto,
-        CommandMutation {
-            sandbox: CommandSandbox::None,
-        },
-        Some(ProjectFolder),
-        Some(ApprovalRisk::Low),
-    ),
-    (
-        Auto,
-        CommandMutation {
-            sandbox: CommandSandbox::ProjectWrite,
-        },
-        Some(ProjectFolder),
-        None,
     ),
     (Auto, FileEdit, Some(ProjectFolder), None),
     (Auto, ProjectRecord, None, None),
@@ -175,14 +143,19 @@ fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if *mode != ReadOnly && matches!(request.kind, Exempt(_)) {
         return Allow;
     }
-    if request.kind
-        == (CommandMutation {
-            sandbox: CommandSandbox::ProjectAndFolders,
-        })
-        && (*mode == Auto && matches!(request.scope, ProjectFolder | AllowedFolder)
-            || *mode == AskExceptReads
-                && matches!(request.scope, ProjectFolder | AllowedFolder)
-                && request.risk == ApprovalRisk::Low)
+    if let CommandMutation { sandbox } = request.kind
+        && match (mode, request.scope, sandbox) {
+            (
+                Auto,
+                ProjectFolder,
+                CommandSandbox::ProjectWrite | CommandSandbox::ProjectAndFolders,
+            )
+            | (Auto, AllowedFolder, CommandSandbox::ProjectAndFolders) => true,
+            (AskExceptReads | Auto, ProjectFolder | AllowedFolder, _) => {
+                request.risk == ApprovalRisk::Low
+            }
+            _ => false,
+        }
     {
         return Allow;
     }
@@ -307,7 +280,6 @@ fn access_boundary_matches_the_owner_table() {
     }
     for command in [
         "cat $HOME/x",
-        "ls ~",
         "ls %USERPROFILE%",
         "ls !USERPROFILE!",
         "cat `pwd`",
@@ -368,6 +340,8 @@ fn access_boundary_matches_the_owner_table() {
         assert!(command_scope_unresolved(command), "{command}");
     }
     for command in [
+        "ls ~",
+        "cat ~/work/a.txt",
         "cat notes.txt",
         "ls",
         "git status",

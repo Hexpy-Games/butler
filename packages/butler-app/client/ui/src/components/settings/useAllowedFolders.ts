@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { subscribeAuthorityPermissions } from "@/app/authorityPermissionEvents.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -10,16 +10,22 @@ export function useAllowedFolders() {
   const [folders, setFolders] = useState<AllowedFolder[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
+  const revision = useRef(0);
   const reload = useCallback(async () => {
+    const request = ++revision.current;
     try {
       const result = await api<{ folders: AllowedFolder[] }>("/allowed-folders");
+      if (revision.current !== request) return;
       setFolders(result.folders);
       setState("ready");
-    } catch { setState("error"); }
+    } catch {
+      if (revision.current === request) setState("error");
+    }
   }, []);
   useEffect(() => {
     void reload();
-    return subscribeAuthorityPermissions(() => void reload());
+    const unsubscribe = subscribeAuthorityPermissions(() => void reload());
+    return () => { revision.current++; unsubscribe(); };
   }, [reload]);
 
   async function mutate(path: "/allowed-folders" | "/allowed-folders/remove", input: Record<string, string>) {

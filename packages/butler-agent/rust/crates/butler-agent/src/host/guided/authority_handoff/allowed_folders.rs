@@ -28,16 +28,14 @@ impl AuthorityHandoff {
         let (data, installation) = self.folder_roots.clone();
         let now = self.now_iso.clone();
         Box::pin(async move {
-            let protected = crate::host::service::data_reset::protected_roots(data.clone())
-                .await
-                .map_err(GatewayApplicationError::internal_from)?;
             let path = tokio::task::spawn_blocking(move || {
                 allowed_folder(
                     &path,
                     &FolderRoots {
                         butler_data: &data,
                         installation_root: Some(&installation),
-                        protected_roots: &protected,
+                        // Reset quarantine roots are inside the excluded data directory.
+                        protected_roots: &[],
                     },
                 )
             })
