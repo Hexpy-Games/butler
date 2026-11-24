@@ -114,7 +114,6 @@ impl Inner {
             state.attached = None;
         });
         let Ok(child) = OwnedChild::spawn(&command, port) else {
-            logs::app_log("ERROR", "lifecycle", "agent.spawn_failed", json!({}));
             self.record_error(SupervisorError::SpawnFailed);
             return Err(Startup::Failed(SupervisorError::SpawnFailed));
         };

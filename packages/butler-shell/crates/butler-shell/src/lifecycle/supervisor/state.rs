@@ -289,13 +289,19 @@ impl Inner {
         let _ = self.status.unbounded_send(next);
     }
 
-    /// `recordError`.
+    /// `recordError`; each failed start writes one `agent.spawn_failed` row naming its code.
     pub(super) fn record_error(&self, error: SupervisorError) {
         self.update(|state| {
             state.last_error = Some(error);
             state.phase = Phase::Failed;
             state.respawning = false;
         });
+        crate::lifecycle::logs::app_log(
+            "ERROR",
+            "lifecycle",
+            "agent.spawn_failed",
+            json!({ "reason": error.code() }),
+        );
     }
 
     /// The `diagnostics()` view; credentials are booleans only.

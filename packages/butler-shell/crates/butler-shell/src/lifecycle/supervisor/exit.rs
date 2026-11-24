@@ -171,6 +171,7 @@ impl Inner {
             return;
         }
         if !self.mutate(super::state::State::spend_budget) {
+            logs::app_log("ERROR", "lifecycle", "agent.restart_exhausted", json!({}));
             self.update(|state| state.phase = Phase::Failed);
             return;
         }

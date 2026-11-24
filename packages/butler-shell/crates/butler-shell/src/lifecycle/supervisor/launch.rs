@@ -217,6 +217,10 @@ fn command(data: &Path, install: Install) -> AgentCommand {
             var("BUTLER_APP_QUIT_WAIT_SAFELY", "1"),
             var("BUTLER_SHUTDOWN_TRACE", "1"),
             var("BUTLER_APP_VERSION", crate::lifecycle::APP_VERSION),
+            (
+                OsString::from("BUTLER_APP_PID"),
+                OsString::from(std::process::id().to_string()),
+            ),
         ],
         program: install.program,
         cwd: data.to_path_buf(),

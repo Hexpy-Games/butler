@@ -21,6 +21,7 @@ use tokio::signal::windows::{
 };
 use tokio::sync::watch;
 use win32job::{ExtendedLimitInfo, Job};
+use winsafe::{HPROCESS, co};
 
 use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
 use crate::process_table::ProcessView;
@@ -257,4 +258,33 @@ fn read_to_end_of_stdin() -> LeaseEnd {
             Err(error) => return Err((error.kind(), error.to_string())),
         }
     }
+}
+
+/// Opens the handle on its own thread and waits there; the open's result comes back first.
+pub(super) fn capture_exit(pid: u32) -> io::Result<watch::Receiver<Option<u32>>> {
+    let (opened, open_result) = std::sync::mpsc::channel();
+    let (sender, receiver) = watch::channel(None);
+    std::thread::Builder::new()
+        .name("butler-exit-watch".into())
+        .spawn(move || {
+            let access = co::PROCESS::SYNCHRONIZE | co::PROCESS::QUERY_LIMITED_INFORMATION;
+            let process = match HPROCESS::OpenProcess(access, false, pid) {
+                Ok(process) => process,
+                Err(error) => {
+                    let _ = opened.send(Err(error));
+                    return;
+                }
+            };
+            let _ = opened.send(Ok(()));
+            if process.WaitForSingleObject(None) == Ok(co::WAIT::OBJECT_0)
+                && let Ok(code) = process.GetExitCodeProcess()
+            {
+                sender.send_replace(Some(code));
+            }
+        })?;
+    open_result
+        .recv()
+        .map_err(|_| io::Error::other("exit watch ended before opening"))?
+        .map_err(io::Error::other)?;
+    Ok(receiver)
 }
