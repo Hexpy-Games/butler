@@ -194,8 +194,8 @@ impl AppGatewayLifecycle {
             app_config.port
         };
         let listener = match listener {
-            Some(listener) => listener,
-            None => AppServer::bind(&app_config.host, port)
+            Some(listener) => Some(listener),
+            None => AppServer::bind(app_config, port)
                 .await
                 .inspect_err(|_| self.endpoint.clear())?,
         };
@@ -215,13 +215,19 @@ impl AppGatewayLifecycle {
         .await
         .inspect_err(|_| self.endpoint.clear())?;
         let address = server.local_addr();
-        if app_config.port == 0 {
+        if app_config.port == 0
+            && let Some(address) = address
+        {
             self.allocated_port.store(address.port(), Ordering::Relaxed);
         }
         self.endpoint
             .publish(address, app_config, local_auth, server.in_process());
         if let Err(error) = self
-            .persist(true, Some(format!("http://{address}")), app_config)
+            .persist(
+                true,
+                address.map(|address| format!("http://{address}")),
+                app_config,
+            )
             .await
         {
             self.endpoint.clear();

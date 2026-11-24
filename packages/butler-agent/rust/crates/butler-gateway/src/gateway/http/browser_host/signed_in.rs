@@ -40,8 +40,8 @@ pub(super) async fn granted_sites(
     Ok(serde_json::from_value(value["sites"].clone()).unwrap_or_default())
 }
 
-pub(super) fn content_origin(state: &HttpState) -> String {
-    format!("http://127.0.0.1:{}", super::super::content::port(state))
+pub(super) fn content_origin(state: &HttpState) -> Option<String> {
+    super::super::content::port(state).map(|port| format!("http://127.0.0.1:{port}"))
 }
 
 fn grant_required(site: &str) -> Value {
@@ -72,7 +72,9 @@ pub(super) async fn admit(
             return Ok(Some(grant_required(&site)));
         }
         frame["args"]["profile"] = json!("signed_in");
-        frame["args"]["policy"] = signed_in_policy(&content_origin(state), &sites);
+        if let Some(origin) = content_origin(state) {
+            frame["args"]["policy"] = signed_in_policy(&origin, &sites);
+        }
         return Ok(None);
     }
     let tab = {
@@ -105,7 +107,9 @@ pub(super) async fn admit(
             _ => json!({"status":"not_dispatched","reason":"navigation_denied"}),
         }));
     }
-    frame["args"]["policy"] = signed_in_policy(&content_origin(state), &sites);
+    if let Some(origin) = content_origin(state) {
+        frame["args"]["policy"] = signed_in_policy(&origin, &sites);
+    }
     Ok(None)
 }
 

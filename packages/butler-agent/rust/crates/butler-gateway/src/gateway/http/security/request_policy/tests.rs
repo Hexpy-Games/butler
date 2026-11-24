@@ -33,7 +33,7 @@ const HOST: (&str, &str) = ("host", "127.0.0.1:18765");
 
 fn policy() -> RequestPolicy {
     RequestPolicy::new(
-        "127.0.0.1:18765".parse().unwrap(),
+        Some("127.0.0.1:18765".parse().unwrap()),
         &["butler.lan".to_owned(), "box.local:443".to_owned()],
         Some("http://127.0.0.1:5173"),
         &["192.0.2.8:18765".to_owned(), "mac.local:18765".to_owned()],

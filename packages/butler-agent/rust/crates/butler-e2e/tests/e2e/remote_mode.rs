@@ -2,7 +2,7 @@
 use butler_e2e::e2e::{
     HarnessError,
     agent::Launch,
-    harness_error,
+    harness_error, listening_tcp_ports,
     sandbox::Sandbox,
     sshd::TestSshd,
     stop_intent::{StopOnDrop, instance_record},
@@ -148,6 +148,11 @@ async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Res
         request_status(&socket, "http://agent/computers", &token, Some(&admin)).await?,
         200
     );
+    let control = record["control_endpoint"]
+        .as_str()
+        .and_then(|endpoint| endpoint.parse::<std::net::SocketAddr>().ok())
+        .ok_or_else(|| harness_error("no control endpoint"))?;
+    assert_eq!(listening_tcp_ports(pid).await?, [control.port()].into());
     let idle_started = Instant::now();
     while process_start(pid)
         .map_err(|error| harness_error(error.to_string()))?
