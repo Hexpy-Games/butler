@@ -266,6 +266,7 @@ impl StdinLease {
 /// The exit code of another process, read through a handle opened by [`ExitWatch::capture`]
 /// while the process runs, so a reused process id is never read. Windows only: elsewhere a
 /// non-child's exit code cannot be read and `capture` returns `Unsupported`.
+#[derive(Clone)]
 pub struct ExitWatch(tokio::sync::watch::Receiver<Option<u32>>);
 
 impl ExitWatch {

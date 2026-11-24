@@ -19,20 +19,28 @@ impl ForegroundLease {
         Ok(Self { input, app })
     }
 
-    /// Resolves once the App has released the lease, after recording the App's exit code (0x… on Windows, `unknown` elsewhere).
+    /// Resolves once the App has released the lease; the App's exit code (Windows) is reported separately once it ends.
     pub(in crate::host) async fn closed(&self) -> Result<(), crate::host::HostError> {
         self.input
             .closed()
             .await
             .map_err(|error| format!("foreground_lease_failed: {error}"))?;
-        let code = match &self.app {
-            Some(app) => app.code(std::time::Duration::from_secs(2)).await,
-            None => None,
-        };
-        let code = code.map_or_else(|| "unknown".to_owned(), |code| format!("{code:#010x}"));
-        butler_core::diagnostic!(
-            "[service-lifecycle] event=app_exit code={code} The App released its foreground lease."
-        );
+        match self.app.clone() {
+            // A crashed or killed App has already ended; a cleanly quitting one waits for this Agent,
+            // so the report never delays the stop (it is dropped if the Agent exits first).
+            Some(app) => {
+                tokio::spawn(async move {
+                    if let Some(code) = app.code(std::time::Duration::from_secs(5)).await {
+                        butler_core::diagnostic!(
+                            "[service-lifecycle] event=app_exit code={code:#010x} The App ended."
+                        );
+                    }
+                });
+            }
+            None => butler_core::diagnostic!(
+                "[service-lifecycle] event=app_exit code=unknown The App released its foreground lease."
+            ),
+        }
         Ok(())
     }
 }
