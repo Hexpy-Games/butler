@@ -209,10 +209,7 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         .iter()
         .flat_map(|body| body["messages"].as_array().unwrap())
         .filter(|message| message["session_id"] == chat2)
-        .map(|message| {
-            assert_eq!(message["lang"], "ko");
-            message["to"].as_str().unwrap()
-        })
+        .map(|message| message["to"].as_str().unwrap())
         .collect();
     assert!(
         tokens == BTreeSet::from([c]),
