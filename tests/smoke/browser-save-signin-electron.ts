@@ -54,6 +54,7 @@ try {
   assert.ok(text.includes("owner@fixture.test"));
   assert.ok(text.includes(copy.saveSignIn));
   assert.ok(!text.includes(copy.giveBack));
+  assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "snapshot excludes the password");
   await app.shot("band");
   await app.page.clickText(copy.saveSignIn, "[data-test-class=browser-save-signin] button");
   await waitBrowser(() => app.page.expression(`!${band}`), "sign-in saved");
@@ -178,7 +179,6 @@ try {
       assert.deepEqual(accounts.body.data.accounts, []);
     }
   }
-  assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "snapshot excludes the password");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true }));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), dom: await app.page.expression("document.body.innerText").catch(() => null) }, null, 2));

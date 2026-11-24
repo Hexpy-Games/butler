@@ -52,7 +52,11 @@ export class SignInSuggest {
     const same = offer?.url === url && offer.frameKey === key && offer.frameOrigin === frameOrigin;
     // A scroll or resize only moves an open list; it never opens one.
     if (!same && rect.moved) return;
-    if (!same) this.close(tab);
+    if (!same) {
+      tab.fillLookupSequence = (tab.fillLookupSequence ?? 0) + 1;
+      this.close(tab);
+    }
+    const sequence = tab.fillLookupSequence;
     const subframe = frame.parent ? frame : null;
     if (subframe) {
       const path = framePath(frame), at = path && await frameAt(tab, path);
@@ -61,7 +65,7 @@ export class SignInSuggest {
     }
     if (same) { if (tab.fillOffer === offer) { offer.rect = box; this.sync(tab); } return; }
     const accounts = await browser.signInAccounts?.(origin, subframe ? frameOrigin : undefined).catch(() => []);
-    if (!accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
+    if (tab.fillLookupSequence !== sequence || !accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
     tab.fillOffer = { url, origin, accounts, rect: box, active: -1, error: false, frame: subframe, frameKey: key, frameOrigin };
     this.sync(tab);
   }

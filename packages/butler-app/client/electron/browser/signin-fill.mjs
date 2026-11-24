@@ -40,7 +40,7 @@ const filledSource = id => `(()=>{const e=globalThis.__butlerSignIn?.get(${JSON.
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function evaluate(tab, code, frame) {
-  if (frame) return nativeWorldOf(tab, frame)?.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]) ?? null;
+  if (frame) return nativeWorldOf(tab, frame)?.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]).catch(() => null) ?? null;
   return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]);
 }
 async function settled(tab, maxMs) {

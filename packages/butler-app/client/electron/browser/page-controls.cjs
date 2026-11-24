@@ -134,7 +134,10 @@ if (process.argv.includes("--butler-signin-capture")) {
   // Same rule as detectSource's named in signin-fill.mjs.
   const named = input => /username|email/u.test(input.autocomplete || "") || input.type === "email" ||
     /user|login|email|account|identifier|아이디|이메일/u.test([input.id, input.getAttribute("name"), input.getAttribute("class"), input.getAttribute("placeholder"), input.getAttribute("aria-label")].join(" ").toLowerCase());
-  const loginInput = t => t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (t.type === "password" || (t.form ?? document).querySelector('input[type="password"]') || named(t)) ? t : null;
+  const loginInput = t => t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (
+    t.type === "password" || (t.form ?? document).querySelector('input[type="password"]') ||
+    named(t) && [...document.querySelectorAll("input")].filter(i => /^(text|email|tel|)$/u.test(i.type) && !i.disabled && i.getClientRects().length).length <= 2
+  ) ? t : null;
   const sendField = (input, moved) => { const { x, y, width, height } = input.getBoundingClientRect(); ipcRenderer.send("butler-browser:signin-field", { x, y, width, height, moved }); };
   window.addEventListener("focusin", event => { const input = event.isTrusted && loginInput(event.target); if (input) sendField(input, false); }, true);
   // Focus leaving the page (to the suggestion list or the App) is main's call; here only a move to another page element closes it.
