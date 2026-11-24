@@ -184,10 +184,12 @@ impl GenerationVectorStore {
             Err(lancedb::Error::TableNotFound { .. }) => return Ok(()),
             Err(source) => return Err(unavailable(source)),
         };
-        lance_maintenance::compact_if_fragmented(&table)
+        let compacted = lance_maintenance::compact_if_fragmented(&table)
             .await
             .map_err(unavailable)?;
-        if prune {
+        // A compaction leaves the rewritten fragments in older versions; pruning
+        // right after it bounds the table to one copy plus the retained versions.
+        if compacted || prune {
             lance_maintenance::prune_old_versions(&table)
                 .await
                 .map_err(unavailable)?;

@@ -58,6 +58,17 @@ async fn fragment(table: &Table) {
         .await
         .unwrap();
     let original = batches[0].slice(0, 1);
+    // One full fragment (8192 rows, lance_maintenance::TARGET_ROWS_PER_FRAGMENT)
+    // that compaction must never rewrite.
+    let schema = original.schema();
+    let full_fragment = original.clone();
+    let batches = (0..8192).map(move |index| Ok(retired_row(&full_fragment, 1000 + index)));
+    table
+        .add(Box::new(RecordBatchIterator::new(batches, schema))
+            as Box<dyn arrow_array::RecordBatchReader + Send>)
+        .execute()
+        .await
+        .unwrap();
     // Retired revisions remain physical rows until optimize prunes them. Each
     // append creates a real fragment; these rows cannot pass currentness checks.
     for index in 0..33 {
@@ -152,5 +163,28 @@ async fn snapshot(table: &Table) -> Value {
         }
     }
     assert_eq!(rows.len(), table.count_rows(None).await.unwrap());
-    json!({"row_count":rows.len(), "fragments":table.stats().await.unwrap().fragment_stats.num_fragments, "rows":rows})
+    let mut full_fragment_ids: Vec<_> = table
+        .dataset()
+        .unwrap()
+        .get()
+        .await
+        .unwrap()
+        .get_fragments()
+        .iter()
+        .filter(|fragment| {
+            fragment
+                .metadata()
+                .physical_rows
+                .is_some_and(|rows| rows >= 8192)
+        })
+        .map(|fragment| fragment.metadata().id)
+        .collect();
+    full_fragment_ids.sort_unstable();
+    json!({
+        "row_count": rows.len(),
+        "fragments": table.stats().await.unwrap().fragment_stats.num_fragments,
+        "rows": rows,
+        "versions": table.list_versions().await.unwrap().len(),
+        "full_fragment_ids": full_fragment_ids
+    })
 }
