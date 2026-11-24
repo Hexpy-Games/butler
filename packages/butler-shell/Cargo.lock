@@ -1137,6 +1137,7 @@ dependencies = [
  "log",
  "notify",
  "percent-encoding",
+ "pulldown-cmark",
  "regex",
  "serde",
  "serde_json",

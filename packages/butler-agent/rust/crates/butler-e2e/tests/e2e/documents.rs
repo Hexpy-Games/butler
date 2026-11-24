@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 const CREATE: &str = "Create the editable report.";
 const READ: &str = "Read my saved report.";
 const EDIT: &str = "Review my changes and update the untouched paragraph.";
-const IMAGE: &str = "img_abcdefghij";
+pub(crate) const IMAGE: &str = "img_abcdefghij";
 fn body() -> String {
     format!(
         "# Report\nOriginal line\nUntouched paragraph\n\n```blocks\n{}\n```\n![Image alt]({IMAGE})\n",
@@ -54,16 +54,16 @@ async fn put(
     assert_eq!(status, 200, "{value}");
     Ok(value["data"].clone())
 }
-fn seed_image(s: &Scenario) -> Result<(), HarnessError> {
+pub(crate) fn seed_image(sandbox: &butler_e2e::e2e::sandbox::Sandbox) -> Result<(), HarnessError> {
     let image =
         butler_runtime::browser::normalize_image(include_bytes!("browser_outputs/pixel.jpg"))
             .unwrap();
     use sha2::{Digest, Sha256};
     let hash = format!("{:x}", Sha256::digest(&image.bytes));
-    let path = s.sandbox.data.join("app-server/assets").join(&hash[..2]);
+    let path = sandbox.data.join("app-server/assets").join(&hash[..2]);
     std::fs::create_dir_all(&path)?;
     std::fs::write(path.join(format!("{hash}.jpg")), &image.bytes)?;
-    let db = db(s)?;
+    let db = rusqlite::Connection::open(sandbox.data.join("app-server/butler-client.sqlite"))?;
     db.execute("INSERT INTO app_assets(id,sha256,mime,width,height,bytes,alt,source_url,created_at,pixel_ratio) VALUES(?1,?2,'image/jpeg',1200,800,?3,'Image alt','https://example.org/image','2026-10-25T00:00:00Z',2)",params![IMAGE,hash,image.bytes.len()])?;
     db.execute(
         "INSERT INTO app_asset_refs VALUES(?1,'chat','general')",
@@ -79,7 +79,7 @@ async fn editable_document_create_correct_search_coalesce_diff_edit_restore_dele
         .stub_cassette(stub::cassette()?)
         .start()
         .await?;
-    seed_image(&s)?;
+    seed_image(&s.sandbox)?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let (_, turn) = s.turn("general", CREATE).await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}\n{}", s.agent.logs());

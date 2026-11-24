@@ -7,6 +7,8 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::ShellClient;
 use gpui::App;
+#[cfg(feature = "cef")]
+use gpui::{SharedString, Task};
 use regex::{Captures, Regex};
 use serde_json::Value;
 
@@ -43,12 +45,19 @@ fn file_name(title: &str) -> String {
     }
 }
 
-/// The Markdown export of `doc`: the save dialog, then the file.
-pub(super) fn markdown(doc: &Doc, cx: &mut App) {
+fn save_dialog(
+    name: &str,
+    cx: &App,
+) -> futures::channel::oneshot::Receiver<anyhow::Result<Option<PathBuf>>> {
     let directory = butler_platform::user_dirs::non_empty_home_dir()
         .map_or_else(PathBuf::new, |home| home.join("Downloads"));
+    cx.prompt_for_new_path(&directory, Some(name))
+}
+
+/// The Markdown export of `doc`: the save dialog, then the file.
+pub(super) fn markdown(doc: &Doc, cx: &mut App) {
     let name = format!("{}.md", file_name(&doc.title));
-    let ask = cx.prompt_for_new_path(&directory, Some(&name));
+    let ask = save_dialog(&name, cx);
     let body = doc.body.clone();
     let content = Jobs::run(
         cx,
@@ -74,6 +83,57 @@ pub(super) fn markdown(doc: &Doc, cx: &mut App) {
         }
     })
     .detach();
+}
+
+#[cfg(feature = "cef")]
+pub(super) fn pdf(doc: &Doc, id: SharedString, cx: &mut App) {
+    let name = format!("{}.pdf", file_name(&doc.title));
+    let ask = save_dialog(&name, cx);
+    let doc = doc.clone();
+    let failed = words(Ds::get(cx).lang()).failed;
+    cx.spawn(async move |cx| {
+        if let Ok(Ok(path)) = ask.await {
+            let Some(path) = path else { return };
+            let task = cx.update(|cx| pdf_to(doc, id, path, cx));
+            if task.await.is_ok() {
+                return;
+            }
+        }
+        cx.update(|cx| toast::show(cx, Toast::error(failed)));
+    })
+    .detach();
+}
+
+#[cfg(feature = "cef")]
+pub(super) fn pdf_to(
+    doc: Doc,
+    id: SharedString,
+    path: PathBuf,
+    cx: &mut App,
+) -> Task<anyhow::Result<()>> {
+    let lang = Ds::get(cx).lang();
+    let assets: Vec<_> = doc.assets.iter().map(|asset| asset.id.clone()).collect();
+    let images = Jobs::run(cx, move |client| async move {
+        let mut images = HashMap::new();
+        for id in assets {
+            let url = data_url(&client, &id)
+                .await
+                .ok_or_else(|| anyhow::anyhow!("Could not fetch document asset {id}"))?;
+            images.insert(id, url);
+        }
+        Ok::<_, anyhow::Error>(images)
+    });
+    cx.spawn(async move |cx| {
+        let images = images
+            .await
+            .ok_or_else(|| anyhow::anyhow!("Agent unavailable"))??;
+        let html = super::print::document(&doc, &id, &images, lang);
+        let pdf = crate::ui::browser::print::pdf(html, cx).await?;
+        cx.background_executor()
+            .spawn(async move { std::fs::write(path, pdf) })
+            .await?;
+        Ok(())
+    })
 }
 
 /// `exportDocumentMarkdown`: only image destinations are replaced; every other byte stays.
