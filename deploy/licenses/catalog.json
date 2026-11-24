@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "97551c6ee795c61a8c3f119e8fa913fa7db3797b5a17e787e24f5d50afaab7e8",
-    "packages/butler-agent/rust/Cargo.lock": "1505ba2a48d0a12efa3f4866a6ad3478738da9b7859b3bba06a8a5f5b67d0f84",
+    "packages/butler-agent/rust/Cargo.lock": "ea6d99d3eeccadc123e63f328785652a4c2bb002766f009ef5c250e641cdc46c",
     "packages/butler-agent/rust/Cargo.toml": "8a9f39e05d32b53e9d2fb910513c418f992539e7a23d59da468781a7935b5705",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b3589ba17a65604df6144e220b521377035f63b121fc792284805c5399431e9a",
@@ -22,7 +22,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "b044aab318310a2ab2e7637bf76812615971a00e0f50928e4bbad1dd3c89f3a2",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "01896b545f6c71d599dddcc760c89a39c82af22062c3c5f9a7cb0e58664d973f",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "b0096bf0cbf413f160bb62f7825ade229d12f7e3ce59b31f5f51bf974a494505",
     "packages/butler-agent/rust/crates/butler-platform/cef/Cargo.toml": "bb905ccddc94fdd2bb525afb308edea7cbbbebcd483864f2a2a88c9e2ef83602",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "f357e5d8349dd7a10056e59dcf47121ed9333583f985a1ba24b9f416b2c6a1af",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "9ed22424cf1e67138968ea389eec752858c8b1a63b651c43a43d3ee7aa6b2ecd",
@@ -20941,11 +20941,11 @@
       ]
     },
     {
-      "id": "rust:ksni@0.3.1",
+      "id": "rust:ksni@0.3.2",
       "name": "ksni",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "license": "Unlicense",
-      "source": "https://github.com/iovxw/ksni/tree/6c6284caed19b70710e431dcfd15ac5a2a21f414",
+      "source": "https://github.com/iovxw/ksni/tree/1546cb36981f375cbe37f3cd99b6d6371b7c1b08",
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent"
@@ -20957,7 +20957,7 @@
         "UNLICENSE"
       ],
       "links": [
-        "https://github.com/iovxw/ksni/blob/6c6284caed19b70710e431dcfd15ac5a2a21f414/UNLICENSE"
+        "https://github.com/iovxw/ksni/blob/1546cb36981f375cbe37f3cd99b6d6371b7c1b08/UNLICENSE"
       ],
       "copyright": []
     },

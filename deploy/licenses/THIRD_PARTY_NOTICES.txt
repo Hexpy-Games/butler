@@ -5040,9 +5040,9 @@ Copyright [2017] [keyring developers]
 Copyright (c) 2016 keyring Developers
 
 =====
-ksni 0.3.1
+ksni 0.3.2
 Unlicense
-License: https://github.com/iovxw/ksni/blob/6c6284caed19b70710e431dcfd15ac5a2a21f414/UNLICENSE
+License: https://github.com/iovxw/ksni/blob/1546cb36981f375cbe37f3cd99b6d6371b7c1b08/UNLICENSE
 
 =====
 kurbo 0.13.1

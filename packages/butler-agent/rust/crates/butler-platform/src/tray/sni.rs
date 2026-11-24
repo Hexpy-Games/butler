@@ -1,6 +1,8 @@
 //! The Linux status icon: a StatusNotifierItem served over D-Bus on its own thread. With no
 //! StatusNotifierWatcher on the bus the desktop shows no status area, and `create` says
 //! `Unsupported` so the window close rule falls back to quit.
+//! Setup also runs on its own thread so a stalled bus cannot hold the caller, and a status
+//! area that does not answer within `READY` counts as `Unsupported`.
 use ksni::blocking::{Handle, TrayMethods};
 use ksni::menu::{CheckmarkItem, MenuItem, StandardItem, SubMenu};
 use ksni::{Icon, ToolTip};
@@ -11,6 +13,9 @@ use super::{TrayError, TrayEvent, TrayIcon as Mark, TrayItem};
 
 /// The sizes offered to the host, which picks the nearest (1x and 2x of the usual 22 px).
 const SIDES: [u32; 2] = [22, 44];
+
+/// How long `create` waits for the status area before it counts as `Unsupported`.
+const READY: std::time::Duration = std::time::Duration::from_secs(1);
 
 struct Sni {
     tooltip: String,
@@ -129,8 +134,19 @@ impl Native {
             menu: menu.to_vec(),
             events,
         };
-        let handle = tray.spawn().map_err(|_| TrayError::Unsupported)?;
-        Ok(Self { handle })
+        let (sent, ready) = std::sync::mpsc::sync_channel(0);
+        std::thread::Builder::new()
+            .name("butler-tray".into())
+            .spawn(move || {
+                if let Err(std::sync::mpsc::SendError(Ok(handle))) = sent.send(tray.spawn()) {
+                    handle.shutdown().wait();
+                }
+            })
+            .map_err(|error| TrayError::Failed(error.to_string()))?;
+        match ready.recv_timeout(READY) {
+            Ok(Ok(handle)) => Ok(Self { handle }),
+            Ok(Err(_)) | Err(_) => Err(TrayError::Unsupported),
+        }
     }
 
     pub(super) fn set_menu(&self, menu: &[TrayItem]) {

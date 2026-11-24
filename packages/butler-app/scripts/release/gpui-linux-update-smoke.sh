@@ -104,7 +104,7 @@ printf '{"app_version":"%s","artifacts":[]}\n' "$from" > "$BUTLER_APP_UPDATE_MAN
 start_app() {
   gpui_wait=record
   # The non-job-control shell's child is not a group leader: setsid keeps $!.
-  setsid xvfb-run -a /usr/bin/butler-app >> "$app_log" 2>&1 &
+  setsid xvfb-run -a dbus-run-session -- /usr/bin/butler-app >> "$app_log" 2>&1 &
   launcher_pid=$!
   deadline=$(($(date +%s) + 120))
   while :; do

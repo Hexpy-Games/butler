@@ -240,7 +240,7 @@ jobs:
           if-no-files-found: error
       - name: Install smoke runtime prerequisites
         run: |
-          sudo apt-get install -y xvfb mesa-vulkan-drivers libvulkan1 libstdc++6 libgcc-s1 libnss3 libgbm1 \
+          sudo apt-get install -y xvfb dbus mesa-vulkan-drivers libvulkan1 libstdc++6 libgcc-s1 libnss3 libgbm1 \
             libasound2t64 libxkbcommon0 libxkbcommon-x11-0 libxcb1 libwayland-client0 libfontconfig1 xdg-utils
       - name: Download the Electron preview and prove the upgrade
         env:

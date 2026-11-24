@@ -42,7 +42,7 @@ rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The status icon (`tray`): a StatusNotifierItem on its own thread, no GTK.
-ksni = { version = "=0.3.1", default-features = false, features = ["blocking", "async-io"] }
+ksni = { version = "=0.3.2", default-features = false, features = ["blocking", "async-io"] }
 zbus = "=5.19.0"
 landlock = "=0.4.7"
 seccompiler = "=0.5.0"
