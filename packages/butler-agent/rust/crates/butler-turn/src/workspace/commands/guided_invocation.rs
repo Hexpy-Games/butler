@@ -19,12 +19,13 @@ fn project_write_shell(
     let writable = scratch.writable_roots();
     // App project folders live under the data folder; the default deny already
     // covers it otherwise, so deny it explicitly only when it is not an ancestor.
-    let mut denied: Vec<&Path> =
-        if butler_platform::secure_fs::path_is_within(&input.workspace_root, data) {
-            Vec::new()
-        } else {
-            vec![data.as_path()]
-        };
+    let mut denied: Vec<&Path> = if input.extra_write_roots.is_empty()
+        && butler_platform::secure_fs::path_is_within(&input.workspace_root, data)
+    {
+        Vec::new()
+    } else {
+        vec![data.as_path()]
+    };
     denied.extend(secrets.iter().map(PathBuf::as_path));
     if !input.extra_write_roots.is_empty() {
         denied.extend(input.installation_root.as_deref());

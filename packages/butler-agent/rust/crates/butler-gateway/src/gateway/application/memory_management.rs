@@ -70,6 +70,12 @@ pub enum AppMemoryCommand {
         inventory_revision: u64,
         project_id: String,
     },
+    /// Reset memories derived from one computer's imported conversations.
+    ResetComputer {
+        operation_id: String,
+        inventory_revision: u64,
+        computer_id: String,
+    },
     /// Reset profile content while preserving consent and settings.
     ResetProfile {
         operation_id: String,

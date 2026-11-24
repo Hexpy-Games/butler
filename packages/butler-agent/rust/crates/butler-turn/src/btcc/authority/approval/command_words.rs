@@ -230,7 +230,7 @@ pub(in crate::btcc) fn read_only(words: &[Word]) -> bool {
                         flags = false;
                         return false;
                     }
-                    !flags || !option(&word.text)
+                    !flags || word.text == "-" || !option(&word.text)
                 })
                 .count()
                 <= 1;

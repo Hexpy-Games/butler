@@ -4,6 +4,7 @@ import { reconcileAnswerDrafts } from "./answerDrafts";
 import { retainAnswerBlocks } from "./stableAnswerBlocks";
 import { generalChatCleared } from "./generalChatEvents";
 import { create } from "zustand";
+import { markComputerUnreachable } from "./computerEvents";
 import { leaveCanonEditor } from "./canonEditGuard.ts";
 import { useProjectDashboardState } from "./projectDashboardState.ts";
 import { useFileViewerState } from "./fileViewerState.ts";
@@ -1356,7 +1357,8 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       // convergence. It must never fail or delay the canonical refresh.
       void get().refreshAuthorityApprovals(chatId);
       return true;
-    } catch {
+    } catch (error) {
+      markComputerUnreachable(findSessionSummary(get().navigation, chatId)?.computer_id, error);
       // Keep the last canonical snapshot visible on transient failures.
       return false;
     }
@@ -1440,7 +1442,8 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         chatId,
         messageListViewFromSessionView(snapshot),
       );
-    } catch {
+    } catch (error) {
+      markComputerUnreachable(findSessionSummary(get().navigation, chatId)?.computer_id, error);
       // Keep the already visible timeline if refresh fails; the status pill carries the error.
     }
   },
@@ -1862,6 +1865,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
             project_id: initialDraft.projectId,
             ...(initialDraft.groupId ? { group_id: initialDraft.groupId } : {}),
             workspace_mode: initialDraft.kind === "project" ? controls.workspaceMode ?? "local" : "local",
+            ...(controls.computerId ? { computer_id: controls.computerId } : {}),
             title: titleFromPrompt(messageTitle),
             initial_message: text,
           }),
@@ -2058,6 +2062,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
       if (!hasImmediateAssistantReply) await get().reloadMessages(targetChatId);
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
+      markComputerUnreachable(findSessionSummary(get().navigation, targetChatId)?.computer_id ?? controls.computerId, error);
       if (isServerBackedSessionId(targetChatId)) {
         await get().reloadMessages(targetChatId);
       }

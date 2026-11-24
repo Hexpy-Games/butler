@@ -10,6 +10,8 @@ pub(super) use mutations::compare_and_set_title;
 mod owner;
 pub(super) mod read;
 mod reads;
+#[path = "remote_sessions_state.rs"]
+mod remote_sessions_state;
 mod stopping;
 mod write;
 
@@ -257,6 +259,8 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         self.load_session_skills(&mut session).await?;
+        self.load_remote_sessions(std::slice::from_mut(&mut session))
+            .await;
         Ok(session)
     }
 
@@ -392,6 +396,7 @@ impl AppApplication {
             .collect::<std::collections::HashSet<_>>();
         self.load_subtasks(&mut sessions).await?;
         self.load_pending_ask_attention(&mut sessions).await?;
+        self.load_remote_sessions(&mut sessions).await;
         for session in &mut sessions {
             session.running_delegated_work = running.contains(&session.session_hint);
         }
@@ -416,10 +421,12 @@ impl AppApplication {
             session.skills_used = names;
         }
         for session in &mut sessions {
-            if !matches!(
-                session.active_turn_state.as_deref(),
-                Some(state) if !matches!(state, "delivered" | "cancelled" | "failed" | "runtime_fault")
-            ) {
+            if session.computer_id.is_some()
+                || !matches!(
+                    session.active_turn_state.as_deref(),
+                    Some(state) if !matches!(state, "delivered" | "cancelled" | "failed" | "runtime_fault")
+                )
+            {
                 continue;
             }
             session.work_progress = self

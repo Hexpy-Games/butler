@@ -6,8 +6,8 @@ import { useScrollEdges } from "../../lib/useScrollEdges";
 import { CodeFrame } from "../MarkdownContent/CodeFrame";
 import styles from "./ComposerDecisionPanel.module.css";
 
-/** A detail line, or `{ code }`: a command body drawn in a code frame with its own spaces and line breaks. */
-export type ComposerDecisionDetail = string | { code: string };
+/** A caption line, a framed command body, or framed prose. */
+export type ComposerDecisionDetail = string | { code: string } | { quote: string };
 /** Display formatting for the title and detail lines; `code` for a `{ code }` detail. */
 export type ComposerDecisionRenderText = (text: string, as: "text" | "code") => ReactNode;
 
@@ -18,6 +18,14 @@ function DetailCode({ code, renderText, literal }: { code: string; renderText?: 
     <Typo.Code as="pre" ref={fade} dir="ltr" tone="secondary" literal={literal} className={dsClass(styles.codeText)}>
       {renderText ? renderText(code, "code") : code}
     </Typo.Code>
+  </CodeFrame>;
+}
+
+function DetailQuote({ quote, renderText, literal }: { quote: string; renderText?: ComposerDecisionRenderText; literal?: boolean }) {
+  return <CodeFrame className={dsClass(styles.code)}>
+    <Typo.Text as="p" tone="secondary" literal={literal} className={dsClass(styles.quoteText)}>
+      {renderText ? renderText(quote, "text") : quote}
+    </Typo.Text>
   </CodeFrame>;
 }
 
@@ -61,9 +69,15 @@ export function ComposerDecisionDetails({ lines, showMoreLabel, showLessLabel, r
   return (
     <div className={styles.details} data-slot="composer-decision-details">
       <div id={id} ref={ref} className={styles.detailLines} data-clamped={clamp && !expanded ? "true" : undefined}>
-        {lines.map((line, index) => typeof line === "string"
-          ? <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere" literal={literal} title={line}>{renderText ? renderText(line, "text") : line}</Typo.Caption>
-          : <DetailCode key={`${index}:${line.code}`} code={line.code} renderText={renderText} literal={literal} />)}
+        {lines.map((line, index) => {
+          if (typeof line === "string") {
+            return <Typo.Caption key={`${index}:${line}`} as="p" tone="secondary" wrap="anywhere" literal={literal} title={line}>{renderText ? renderText(line, "text") : line}</Typo.Caption>;
+          }
+          if ("quote" in line) {
+            return <DetailQuote key={`${index}:${line.quote}`} quote={line.quote} renderText={renderText} literal={literal} />;
+          }
+          return <DetailCode key={`${index}:${line.code}`} code={line.code} renderText={renderText} literal={literal} />;
+        })}
       </div>
       {clamp && (overflowing || expanded) ? (
         <Button type="button" variant="inline" aria-controls={id} aria-expanded={expanded}

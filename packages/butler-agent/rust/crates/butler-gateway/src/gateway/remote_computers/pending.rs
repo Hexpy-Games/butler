@@ -1,5 +1,6 @@
 //! Instructions pulled from registered computers for an explicit decision on the main.
-use super::{Computer, HttpError, live_pump::Pump, live_records::Record, relay};
+use super::{Computer, HttpError, live::LiveRelays, live_pump::Pump, live_records::Record, relay};
+use crate::gateway::{AppEventEnvelope, protocol::APP_PROTOCOL_VERSION};
 use butler_core::configuration::{lock_file_async, read_json_object, write_json_atomic};
 use butler_turn::remote_instructions::PendingInstruction;
 use parking_lot::Mutex;
@@ -19,6 +20,15 @@ pub(super) async fn pull(
     computer: &Computer,
     root: &Path,
     cancel: CancellationToken,
+) -> Result<(), HttpError> {
+    pull_pending(computer, root, cancel, None).await
+}
+
+async fn pull_pending(
+    computer: &Computer,
+    root: &Path,
+    cancel: CancellationToken,
+    relays: Option<&LiveRelays>,
 ) -> Result<(), HttpError> {
     let lock = PULLS.lock().entry(computer.id.clone()).or_default().clone();
     let _pull = lock.lock().await;
@@ -40,7 +50,16 @@ pub(super) async fn pull(
         if count == 0 {
             return Ok(());
         }
-        let ids = merge(root, computer.id.clone(), std::mem::take(items)).await?;
+        let (ids, changed) = merge(root, computer.id.clone(), std::mem::take(items)).await?;
+        if changed && let Some(relays) = relays {
+            relays.emit(AppEventEnvelope {
+                id: 0,
+                protocol_version: APP_PROTOCOL_VERSION.to_owned(),
+                event_type: "remote.instruction_pending".to_owned(),
+                created_at: butler_core::js_date::iso_from_system_time(std::time::SystemTime::now()),
+                payload: serde_json::Map::from_iter([("computer_id".into(), computer.id.clone().into())]),
+            });
+        }
         if !ids.is_empty() {
             let reply = relay::request(
                 computer,
@@ -64,7 +83,7 @@ async fn merge(
     root: &Path,
     computer_id: String,
     batch: Vec<Value>,
-) -> Result<Vec<String>, HttpError> {
+) -> Result<(Vec<String>, bool), HttpError> {
     let path = root.join("config/computers/pending-instructions.json");
     let guard = lock_file_async(&path)
         .await
@@ -124,10 +143,11 @@ async fn merge(
                 "[remote-instructions] invalid items={invalid} computer={computer_id}"
             );
         }
-        if items.len() != before {
+        let changed = items.len() != before;
+        if changed {
             write_json_atomic(&path, &file).map_err(|_| HttpError::Internal)?;
         }
-        Ok(ids)
+        Ok((ids, changed))
     })
     .await
     .map_err(|_| HttpError::Internal)?
@@ -169,7 +189,7 @@ pub(super) fn pull_from_pump(pump: &Pump) {
                 .into_iter()
                 .find(|c| c.id == id)
                 .ok_or(HttpError::Internal)?;
-            pull(&computer, &link.root, link.cancel).await
+            pull_pending(&computer, &link.root, link.cancel, link.relays.as_ref()).await
         }
         .await;
         if result.is_err() {

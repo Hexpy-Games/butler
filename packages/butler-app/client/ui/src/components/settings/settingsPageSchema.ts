@@ -125,6 +125,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },
+    { id: "computers", kind: "list", fields: [], optional: true },
     { id: "command-isolation", kind: "form", fields: ["command-sandbox"] },
     { id: "allowed-folders", kind: "list", fields: [] },
     { id: "grants", kind: "list", fields: [] },

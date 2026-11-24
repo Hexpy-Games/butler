@@ -575,6 +575,7 @@ export interface AppCopy {
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
   publishing: typeof import("./locales/publishing.ts").PUBLISHING_COPY["en-US"];
   sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
+  computers: typeof import("./locales/computers.ts").COMPUTERS_COPY["en-US"];
   fileViewer: typeof import("./locales/file-viewer.ts").FILE_VIEWER_COPY["en-US"];
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;

@@ -32,10 +32,11 @@ export function registerOpenMessageFile({ ipcMain, serverFetch, openPath, showIt
     if (!isTrustedSender(event)) throw new Error("invalid_open_file_sender");
     const fileId = typeof input?.fileId === "string" ? input.fileId : "";
     if (!fileIdPattern.test(fileId)) throw new Error("Invalid Butler file.");
+    const sessionId = typeof input?.sessionId === "string" && input.sessionId.length <= 200 ? input.sessionId : undefined;
     const response = await serverFetch("/internal/opened-files", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ file_id: fileId }),
+      body: JSON.stringify({ file_id: fileId, session_id: sessionId }),
     });
     const body = await response.json().catch(() => null);
     const path = body?.data?.path;

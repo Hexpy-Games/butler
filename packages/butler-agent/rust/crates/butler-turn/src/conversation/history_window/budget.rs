@@ -3,7 +3,7 @@ use super::{ConversationError, ConversationResult};
 use rusqlite::{Connection, functions::FunctionFlags};
 use serde_json::Value;
 
-pub(super) fn register(db: &Connection) -> ConversationResult<()> {
+pub(in crate::conversation) fn register(db: &Connection) -> ConversationResult<()> {
     let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
     db.create_scalar_function("history_budget_text", 1, flags, |ctx| {
         Ok(shape(ctx.get_raw(0).as_str().unwrap_or_default()))

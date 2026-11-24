@@ -84,16 +84,16 @@ pub(super) async fn forward(
     computer: &str,
     record: &Record,
     bound: &mut HashSet<String>,
-) {
+) -> bool {
     if record.oversized {
         relays.emit(reconcile(computer));
-        return;
+        return false;
     }
     let Ok(value) = serde_json::from_str::<Value>(&record.data) else {
-        return;
+        return false;
     };
     let Some(kind) = value["type"].as_str() else {
-        return;
+        return false;
     };
     let payload = &value["payload"];
     let is_bound = async |id: &str, bound: &mut HashSet<String>| {
@@ -148,9 +148,11 @@ pub(super) async fn forward(
                 && is_bound(id, bound).await
             {
                 emit(kind, payload.as_object().cloned().unwrap_or_default());
+                return kind == "turn.state_changed";
             }
         }
     }
+    false
 }
 
 pub(super) fn reconcile(computer: &str) -> AppEventEnvelope {

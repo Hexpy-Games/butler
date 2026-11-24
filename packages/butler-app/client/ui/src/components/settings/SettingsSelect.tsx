@@ -38,6 +38,7 @@ export function SettingsSelect({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   label: string;
   settingId?: string;
@@ -54,6 +55,7 @@ export function SettingsSelect({
   value: string;
   onChange: (value: string) => void;
   options: SettingsOption[];
+  placeholder?: string;
 }) {
   const generatedId = useId();
   const controlId = id ?? generatedId;
@@ -70,7 +72,7 @@ export function SettingsSelect({
       data-multiline={selectedHasDescription ? "true" : undefined}
       disabled={inactive}
     >
-      <SelectValue icon={selectedOption?.icon}>
+      <SelectValue icon={selectedOption?.icon} placeholder={placeholder}>
         {selectedOption && (
           <span data-slot="select-value-stack">
             <span data-slot="select-value-label">{selectedOption.label}</span>

@@ -125,3 +125,27 @@ pub(super) async fn create_session(
         },
     )
 }
+
+pub(super) async fn session_state(state: &HttpState) -> Result<Response, HttpError> {
+    let sessions: Vec<_> = state.application.list_sessions(None, None, None).await?
+        .into_iter()
+        .filter(|session| {
+            session.attention_required || matches!(
+                session.active_turn_state.as_deref(),
+                Some(state) if !matches!(state, "delivered" | "cancelled" | "failed" | "runtime_fault")
+            )
+        })
+        .map(|session| crate::gateway::remote_computers::SessionStateRow {
+            session_id: session.id,
+            active_turn_state: session.active_turn_state,
+            attention_required: session.attention_required,
+        })
+        .collect();
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: serde_json::json!({"sessions": sessions}),
+        },
+    )
+}

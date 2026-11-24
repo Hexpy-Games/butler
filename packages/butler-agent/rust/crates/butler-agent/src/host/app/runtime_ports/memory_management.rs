@@ -109,6 +109,7 @@ impl AppMemoryManagement {
             | AppMemoryCommand::Reextract { .. }
             | AppMemoryCommand::ResetProfile { .. }
             | AppMemoryCommand::ResetProject { .. }
+            | AppMemoryCommand::ResetComputer { .. }
             | AppMemoryCommand::ResetStatus { .. }) => self.reset_command(command, sink).await,
             AppMemoryCommand::Inventory => self.inventory(self.owner.inventory(), false).await,
             AppMemoryCommand::Check => {

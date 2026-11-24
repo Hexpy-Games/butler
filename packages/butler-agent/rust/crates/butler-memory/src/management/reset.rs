@@ -9,23 +9,27 @@ impl MemoryManagement {
         operation_id: String,
         inventory_revision: u64,
         project_id: Option<String>,
+        origin: Option<String>,
     ) -> io::Result<ResetResult> {
         let root = self.root.clone();
         let paths = self.paths.clone();
         let coordinator = self.coordinator.clone();
         tokio::task::spawn_blocking(move || {
+            let kind = if project_id.is_some() {
+                "project_memory"
+            } else if origin.is_some() {
+                "computer_memory"
+            } else {
+                "chat_memory"
+            };
             cognition::begin_conversation_reset(
-                &root,
-                &paths,
+                (&root, &paths),
                 &coordinator,
                 &operation_id,
                 inventory_revision,
-                project_id.clone(),
-                if project_id.is_some() {
-                    "project_memory"
-                } else {
-                    "chat_memory"
-                },
+                project_id,
+                origin,
+                kind,
             )
         })
         .await
@@ -77,11 +81,11 @@ impl MemoryManagement {
         let coordinator = self.coordinator.clone();
         tokio::task::spawn_blocking(move || {
             cognition::begin_conversation_reset(
-                &root,
-                &paths,
+                (&root, &paths),
                 &coordinator,
                 &id,
                 revision,
+                None,
                 None,
                 "profile",
             )
@@ -220,11 +224,11 @@ impl MemoryManagement {
                 return Err(io::Error::other("Re-extraction is not due"));
             }
             cognition::begin_conversation_reset(
-                &root,
-                &paths,
+                (&root, &paths),
                 &coordinator,
                 &id,
                 revision,
+                None,
                 None,
                 "reextract",
             )

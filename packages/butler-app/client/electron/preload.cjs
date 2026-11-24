@@ -933,12 +933,14 @@ const butlerApp = Object.freeze({
   },
   memoryRequest: ({ path, method = "GET", body } = {}) => {
     const existing = /^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path);
-    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|reextract|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
+    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|reextract|projects\/[A-Za-z0-9_-]+|computers\/[A-Za-z0-9_-]{1,64})$/.test(path)) ||
       (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
     const patterns = (method === "GET" && path === "/memory/patterns") ||
       (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));
     const proposals = (method === "GET" && path === "/memory/pattern-proposals") ||
       (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
+    const pendingInstruction = method === "POST" && /^\/memory\/instructions\/pending\/[A-Za-z0-9_-]{1,200}$/.test(path);
+    if (pendingInstruction) return requestBridgeResult(path, { method, body: JSON.stringify(body) });
     if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
     const consolidation = path === "/memory/consolidation" && ["GET", "POST"].includes(method);
     if (consolidation) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
@@ -1010,13 +1012,14 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/sessions?${query}` : "/sessions");
   },
-  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey, workspaceMode }) => requestJson("/sessions", {
+  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey, workspaceMode, computerId }) => requestJson("/sessions", {
     method: "POST",
     body: JSON.stringify({
       kind,
       title,
       initial_message: initialMessage,
       workspace_mode: workspaceMode,
+      computer_id: computerId,
       project_id: projectId,
       session_hint: sessionHint,
       idempotency_key: idempotencyKey,
@@ -1462,6 +1465,18 @@ const butlerApp = Object.freeze({
   updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),
   deleteSignIn: ({ id } = {}) => requestSecurity("deleteSignIn", { id }),
   updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
+  listComputers: () => requestSecurity("listComputers"),
+  checkComputerHostKey: (payload) => requestSecurity("checkComputerHostKey", { payload }),
+  addComputer: (payload) => requestSecurity("addComputer", { payload }),
+  deleteComputer: ({ id } = {}) => requestSecurity("deleteComputer", { id }),
+  startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
+  getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
+  reconnectComputer: ({ id } = {}) => requestSecurity("reconnectComputer", { id }),
+  updateComputerModel: ({ id, payload } = {}) => requestSecurity("updateComputerModel", { id, payload }),
+  editComputer: ({ id, payload } = {}) => requestSecurity("editComputer", { id, payload }),
+  startComputerOauth: ({ id, payload } = {}) => requestSecurity("startComputerOauth", { id, payload }),
+  getComputerOauth: ({ id, flow } = {}) => requestSecurity("getComputerOauth", { id, flow }),
+  cancelComputerOauth: ({ id, flow } = {}) => requestSecurity("cancelComputerOauth", { id, flow }),
   listImportSources: () => requestSecurity("listImportSources"),
   previewImport: (payload) => requestSecurity("previewImport", { payload }),
   runImport: (payload) => requestSecurity("runImport", { payload }),
@@ -1611,8 +1626,8 @@ const butlerApp = Object.freeze({
   exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
-  openMessageFile: ({ fileId } = {}) =>
-    ipcRenderer.invoke("butler:open-message-file", { fileId }),
+  openMessageFile: ({ fileId, sessionId } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId, sessionId }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);

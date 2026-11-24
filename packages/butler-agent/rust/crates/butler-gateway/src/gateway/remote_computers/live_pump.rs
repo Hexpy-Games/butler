@@ -3,7 +3,9 @@ use super::{
     HttpError, Link, RemoteStream,
     live::{Connection, LiveRelays},
     live_records::{self, Record},
-    relay, sessions,
+    relay,
+    session_state::spawn_refresh,
+    sessions,
 };
 use crate::gateway::GatewayApplication;
 use std::{collections::HashSet, sync::Arc, time::Duration};
@@ -43,6 +45,7 @@ pub(super) async fn run(pump: Pump) {
             Ended::Stopped => return,
             Ended::Idle => {
                 super::transcripts::spawn_pull(pump.link.clone(), pump.computer.clone());
+                spawn_refresh(pump.link.clone(), pump.computer.clone());
                 return;
             }
             Ended::Restart => {
@@ -81,6 +84,7 @@ async fn attempt(pump: &Pump, system_wake: &mut watch::Receiver<u64>, failures: 
             pump.relays
                 .set(&pump.computer, &pump.wake, Connection::Connected, None);
             super::pending::pull_from_pump(pump);
+            spawn_refresh(pump.link.clone(), pump.computer.clone());
             read(pump, system_wake, stream, cursor.is_none()).await
         }
         Ok(_) => Ended::Lost("remote_request_failed".into()),
@@ -147,15 +151,17 @@ async fn read(
             super::pending::pull_from_pump(pump);
             continue;
         }
-        if !history || caught_up || record.id.is_none() {
-            live_records::forward(
+        if (!history || caught_up || record.id.is_none())
+            && live_records::forward(
                 &pump.relays,
                 &*pump.application,
                 &pump.computer,
                 &record,
                 &mut bound,
             )
-            .await;
+            .await
+        {
+            spawn_refresh(pump.link.clone(), pump.computer.clone());
         }
         if let Some(id) = record.id {
             pump.relays.set_cursor(&pump.computer, &pump.wake, id);

@@ -17,12 +17,6 @@ pub(super) enum Stdin {
     File(PathBuf),
 }
 
-pub(super) struct HostKey {
-    pub fingerprint: Option<String>,
-    pub key_type: Option<String>,
-    pub host_keys: Vec<String>,
-}
-
 fn identity_args(target: &HostInput, home: Option<&Path>) -> Result<Vec<String>, HttpError> {
     let mut args = Vec::new();
     if let Some(port) = target.port {
@@ -127,11 +121,11 @@ pub(super) async fn host_key(
     target: &HostInput,
     records: &[Computer],
     cancel: CancellationToken,
-) -> Result<HostKey, HttpError> {
+) -> Result<Vec<String>, HttpError> {
     let before = host_lines(records);
     let known_hosts = KnownHosts::write(before.clone()).await?;
     let home = butler_platform::user_dirs::non_empty_home_dir();
-    let args = arguments(
+    let mut args = arguments(
         target,
         &known_hosts.0,
         "accept-new",
@@ -139,6 +133,7 @@ pub(super) async fn host_key(
         "true",
         home.as_deref(),
     )?;
+    args.splice(1..1, remote_ssh::settings_config_args());
     let output = run(
         args,
         Stdin::Bytes(Vec::new()),
@@ -157,13 +152,9 @@ pub(super) async fn host_key(
         ));
     }
     let after = known_hosts.lines().await?;
-    let new_lines = after
-        .difference(&before)
-        .cloned()
-        .collect::<std::collections::BTreeSet<_>>();
-    let (fingerprint, key_type) = if !new_lines.is_empty() {
-        fingerprint(new_lines, cancel.clone()).await?
-    } else if output.exit_code == Some(255)
+    let new_lines: Vec<String> = after.difference(&before).cloned().collect();
+    if new_lines.is_empty()
+        && output.exit_code == Some(255)
         && [
             "Could not resolve",
             "Connection refused",
@@ -179,59 +170,32 @@ pub(super) async fn host_key(
             "ssh_unreachable",
             "Could not reach this computer.",
         ));
-    } else {
-        (None, None)
-    };
-    let host_keys = lookup(target, &known_hosts, home.as_deref(), cancel).await?;
-    Ok(HostKey {
-        fingerprint,
-        key_type,
-        host_keys,
-    })
+    }
+    let settings = settings(target, home.as_deref(), cancel.clone()).await?;
+    if !new_lines.is_empty()
+        && !accepts(&new_lines, &user_entries(&settings, cancel.clone()).await?)
+    {
+        return Err(remote_error(
+            "host_key_changed",
+            "This computer's host key changed.",
+        ));
+    }
+    lookup(&settings.lookup, &known_hosts, cancel).await
 }
 
-async fn fingerprint(
-    new_lines: std::collections::BTreeSet<String>,
-    cancel: CancellationToken,
-) -> Result<(Option<String>, Option<String>), HttpError> {
-    let new_hosts = KnownHosts::write(new_lines).await?;
-    let output = run(
-        vec![
-            "ssh-keygen".into(),
-            "-l".into(),
-            "-E".into(),
-            "sha256".into(),
-            "-f".into(),
-            new_hosts.0.to_string_lossy().into_owned(),
-        ],
-        Stdin::Bytes(Vec::new()),
-        Duration::from_secs(20),
-        cancel.clone(),
-    )
-    .await?;
-    let line = output.stdout.lines().next().ok_or(HttpError::Internal)?;
-    let fingerprint = line
-        .split_whitespace()
-        .nth(1)
-        .ok_or(HttpError::Internal)?
-        .to_owned();
-    let key_type = line
-        .split_whitespace()
-        .last()
-        .and_then(|s| s.strip_prefix('('))
-        .and_then(|s| s.strip_suffix(')'))
-        .ok_or(HttpError::Internal)?
-        .to_owned();
-    Ok((Some(fingerprint), Some(key_type)))
+struct Settings {
+    lookup: String,
+    files: Vec<String>,
 }
 
-async fn lookup(
+async fn settings(
     target: &HostInput,
-    known_hosts: &KnownHosts,
     home: Option<&Path>,
     cancel: CancellationToken,
-) -> Result<Vec<String>, HttpError> {
-    let mut args = vec![remote_ssh::PROGRAM.into(), "-G".into()];
+) -> Result<Settings, HttpError> {
+    let mut args = vec![remote_ssh::PROGRAM.into()];
+    args.extend(remote_ssh::settings_config_args());
+    args.push("-G".into());
     args.extend(identity_args(target, home)?);
     args.extend(["--".into(), target.address.clone()]);
     let config = run(
@@ -244,12 +208,21 @@ async fn lookup(
     let mut hostname = "";
     let mut port = "22";
     let mut alias = "";
+    let mut files = Vec::new();
     for line in config.stdout.lines() {
         if let Some((key, value)) = line.split_once(' ') {
             match key {
                 "hostname" => hostname = value.trim(),
                 "port" => port = value.trim(),
                 "hostkeyalias" => alias = value.trim(),
+                "userknownhostsfile" | "globalknownhostsfile" => {
+                    for file in value.split_whitespace().filter(|file| *file != "none") {
+                        if !Path::new(file).is_absolute() {
+                            return Err(HttpError::Internal);
+                        }
+                        files.push(file.to_owned());
+                    }
+                }
                 _ => {}
             }
         }
@@ -261,11 +234,19 @@ async fn lookup(
     } else {
         format!("[{hostname}]:{port}")
     };
+    Ok(Settings { lookup, files })
+}
+
+async fn lookup(
+    lookup: &str,
+    known_hosts: &KnownHosts,
+    cancel: CancellationToken,
+) -> Result<Vec<String>, HttpError> {
     let output = run(
         vec![
             "ssh-keygen".into(),
             "-F".into(),
-            lookup,
+            lookup.into(),
             "-f".into(),
             known_hosts.0.to_string_lossy().into_owned(),
         ],
@@ -280,6 +261,70 @@ async fn lookup(
         .filter(|line| !line.starts_with('#') && !line.is_empty())
         .map(str::to_owned)
         .collect())
+}
+
+async fn user_entries(
+    settings: &Settings,
+    cancel: CancellationToken,
+) -> Result<Vec<String>, HttpError> {
+    let mut entries = Vec::new();
+    for file in &settings.files {
+        if !tokio::fs::try_exists(file).await.unwrap_or(false) {
+            continue;
+        }
+        let output = run(
+            vec![
+                "ssh-keygen".into(),
+                "-F".into(),
+                settings.lookup.clone(),
+                "-f".into(),
+                file.clone(),
+            ],
+            Stdin::Bytes(Vec::new()),
+            Duration::from_secs(20),
+            cancel.clone(),
+        )
+        .await?;
+        entries.extend(
+            output
+                .stdout
+                .lines()
+                .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+                .map(str::to_owned),
+        );
+    }
+    Ok(entries)
+}
+
+fn accepts(scanned: &[String], entries: &[String]) -> bool {
+    fn parse(line: &str) -> Option<(Option<&str>, &str, &str)> {
+        let mut fields = line.split_whitespace();
+        let first = fields.next()?;
+        let marker = if first.starts_with('@') {
+            fields.next()?;
+            Some(first)
+        } else {
+            None
+        };
+        Some((marker, fields.next()?, fields.next()?))
+    }
+    let entries: Vec<_> = entries.iter().filter_map(|line| parse(line)).collect();
+    scanned
+        .iter()
+        .filter_map(|line| parse(line))
+        .all(|(_, kind, blob)| {
+            if entries
+                .iter()
+                .any(|(marker, _, key)| *marker == Some("@revoked") && *key == blob)
+            {
+                return false;
+            }
+            let mut keys = entries
+                .iter()
+                .filter(|(marker, entry_kind, _)| marker.is_none() && *entry_kind == kind)
+                .peekable();
+            keys.peek().is_none() || keys.any(|(_, _, key)| *key == blob)
+        })
 }
 
 pub(super) async fn probe(
