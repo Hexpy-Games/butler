@@ -14,6 +14,7 @@ export default function NotificationsSettings() {
   const [push, setPush] = useState(false);
   const [kinds, setKinds] = useState<PushKind[]>([...PUSH_KINDS]);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     void pairingStore.loadActive().then(active => {
       setPush(active?.pushEnabled === true);
@@ -28,25 +29,35 @@ export default function NotificationsSettings() {
 
   async function toggle(on: boolean) {
     if (!client || !pairing) return;
-    const ok = on ? await enablePush(client, pairing.butlerId) : await disablePush(client, pairing.butlerId);
-    if (ok) setPush(on);
-    else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
+    setBusy(true);
+    try {
+      const ok = on ? await enablePush(client, pairing.butlerId) : await disablePush(client, pairing.butlerId);
+      if (ok) setPush(on);
+      else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function toggleKind(kind: PushKind, on: boolean) {
     if (!client || !pairing) return;
     const next = PUSH_KINDS.filter(k => k === kind ? on : kinds.includes(k));
-    if (await setPushKinds(client, pairing.butlerId, next)) setKinds(next);
-    else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
+    setBusy(true);
+    try {
+      if (await setPushKinds(client, pairing.butlerId, next)) setKinds(next);
+      else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <SettingsScreen title={copy.settings.notifications}>
     <ListGroup footer={available === false ? copy.settings.notificationsSignIn : undefined}>
-      <SwitchRow title={copy.settings.notificationsReceive} value={push} disabled={off} onChange={on => void toggle(on)} />
+      <SwitchRow title={copy.settings.notificationsReceive} value={push} disabled={off || busy} onChange={on => void toggle(on)} />
     </ListGroup>
     <ListGroup>
       {PUSH_KINDS.map(kind => <SwitchRow key={kind} title={copy.settings.notificationKinds[kind]}
-        value={kinds.includes(kind)} disabled={off || !push} onChange={on => void toggleKind(kind, on)} />)}
+        value={kinds.includes(kind)} disabled={off || !push || busy} onChange={on => void toggleKind(kind, on)} />)}
     </ListGroup>
   </SettingsScreen>;
 }
