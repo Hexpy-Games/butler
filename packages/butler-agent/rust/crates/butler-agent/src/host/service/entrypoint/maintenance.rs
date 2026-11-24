@@ -15,7 +15,6 @@ const SERVICE_MAINTENANCE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(super) async fn run_service_maintenance(
     progress: Arc<ProgressPublisher>,
-    parent_client: butler_log::http::Client,
     subsessions: Arc<butler_turn::btcc::SubsessionService>,
     app_endpoint: ActiveAppEndpoint,
     mut stop: oneshot::Receiver<()>,
@@ -28,14 +27,8 @@ pub(super) async fn run_service_maintenance(
         let pass = async {
             let summary = progress.reconcile().await?;
             let mut retry_pending = summary.attempted > summary.published;
-            if let Some(active) = app_endpoint.snapshot() {
-                retry_pending |= deliver_parent_results(
-                    &parent_client,
-                    &subsessions,
-                    &active.base_url,
-                    &active.local_auth,
-                )
-                .await?;
+            if app_endpoint.snapshot().is_some() {
+                retry_pending |= deliver_parent_results(&app_endpoint, &subsessions).await?;
             }
             Ok::<bool, BtccError>(retry_pending)
         };

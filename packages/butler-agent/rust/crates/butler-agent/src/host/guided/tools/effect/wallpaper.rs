@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use reqwest::Method;
+use http::Method;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 

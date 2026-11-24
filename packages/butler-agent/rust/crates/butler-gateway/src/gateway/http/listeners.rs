@@ -59,6 +59,9 @@ pub(super) fn spawn(
 #[derive(Clone)]
 pub(super) struct LocalSocketPeer;
 
+#[derive(Clone)]
+pub(super) struct InProcessPeer;
+
 pub(super) fn spawn_local(
     listener: LocalListener,
     socket: RemoteSocket,

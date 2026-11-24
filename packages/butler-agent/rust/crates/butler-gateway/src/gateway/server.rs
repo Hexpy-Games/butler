@@ -5,7 +5,9 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use super::{GatewayApplication, GatewaySecurityStore, LocalAuthConfig, RemoteSocket, http};
+use super::{
+    GatewayApplication, GatewaySecurityStore, InProcessGateway, LocalAuthConfig, RemoteSocket, http,
+};
 use butler_platform::local_socket;
 
 /// Listener configuration for [`serve_gateway`].
@@ -97,6 +99,7 @@ pub struct GatewayServer {
     local_addr: SocketAddr,
     content_addr: SocketAddr,
     shutdown: CancellationToken,
+    in_process: InProcessGateway,
     task: Option<JoinHandle<std::io::Result<()>>>,
 }
 
@@ -109,6 +112,10 @@ impl GatewayServer {
     /// The bound content listener, including any ephemeral fallback.
     pub fn content_addr(&self) -> SocketAddr {
         self.content_addr
+    }
+
+    pub fn in_process(&self) -> InProcessGateway {
+        self.in_process.clone()
     }
 
     /// Refuse new HTTP work without closing application storage or waiting for handlers.
@@ -158,22 +165,37 @@ pub async fn serve_gateway(
         config.dev_cors_origin.as_deref(),
     )?;
     let shutdown = CancellationToken::new();
+    let state = match http::prepare(
+        application,
+        config,
+        shutdown.clone(),
+        local_addr,
+        content_addr,
+    )
+    .await
+    {
+        Ok(state) => state,
+        Err(error) => {
+            shutdown.cancel();
+            return Err(error);
+        }
+    };
+    let in_process = InProcessGateway::new(state.clone(), shutdown.clone());
     let task = http::serve(
         http::Listeners {
             main: listener,
             content: content_listener,
             local: local_listener,
         },
-        application,
-        config,
+        state,
         shutdown.clone(),
-        local_addr,
-        content_addr,
+        in_process.clone(),
     );
     Ok(GatewayServer {
         local_addr,
         content_addr,
         shutdown,
+        in_process,
         task: Some(task),
     })
 }

@@ -204,6 +204,6 @@ pub fn http_route_templates() -> Vec<&'static str> {
     http::route_templates()
 }
 
-pub use http::{reset_browser_secret_keys, vault_legacy_items};
+pub use http::{InProcessError, InProcessGateway, reset_browser_secret_keys, vault_legacy_items};
 
 pub use protocol::ImageEditRequest;

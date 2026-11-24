@@ -2,7 +2,7 @@ use super::{GuidedTools, ToolName, admin, error, not_found, rows};
 use butler_turn::btcc::{
     OptionKind, QuestionKind, QuestionOption, UserQuestion, UserQuestionAnswer, UserQuestions,
 };
-use reqwest::Method;
+use http::Method;
 use serde_json::{Map, Value, json};
 
 const FIELDS: [&str; 4] = ["name", "address", "folder", "model"];

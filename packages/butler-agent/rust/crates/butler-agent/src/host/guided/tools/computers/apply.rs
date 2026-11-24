@@ -3,7 +3,7 @@ use super::{
     encoded, error, gateway_failure, not_found, rows,
 };
 use butler_models::models::CredentialError;
-use reqwest::Method;
+use http::Method;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
