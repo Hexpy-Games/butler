@@ -24,8 +24,8 @@ pub(crate) mod welcome;
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::setup_wizard_shell::{
-    ContentWidth, SetupWizardAnchor, SetupWizardContent, SetupWizardIntro, SetupWizardShell,
-    SetupWizardVariant,
+    ContentWidth, SetupWizardAnchor, SetupWizardContent, SetupWizardIntro, SetupWizardMorph,
+    SetupWizardShell, SetupWizardVariant,
 };
 use butler_ds::ui::blocks::wallpaper::WallpaperTone;
 use butler_ds::ui::context::Lang;
@@ -90,6 +90,7 @@ pub(crate) struct Onboarding {
     pub(crate) imports: Entity<import::Imports>,
     /// The step card's title: focused when the card changes.
     pub(crate) title: FocusHandle,
+    pub(crate) morph: SetupWizardMorph,
     intro: SetupWizardIntro,
     pub(crate) vault: Entity<crate::ui::shell::vault::Vault>,
     pub(crate) vault_offered: Option<bool>,
@@ -207,6 +208,7 @@ impl Onboarding {
             focus_start: false,
             stages: Stages::default(),
             current_card: current_card(mode, &settings, &catalog),
+            morph: SetupWizardMorph::new(),
             intro: intro(mode, &settings),
             settings,
             catalog,
@@ -380,8 +382,6 @@ impl Render for Onboarding {
         let confirmation =
             crate::ui::settings::confirm::dialog(&self.vault_confirm.state, window, cx);
         let lang = self.lang;
-        // ANIM-MIGRATE(setup card morph between steps): requires measured surface edges and
-        // retained old content; motion Props cannot animate layout bounds without scaling text.
         // ANIM-MIGRATE(first-install ink intro): requires the wallpaper's ink timeline and mark
         // reveal; motion Props animate painted groups, not the procedural ink or its keep-out.
         let shell = SetupWizardShell::new("first-run", words(lang).product)
@@ -391,6 +391,7 @@ impl Render for Onboarding {
             .day_phase(crate::ui::chat::empty::day_phase())
             .intro(self.intro)
             .step_key(key)
+            .morph(&self.morph, true)
             .child(body);
         crate::ui::widgets::anchor(div(), "first-run-setup")
             .size_full()

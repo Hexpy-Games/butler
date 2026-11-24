@@ -45,9 +45,10 @@ pub(crate) fn screen(
     SetupWizardContent::new()
         .variant(SetupWizardVariant::Focus)
         .solid()
+        .rows(&view.morph)
         .child(intro)
         .child(language_field(view, cx))
-        .child(rows(view, blocked, saving, window, cx))
+        .children(rows(view, blocked, saving, window, cx))
         .into_any_element()
 }
 
@@ -77,7 +78,7 @@ fn rows(
     saving: bool,
     window: &mut Window,
     cx: &mut Context<Onboarding>,
-) -> AnyElement {
+) -> [AnyElement; 2] {
     let copy = words(view.lang);
     // CARVE-OUT(G-start-focus): React focuses the start button when the flow comes back to
     // welcome (`focusStart`); the DS Button has no focus handle to take.
@@ -123,11 +124,7 @@ fn rows(
             ))
             .into_any_element()
     };
-    Stack::new()
-        .gap(Space::Lg)
-        .child(buttons)
-        .child(status)
-        .into_any_element()
+    [buttons.into_any_element(), status]
 }
 
 /// `<Typo.Caption as="span">` around inline content: it takes the caption's type scale, as the
