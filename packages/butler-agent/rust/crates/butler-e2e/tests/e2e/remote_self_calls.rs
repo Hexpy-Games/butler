@@ -106,7 +106,7 @@ async fn creates_and_reads_document() -> Result<(), HarnessError> {
     let remote = Remote::start("REMOTE-SELF-DOCUMENT").await?;
     remote.turn(DOCUMENT).await?;
     let result = remote.result("read").unwrap_or(Value::Null);
-    assert_eq!(result["body"], NOTE, "{result}");
+    assert_eq!(result["output"]["body"], NOTE, "{result}");
     remote.finish().await
 }
 
@@ -135,7 +135,7 @@ async fn creates_topic_branch() -> Result<(), HarnessError> {
     remote.turn("Answer the source conversation.").await?;
     remote.turn(BRANCH).await?;
     let result = remote.result("branch").unwrap_or(Value::Null);
-    assert_eq!(result["title"], "Remote branch", "{result}");
+    assert_eq!(result["output"]["title"], "Remote branch", "{result}");
     remote.finish().await
 }
 
@@ -216,7 +216,8 @@ fn script(body: &Value) -> Option<ResponseRecord> {
         ),
         DOCUMENT => {
             let created = output(body, "create")?;
-            native(body, "read", "document_read", &json!({"id":created["id"]}))
+            let id = created["output"]["id"].as_str()?;
+            native(body, "read", "document_read", &json!({"id":id}))
         }
         WALLPAPER => native(body, "wallpaper", "list_wallpapers", &json!({})),
         BRANCH => native(
