@@ -7,8 +7,7 @@ use super::records;
 use crate::btcc::StorageCode;
 use crate::btcc::identity::{content_ref, digest};
 use crate::btcc::storage::common::{error, route_text, stringify};
-use crate::btcc::storage::subsessions::RELATION_OWES_RESULT_SQL;
-use crate::btcc::storage::{StorageError, StorageResult, hydration, worker_result_message_id};
+use crate::btcc::storage::{StorageError, StorageResult, hydration, worker_result_turn_id};
 use crate::btcc::turn::{
     FinalPayload, SettledTurn, SuspensionReason, TurnRecord, TurnSemanticState,
 };
@@ -27,16 +26,19 @@ pub(in crate::btcc::storage) fn settled_turns(
         })
         .map_err(StorageError::sqlite)?;
     let mut own = db
-        .prepare(concat!(
-            "SELECT r.relation_id, ",
-            RELATION_OWES_RESULT_SQL!(),
-            ", pt.rowid FROM btcc_session_relations r
-             JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
-             JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
-             WHERE r.parent_session_id=?1 AND r.parent_turn_id=?2"
-        ))
+        .prepare(
+            "SELECT r.relation_id, r.activity_terminal, pt.rowid FROM btcc_session_relations r
+         JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
+         WHERE r.parent_session_id=?1 AND r.parent_turn_id=?2",
+        )
         .map_err(StorageError::sqlite)?;
-    let mut earlier = prepare_earlier_relations(db)?;
+    let mut earlier = db
+        .prepare(
+            "SELECT r.relation_id, r.activity_terminal, pt.rowid FROM btcc_session_relations r
+         JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
+         WHERE r.parent_session_id=?1 AND pt.rowid<?2",
+        )
+        .map_err(StorageError::sqlite)?;
     let mut outbox = db
         .prepare("SELECT result_id FROM btcc_subsession_outbox WHERE relation_id=?1 ORDER BY rowid")
         .map_err(StorageError::sqlite)?;
@@ -45,7 +47,7 @@ pub(in crate::btcc::storage) fn settled_turns(
         let (turn_id, parent_rowid) = parent.map_err(StorageError::sqlite)?;
         let relations =
             parent_relations(&mut own, &mut earlier, session_id, &turn_id, parent_rowid)?;
-        if relations.iter().any(|(_, owes, _)| *owes) {
+        if relations.iter().any(|(_, terminal, _)| !terminal) {
             continue;
         }
         let mut last: Option<(i64, String, String)> = None;
@@ -86,18 +88,6 @@ pub(in crate::btcc::storage) fn settled_turns(
     Ok(turns)
 }
 
-fn prepare_earlier_relations(db: &Connection) -> StorageResult<Statement<'_>> {
-    db.prepare(concat!(
-        "SELECT r.relation_id, ",
-        RELATION_OWES_RESULT_SQL!(),
-        ", pt.rowid FROM btcc_session_relations r
-             JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
-             JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
-             WHERE r.parent_session_id=?1 AND pt.rowid<?2"
-    ))
-    .map_err(StorageError::sqlite)
-}
-
 fn parent_relations(
     own: &mut Statement<'_>,
     earlier: &mut Statement<'_>,
@@ -129,18 +119,25 @@ fn result_turn(
     parent_rowid: i64,
     result_id: &str,
 ) -> StorageResult<Option<(String, i64, String)>> {
+    let read_turn = |row: &rusqlite::Row<'_>| Ok((row.get(0)?, row.get(1)?, row.get(2)?));
+    let turn = db
+        .query_row(
+            "SELECT turn_id, rowid, semantic_state FROM btcc_turns
+             WHERE turn_id=?1 AND session_id=?2 AND rowid>?3",
+            params![worker_result_turn_id(result_id), session_id, parent_rowid],
+            read_turn,
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
+    if turn.is_some() {
+        return Ok(turn);
+    }
     db.query_row(
         "SELECT turn_id, rowid, semantic_state FROM btcc_turns
-         WHERE session_id=?1 AND rowid>?2 AND (original_message_id=?3
-           OR json_extract(context_json,'$.subsessionResult.result_id')=?4)
+         WHERE session_id=?1 AND rowid>?2 AND json_extract(context_json,'$.subsessionResult.result_id')=?3
          ORDER BY rowid LIMIT 1",
-        params![
-            session_id,
-            parent_rowid,
-            worker_result_message_id(result_id),
-            result_id
-        ],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        params![session_id, parent_rowid, result_id],
+        read_turn,
     )
     .optional()
     .map_err(StorageError::sqlite)

@@ -9,11 +9,6 @@ pub(crate) fn worker_result_turn_id(result_id: &str) -> String {
     )
 }
 
-/// The message a Worker result is admitted from in its Steward queue (`result_delivery.rs`).
-pub(crate) fn worker_result_message_id(result_id: &str) -> String {
-    format!("worker-result-message:{result_id}")
-}
-
 /// A Worker result that is committed but whose Steward result turn has not started.
 pub(super) fn has_unreceived_worker_result(
     db: &rusqlite::Connection,

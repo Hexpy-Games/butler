@@ -32,7 +32,7 @@ pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
 pub use subtasks::{OPEN_SUBTASKS_SQL, SUBTASK_WORKERS_SQL};
-pub(crate) use unreceived::{worker_result_message_id, worker_result_turn_id};
+pub(crate) use unreceived::worker_result_turn_id;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
@@ -41,19 +41,6 @@ use self::decode::{direction_row, list, read};
 use self::directions::queued_instruction;
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
-
-/// The relation `r` (with delegation `d`) still owes a result: a pending direction,
-/// or no saved result for its child's current turn.
-macro_rules! RELATION_OWES_RESULT_SQL {
-    () => {
-        "(json_extract(d.packet_json,'$.superseded_by') IS NULL AND (
-           EXISTS (SELECT 1 FROM btcc_subsession_directions i WHERE i.relation_id=r.relation_id AND i.status='pending')
-           OR NOT EXISTS (SELECT 1 FROM btcc_steward_results x WHERE x.relation_id=r.relation_id AND x.child_turn_id=COALESCE(
-             (SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1),
-             d.child_turn_id))))"
-    };
-}
-pub(crate) use RELATION_OWES_RESULT_SQL;
 
 /// A new subsession delegation to persist.
 #[derive(Clone, Debug)]
@@ -425,13 +412,17 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let unfinished: bool = db
                     .query_row(
-                        concat!(
-                            "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
-                             JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
-                             WHERE r.parent_session_id=?1 AND ",
-                            RELATION_OWES_RESULT_SQL!(),
-                            ")"
-                        ),
+                        "SELECT EXISTS (SELECT 1 FROM btcc_session_relations r
+                         JOIN btcc_subsession_delegations d ON d.relation_id=r.relation_id
+                         WHERE r.parent_session_id=?1
+                           AND json_extract(d.packet_json,'$.superseded_by') IS NULL AND (
+                           EXISTS (SELECT 1 FROM btcc_subsession_directions i
+                             WHERE i.relation_id=r.relation_id AND i.status='pending')
+                           OR NOT EXISTS (SELECT 1 FROM btcc_steward_results x
+                             WHERE x.relation_id=r.relation_id AND x.child_turn_id=COALESCE(
+                               (SELECT t.turn_id FROM btcc_turns t
+                                WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1),
+                               d.child_turn_id))))",
                         [&parent],
                         |row| row.get(0),
                     )

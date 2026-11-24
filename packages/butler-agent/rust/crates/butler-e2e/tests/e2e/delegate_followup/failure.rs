@@ -13,7 +13,7 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
         .start()
         .await?;
-    let (owner, _) = s.turn("general", stub::OWNER).await?;
+    s.turn("general", stub::OWNER).await?;
     let deadline = Instant::now() + Duration::from_secs(30);
     let first = loop {
         if let Some(child) = children(&s).await?.first()
@@ -24,7 +24,6 @@ async fn child_repetition_and_parent_redelegation_have_separate_feedback()
         assert!(Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
-    assert_owner_answered(&s, &owner).await;
     let relation = first["relation"]["relation_id"].as_str().unwrap();
     *script.relation.lock().unwrap() = relation.to_owned();
     s.restart().await?;
