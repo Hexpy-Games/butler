@@ -94,15 +94,7 @@ pub(super) fn write_fields(
     quiet: bool,
 ) -> Result<()> {
     let old = one(tx, spec.read, [id])?;
-    // A remote done/cancelled never ends a locally running epic, as local writes cannot.
-    if spec.sync == EPIC.sync
-        && fields
-            .get("canon_status")
-            .is_some_and(|status| status == "done" || status == "cancelled")
-        && runtime::epic_running(tx, id)?
-    {
-        return Err(Error::Running);
-    }
+    refuse_running(tx, spec, id, fields)?;
     let (mut columns, mut values) = (Vec::new(), Vec::new());
     for (name, value) in fields {
         values.push(sql_value(value));
@@ -165,6 +157,22 @@ pub(super) fn write_fields(
             let title = plan.as_ref().map(|p| text(p, "title")).transpose()?;
             activity::append(tx, ctx, id, "moved", title.unwrap_or(""), None)?;
         }
+    }
+    Ok(())
+}
+
+/// A remote done/cancelled never ends a locally running epic, as local writes cannot.
+fn refuse_running(
+    tx: &Transaction<'_>,
+    spec: &Spec,
+    id: &str,
+    fields: &Map<String, Value>,
+) -> Result<()> {
+    let closes = fields
+        .get("canon_status")
+        .is_some_and(|status| status == "done" || status == "cancelled");
+    if spec.sync == EPIC.sync && closes && runtime::epic_running(tx, id)? {
+        return Err(Error::Running);
     }
     Ok(())
 }
