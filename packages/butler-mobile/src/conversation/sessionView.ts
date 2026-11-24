@@ -26,6 +26,7 @@ export function mergeMessages(previous: ConversationMessage[], incoming: Convers
   const messages = new Map(previous.map(message => [message.id, message]));
   for (const message of incoming) {
     const old = messages.get(message.id);
+    if (old && JSON.stringify(old) === JSON.stringify(message)) continue;
     if (old?.updated_at && message.updated_at && message.updated_at < old.updated_at) continue;
     messages.set(message.id, message);
   }

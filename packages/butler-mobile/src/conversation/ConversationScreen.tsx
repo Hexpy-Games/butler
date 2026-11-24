@@ -125,7 +125,8 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
         renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
           liveRows={item.role === "assistant" && !!item.turn_id && item.turn_id === view?.active_turn?.id ? view.active_turn.progress?.safe_progress_rows : undefined}
-          stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
+          retryable={item.turn_id === view?.latest_turn?.id && !!view?.latest_turn?.retryable}
+          stewardChild={anchors.get(item.id)} sessionId={view?.session_id} projectId={view?.project_id} />}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}

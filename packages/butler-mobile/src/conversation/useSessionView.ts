@@ -5,24 +5,32 @@ import type { ConversationMessage, SessionView } from "../../../butler-protocol/
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { useConversation } from "./live";
 import { applyLiveEvent, mergeMessages } from "./sessionView";
+import { cachedSessionView, rememberSessionView, saveSessionView, SESSION_PAGE } from "./sessionViewCache";
 
-/** Messages per /session-view page; the conversation renders one page in its first pass. */
-export const SESSION_PAGE = 50;
+export { SESSION_PAGE } from "./sessionViewCache";
 
 export function useSessionViewData(id: string | undefined) {
-  const { client, reconcile, subscribe } = useConversation();
-  const [view, setView] = useState<SessionView | null>(null);
+  const { client, pairing, reconcile, subscribe } = useConversation();
+  const butlerId = pairing?.butlerId;
+  const [view, setView] = useState(() => butlerId && id ? cachedSessionView(butlerId, id) : null);
   const [error, setError] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const requestRef = useRef<(older?: boolean) => void>(() => {});
   useEffect(() => {
-    setView(null); setError(false); setLoadingEarlier(false);
+    const cached = butlerId && id ? cachedSessionView(butlerId, id) : null;
+    setView(cached); setError(false); setLoadingEarlier(false);
     if (!client || !id) return;
-    let current: SessionView | null = null;
+    let current: SessionView | null = cached;
+    let fresh = false;
     let closed = false, busy = false, pending = false, last = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const publish = (next: SessionView) => { current = next; setView(next); };
+    const publish = (next: SessionView) => {
+      current = next;
+      setView(next);
+      if (butlerId) rememberSessionView(butlerId, next);
+    };
     const request = (older = false) => {
+      if (older && !fresh) return;
       if (closed) return;
       const token = older && current?.message_window.has_more ? current.message_window.previous_cursor_token : undefined;
       if (older && (!token || busy)) return;
@@ -39,7 +47,9 @@ export function useSessionViewData(id: string | undefined) {
       const before = token ? `&before_cursor_token=${encodeURIComponent(token)}` : "";
       void client.request<SessionView>(`/session-view?session_id=${encodeURIComponent(id)}${before}&limit=${SESSION_PAGE}`).then(next => {
         if (closed) return;
-        publish(mergeSessionView(current, next, older));
+        const kept = fresh ? null : (current?.messages ?? []).filter(m => next.messages.some(n => n.id === m.id));
+        publish(kept ? { ...next, messages: mergeMessages(kept, next.messages) } : mergeSessionView(current, next, older));
+        fresh = true;
         setError(false);
       }).catch(() => { if (!closed && !current) setError(true); }).finally(() => {
         busy = false;
@@ -56,10 +66,11 @@ export function useSessionViewData(id: string | undefined) {
     });
     request();
     return () => {
+      if (butlerId && id) saveSessionView(butlerId, id);
       closed = true; clearTimeout(timer); unsubscribe();
       requestRef.current = () => {};
     };
-  }, [client, id, subscribe]);
+  }, [butlerId, client, id, subscribe]);
   const seen = useRef(reconcile);
   useEffect(() => {
     if (seen.current === reconcile) return;
