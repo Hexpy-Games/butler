@@ -3,6 +3,7 @@ use butler_platform::preview_process::PreviewProcess;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
+    io,
     path::PathBuf,
     sync::{
         Arc, Mutex,
@@ -28,10 +29,62 @@ struct Preview {
     command: String,
     cwd: PathBuf,
     port: u16,
-    process: PreviewProcess,
+    process: Source,
     created_at: String,
     failure_reported: AtomicBool,
 }
+enum Source {
+    Spawned(PreviewProcess),
+    Attached(CancellationToken),
+}
+
+impl Source {
+    fn attach(occupied: bool) -> Result<Self, &'static str> {
+        if !occupied {
+            return Err("port_not_listening");
+        }
+        Ok(Self::Attached(CancellationToken::new()))
+    }
+
+    fn is_running(&self) -> bool {
+        match self {
+            Self::Spawned(process) => process.is_running(),
+            Self::Attached(token) => !token.is_cancelled(),
+        }
+    }
+
+    fn cancellation(&self) -> CancellationToken {
+        match self {
+            Self::Spawned(process) => process.cancellation(),
+            Self::Attached(token) => token.clone(),
+        }
+    }
+
+    fn log(&self) -> String {
+        match self {
+            Self::Spawned(process) => process.log(),
+            Self::Attached(_) => String::new(),
+        }
+    }
+
+    fn pid(&self) -> Option<u32> {
+        match self {
+            Self::Spawned(process) => Some(process.pid()),
+            Self::Attached(_) => None,
+        }
+    }
+
+    async fn stop(&self) -> io::Result<()> {
+        match self {
+            Self::Spawned(process) => process.stop().await,
+            Self::Attached(token) => {
+                token.cancel();
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Target {
     pub port: u16,
@@ -55,15 +108,24 @@ impl Previews {
         args: &Value,
     ) -> Result<Value, &'static str> {
         let start = self.starts.lock().await;
+        let (command, cwd) = match args["command"].as_str() {
+            Some(command) => {
+                if command.trim().is_empty() || command.len() > 8192 {
+                    return Err("invalid_command");
+                }
+                (
+                    command,
+                    PathBuf::from(args["cwd"].as_str().ok_or("invalid_cwd")?),
+                )
+            }
+            None => ("", PathBuf::new()),
+        };
         let input = Start {
             session,
             agent,
             id,
-            command: args["command"]
-                .as_str()
-                .filter(|s| !s.trim().is_empty() && s.len() <= 8192)
-                .ok_or("invalid_command")?,
-            cwd: PathBuf::from(args["cwd"].as_str().ok_or("invalid_cwd")?),
+            command,
+            cwd,
             port: args["port"]
                 .as_u64()
                 .filter(|p| (1024..=65535).contains(p))
@@ -87,23 +149,27 @@ impl Previews {
         let occupied = tokio::net::TcpStream::connect(("127.0.0.1", input.port))
             .await
             .is_ok();
-        if occupied {
-            return Err("port_in_use");
-        }
-        let process = PreviewProcess::start(input.command.into(), input.cwd.clone())
-            .await
-            .map_err(|_| "preview_spawn_failed")?;
+        let process = match (command.is_empty(), occupied) {
+            (true, _) => Source::attach(occupied)?,
+            (false, true) => return Err("port_in_use"),
+            (false, false) => Source::Spawned(
+                PreviewProcess::start(input.command.into(), input.cwd.clone())
+                    .await
+                    .map_err(|_| "preview_spawn_failed")?,
+            ),
+        };
         if let Err((reason, process)) = self.register(input, process) {
             drop(start);
             process.stop().await.map_err(|_| "preview_stop_failed")?;
             return Err(reason);
         }
         drop(start); // Readiness must not block another agent's start or archive.
-        let target = self.target(id);
-        if !match target {
-            Some(target) => ready(&target).await,
-            None => false,
-        } {
+        if !command.is_empty()
+            && !match self.target(id) {
+                Some(target) => ready(&target).await,
+                None => false,
+            }
+        {
             let _ = self.stop(session, agent, id).await;
             return Err("preview_not_ready");
         }
@@ -155,11 +221,7 @@ impl Previews {
         }
         Ok(None)
     }
-    fn register(
-        &self,
-        input: Start<'_>,
-        process: PreviewProcess,
-    ) -> Result<(), (&'static str, PreviewProcess)> {
+    fn register(&self, input: Start<'_>, process: Source) -> Result<(), (&'static str, Source)> {
         let Ok(closed) = self.closed.lock() else {
             return Err(("preview_unavailable", process));
         };

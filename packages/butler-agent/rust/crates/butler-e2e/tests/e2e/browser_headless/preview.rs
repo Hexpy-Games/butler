@@ -8,9 +8,9 @@
     reason = "test assertions"
 )]
 use super::support::{admin, call, open, publish, selected, setup};
-use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::{HarnessError, security::AdminClient};
 use serde_json::{Value, json};
-use std::time::Duration;
+use std::{net::TcpStream, process::Command, time::Duration};
 
 /// A dev server: a page, an image, and an HMR socket that says "ready".
 const SERVER: &str = r#"
@@ -62,22 +62,7 @@ async fn headless_opens_registered_previews_only() -> Result<(), HarnessError> {
     assert_eq!(started["status"], "ok", "{started}");
     assert_eq!(started["browser"]["status"], "ok", "{started}");
     let tab = started["browser"]["tab"].clone();
-    let mut text = String::new();
-    for _ in 0..50 {
-        let seen = call(
-            &admin,
-            "general",
-            "tab.observe",
-            &tab,
-            json!({"settle":true}),
-        )
-        .await?;
-        text = seen["text"].as_str().unwrap_or("").to_owned();
-        if !text.contains("pending") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    let text = observe(&admin, &tab).await?;
     for expected in [
         "Dev server",
         "Mounted loaded",
@@ -122,4 +107,105 @@ async fn headless_opens_registered_previews_only() -> Result<(), HarnessError> {
         .await?;
     assert_eq!(retired.status, 400, "{}", retired.text);
     s.finish().await
+}
+
+#[tokio::test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "local fixture readiness and survival probes"
+)]
+async fn headless_opens_running_local_server() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    let setup = setup("BROWSER-HEADLESS-PREVIEW-ATTACHED")?;
+    let cwd = setup.sandbox.workspace.clone();
+    std::fs::write(cwd.join("server.mjs"), SERVER)?;
+    let s = setup.start().await?;
+    let dev = port();
+    let log = std::fs::File::create(s.sandbox.data.join("preview-server.log"))?;
+    let mut command = Command::new("bun");
+    command
+        .args(["server.mjs", &dev.to_string()])
+        .current_dir(cwd)
+        .stdout(log.try_clone()?)
+        .stderr(log);
+    let mut child = tokio::process::Command::from(command)
+        .kill_on_drop(true)
+        .spawn()?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while tokio::net::TcpStream::connect(("127.0.0.1", dev))
+            .await
+            .is_err()
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("fixture server did not listen");
+
+    let admin = admin(&s);
+    let url = publish(&s).await?;
+    let warm = open(&admin, "warmup", &url).await?;
+    assert_eq!(warm["status"], "ok", "{warm}");
+    call(&admin, "warmup", "tab.close", &warm["tab"], json!({})).await?;
+
+    let started = call(
+        &admin,
+        "general",
+        "preview.start",
+        &Value::Null,
+        json!({"agent":"preview-agent","preview_id":"preview-attached","port":dev}),
+    )
+    .await?;
+    assert_eq!(started["status"], "ok", "{started}");
+    assert_eq!(started["browser"]["status"], "ok", "{started}");
+    let tab = &started["browser"]["tab"];
+    let text = observe(&admin, tab).await?;
+    for expected in [
+        "Dev server",
+        "Mounted loaded",
+        "Direct blocked",
+        "HMR ready",
+    ] {
+        assert!(text.contains(expected), "{expected}: {text}");
+    }
+
+    let stopped = call(
+        &admin,
+        "general",
+        "preview.stop",
+        &Value::Null,
+        json!({"agent":"preview-agent","preview_id":"preview-attached"}),
+    )
+    .await?;
+    assert_eq!(stopped["status"], "ok", "{stopped}");
+    let gone = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    assert_eq!(gone["reason"], "not_your_tab", "{gone}");
+    assert!(TcpStream::connect(("127.0.0.1", dev)).is_ok());
+
+    let gateway = reqwest::Url::parse(&s.gw.base).unwrap().port().unwrap();
+    let refused = call(
+        &admin,
+        "general",
+        "preview.start",
+        &Value::Null,
+        json!({"agent":"preview-agent","preview_id":"preview-attached","port":gateway}),
+    )
+    .await?;
+    assert_eq!(refused["reason"], "invalid_port", "{refused}");
+    child.kill().await?;
+    s.finish().await
+}
+
+async fn observe(admin: &AdminClient, tab: &Value) -> Result<String, HarnessError> {
+    let mut text = String::new();
+    for _ in 0..50 {
+        let seen = call(admin, "general", "tab.observe", tab, json!({"settle":true})).await?;
+        text = seen["text"].as_str().unwrap_or("").to_owned();
+        if !text.contains("pending") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Ok(text)
 }

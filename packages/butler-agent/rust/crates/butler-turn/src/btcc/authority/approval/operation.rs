@@ -77,9 +77,10 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             }
         }
         "list_files" | "grep_files" => vec![input["root"].as_str().unwrap_or(".")],
-        "run_command" | "run_command_remote_observation" | "preview_start" => {
+        "run_command" | "run_command_remote_observation" => {
             vec![input["cwd"].as_str().unwrap_or(".")]
         }
+        "preview_start" => input["cwd"].as_str().into_iter().collect(),
         _ => Vec::new(),
     };
     let targets = if paths.is_empty() {
