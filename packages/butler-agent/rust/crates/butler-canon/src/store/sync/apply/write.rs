@@ -94,6 +94,15 @@ pub(super) fn write_fields(
     quiet: bool,
 ) -> Result<()> {
     let old = one(tx, spec.read, [id])?;
+    // A remote done/cancelled never ends a locally running epic, as local writes cannot.
+    if spec.sync == EPIC.sync
+        && fields
+            .get("canon_status")
+            .is_some_and(|status| status == "done" || status == "cancelled")
+        && runtime::epic_running(tx, id)?
+    {
+        return Err(Error::Running);
+    }
     let (mut columns, mut values) = (Vec::new(), Vec::new());
     for (name, value) in fields {
         values.push(sql_value(value));
