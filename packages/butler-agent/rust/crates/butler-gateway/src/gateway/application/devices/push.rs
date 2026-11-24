@@ -173,7 +173,9 @@ async fn deliver(
         .iter()
         .map(|token| match &push.target {
             Target::Session(id) => json!({"to":token,"kind":kind,"lang":lang,"session_id":id}),
-            Target::Automation(id) => json!({"to":token,"kind":kind,"lang":lang,"automation_id":id}),
+            Target::Automation(id) => {
+                json!({"to":token,"kind":kind,"lang":lang,"automation_id":id})
+            }
         })
         .collect();
     let Ok(value) = setup
@@ -182,7 +184,7 @@ async fn deliver(
         .inspect_err(|error| {
             let code = match error {
                 GatewayApplicationError::Public { code, .. } => code.as_str(),
-                _ => "internal",
+                GatewayApplicationError::Internal { .. } => "internal",
             };
             match code {
                 "butler_account_disabled" | "butler_account_signed_out" => {
@@ -194,17 +196,26 @@ async fn deliver(
     else {
         return;
     };
-    let gone: Vec<_> = value["gone"].as_array().into_iter().flatten()
+    let gone: Vec<_> = value["gone"]
+        .as_array()
+        .into_iter()
+        .flatten()
         .filter_map(|token| token.as_str().map(str::to_owned))
         .collect();
     if !gone.is_empty() {
-        match storage.execute(move |db| {
-            gone.into_iter().try_fold(0, |cleared, token| {
-                db.execute("UPDATE paired_devices SET push_token=NULL WHERE push_token=?1", [token])
+        match storage
+            .execute(move |db| {
+                gone.into_iter().try_fold(0, |cleared, token| {
+                    db.execute(
+                        "UPDATE paired_devices SET push_token=NULL WHERE push_token=?1",
+                        [token],
+                    )
                     .map(|rows| cleared + rows)
                     .map_err(AppStorageError::sqlite)
+                })
             })
-        }).await {
+            .await
+        {
             Ok(cleared) if cleared > 0 => sync_tokens(storage, setup).await,
             Ok(_) => {}
             Err(error) => tracing::warn!(code = error.code(), "push dropped"),

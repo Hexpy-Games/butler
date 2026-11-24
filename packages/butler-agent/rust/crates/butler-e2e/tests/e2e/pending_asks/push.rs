@@ -73,7 +73,11 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         reply.json::<Value>().await?["error"]["code"],
         "device_token_required"
     );
-    let reply = client.get(&push_url).bearer_auth(&devices[0]).send().await?;
+    let reply = client
+        .get(&push_url)
+        .bearer_auth(&devices[0])
+        .send()
+        .await?;
     assert_eq!(reply.status(), 200);
     assert_eq!(reply.json::<Value>().await?["data"]["available"], false);
     for (device, token) in devices.iter().zip([a, b, c]) {
@@ -97,7 +101,11 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         .await?;
     assert_eq!(reply.status, 200);
     assert_eq!(reply.data()["signed_in"], true);
-    let reply = client.get(&push_url).bearer_auth(&devices[0]).send().await?;
+    let reply = client
+        .get(&push_url)
+        .bearer_auth(&devices[0])
+        .send()
+        .await?;
     assert_eq!(reply.status(), 200);
     assert_eq!(reply.json::<Value>().await?["data"]["available"], true);
     fake.set_push_gone(a);
@@ -161,7 +169,11 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         second_tokens == BTreeSet::from([b, c]),
         "unexpected second push recipients"
     );
-    assert!(fake.seen().iter().any(|entry| entry == "PUT /v1/push/tokens"));
+    assert!(
+        fake.seen()
+            .iter()
+            .any(|entry| entry == "PUT /v1/push/tokens")
+    );
 
     let reply = client
         .delete(format!("{}/devices/self", s.gw.base))
@@ -193,7 +205,10 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         .filter(|message| message["session_id"] == chat2)
         .map(|message| message["to"].as_str().unwrap())
         .collect();
-    assert!(tokens == BTreeSet::from([c]), "unexpected recipients after revoke");
+    assert!(
+        tokens == BTreeSet::from([c]),
+        "unexpected recipients after revoke"
+    );
     assert_no_secrets(&s, &devices.iter().map(String::as_str).collect::<Vec<_>>())?;
     stub_server.abort();
     s.finish().await
