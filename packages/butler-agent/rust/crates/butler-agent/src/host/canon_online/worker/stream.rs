@@ -2,7 +2,7 @@
 //! At most one batch per space is in flight: each POST and its results are
 //! recorded before the next batch is taken.
 use super::*;
-use butler_canon::store::sync::Applied;
+use butler_canon::store::SyncApplied as Applied;
 
 impl Worker {
     /// A GET whose status maps to the shared outcomes; 429/503 wait and retry.
@@ -85,7 +85,7 @@ impl Worker {
         let resynced = self
             .online
             .storage
-            .canon_write(move |tx| sync::resync(tx, &me, &space, &snapshot))
+            .canon_write(move |tx| sync_resync(tx, &me, &space, &snapshot))
             .await;
         match resynced {
             Ok(Some(skipped)) => {
@@ -104,7 +104,7 @@ impl Worker {
         match self
             .online
             .storage
-            .canon_read(move |db| sync::has_sendable(db, &space))
+            .canon_read(move |db| sync_has_sendable(db, &space))
             .await
         {
             Ok(true) => self.flush(pass).await,
@@ -123,7 +123,7 @@ impl Worker {
             let rows = match self
                 .online
                 .storage
-                .canon_write(move |tx| sync::take_sendable(tx, &space))
+                .canon_write(move |tx| sync_take_sendable(tx, &space))
                 .await
             {
                 Ok(rows) if rows.is_empty() => return Outcome::Done,
@@ -155,7 +155,7 @@ impl Worker {
             let Ok(recorded) = self
                 .online
                 .storage
-                .canon_write(move |tx| sync::record_results(tx, &me, &space, &results))
+                .canon_write(move |tx| sync_record_results(tx, &me, &space, &results))
                 .await
             else {
                 return Outcome::Reconnect;
@@ -180,7 +180,7 @@ impl Worker {
         match self
             .online
             .storage
-            .canon_write(move |tx| sync::demote(tx, &space))
+            .canon_write(move |tx| sync_demote(tx, &space))
             .await
         {
             Ok(dropped) => {
@@ -212,7 +212,7 @@ impl Worker {
                 let marked = self
                     .online
                     .storage
-                    .canon_write(move |tx| sync::mark_resync(tx, &space))
+                    .canon_write(move |tx| sync_mark_resync(tx, &space))
                     .await;
                 if marked.is_err() {
                     return Outcome::Reconnect;
@@ -249,7 +249,7 @@ impl Worker {
         let applied = self
             .online
             .storage
-            .canon_write(move |tx| sync::apply(tx, &space, &ops, &members, now))
+            .canon_write(move |tx| sync_apply(tx, &space, &ops, &members, now))
             .await
             .map_err(|_| Outcome::Reconnect)?;
         if applied.missing {

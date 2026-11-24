@@ -40,6 +40,15 @@ mod intents;
 mod specs;
 pub mod sql;
 pub mod sync;
+/// The online-sync facade for hosts.
+pub use sync::{
+    Applied as SyncApplied, Recorded as SyncRecorded, apply as sync_apply, demote as sync_demote,
+    has_sendable as sync_has_sendable, join as sync_join, link as sync_link,
+    link_by_project as sync_link_by_project, link_by_space as sync_link_by_space,
+    links as sync_links, mark_resync as sync_mark_resync, project_used as sync_project_used,
+    record_results as sync_record_results, resync as sync_resync, set_role as sync_set_role,
+    set_state as sync_set_state, take_sendable as sync_take_sendable, unlink as sync_unlink,
+};
 mod transaction;
 pub use entities::*;
 pub use intents::*;

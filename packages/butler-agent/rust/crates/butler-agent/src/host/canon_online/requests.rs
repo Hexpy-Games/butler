@@ -47,7 +47,7 @@ pub(super) async fn handle(
     if let CanonOnlineRequest::Status = request {
         let links = online
             .storage
-            .canon_read(sync::links)
+            .canon_read(sync_links)
             .await
             .map_err(storage_error)?;
         let links: Vec<Value> = links.iter().map(|link| online.view(link)).collect();
@@ -62,7 +62,7 @@ pub(super) async fn handle(
                 .await?;
             let links = online
                 .storage
-                .canon_read(sync::links)
+                .canon_read(sync_links)
                 .await
                 .map_err(storage_error)?;
             for space in value["spaces"].as_array_mut().into_iter().flatten() {
@@ -172,7 +172,7 @@ async fn link_row(
     let project = project.to_owned();
     online
         .storage
-        .canon_read(move |db| sync::link_by_project(db, &project))
+        .canon_read(move |db| sync_link_by_project(db, &project))
         .await
         .map_err(storage_error)
 }
@@ -187,7 +187,7 @@ async fn linked(online: &CanonOnline, project: &str) -> Result<String, GatewayAp
 async fn view(online: &CanonOnline, project: &str) -> Result<Value, GatewayApplicationError> {
     let links = online
         .storage
-        .canon_read(sync::links)
+        .canon_read(sync_links)
         .await
         .map_err(storage_error)?;
     let link = links
@@ -199,7 +199,7 @@ async fn view(online: &CanonOnline, project: &str) -> Result<Value, GatewayAppli
 async fn forget(online: &CanonOnline, project: String) -> Result<(), GatewayApplicationError> {
     online
         .storage
-        .canon_write(move |tx| sync::unlink(tx, &project))
+        .canon_write(move |tx| sync_unlink(tx, &project))
         .await
         .map_err(storage_error)?;
     online.poke();
@@ -236,7 +236,7 @@ async fn link(
     let (target, space_id, account_id) = (project.clone(), space.clone(), id.account_id.clone());
     let linked = online
         .storage
-        .canon_write(move |tx| sync::link(tx, &ctx, &target, &space_id, &account_id))
+        .canon_write(move |tx| sync_link(tx, &ctx, &target, &space_id, &account_id))
         .await;
     if let Err(error) = linked {
         let _ = online
@@ -261,7 +261,7 @@ async fn join(
     let used = online
         .storage
         .canon_read(move |db| {
-            Ok(sync::link_by_project(db, &target)?.is_some() || sync::project_used(db, &target)?)
+            Ok(sync_link_by_project(db, &target)?.is_some() || sync_project_used(db, &target)?)
         })
         .await
         .map_err(storage_error)?;
@@ -289,7 +289,7 @@ async fn join(
     let lookup = space_id.clone();
     if online
         .storage
-        .canon_read(move |db| sync::link_by_space(db, &lookup))
+        .canon_read(move |db| sync_link_by_space(db, &lookup))
         .await
         .map_err(storage_error)?
         .is_some()
@@ -314,7 +314,7 @@ async fn join(
     let skipped = online
         .storage
         .canon_write(move |tx| {
-            sync::join(tx, &me, &target, &space_id, &account_id, &role, &snapshot)
+            sync_join(tx, &me, &target, &space_id, &account_id, &role, &snapshot)
         })
         .await
         .map_err(storage_error)?;

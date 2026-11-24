@@ -133,7 +133,7 @@ impl Worker {
         let space = self.space.clone();
         self.online
             .storage
-            .canon_read(move |db| sync::link_by_space(db, &space))
+            .canon_read(move |db| sync_link_by_space(db, &space))
             .await
             .map_err(|_| Outcome::Reconnect)
     }
@@ -142,7 +142,7 @@ impl Worker {
         let result = self
             .online
             .storage
-            .canon_write(move |tx| sync::set_state(tx, &space, "detached"))
+            .canon_write(move |tx| sync_set_state(tx, &space, "detached"))
             .await;
         if let Err(error) = result {
             tracing::warn!(%error, "Canon online link could not be detached");
@@ -226,7 +226,7 @@ impl Worker {
             let saved = self
                 .online
                 .storage
-                .canon_write(move |tx| sync::set_role(tx, &space, &role))
+                .canon_write(move |tx| sync_set_role(tx, &space, &role))
                 .await;
             if saved.is_err() {
                 return Outcome::Reconnect;

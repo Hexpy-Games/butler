@@ -7,7 +7,11 @@ mod worker;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use butler_canon::store::sync;
+use butler_canon::store::{
+    sync_apply, sync_demote, sync_has_sendable, sync_join, sync_link, sync_link_by_project,
+    sync_link_by_space, sync_links, sync_mark_resync, sync_project_used, sync_record_results,
+    sync_resync, sync_set_role, sync_set_state, sync_take_sendable, sync_unlink,
+};
 use butler_gateway::gateway::{CanonOnlineRequest, GatewayApplicationError};
 use butler_turn::btcc::BtccStorage;
 use parking_lot::Mutex;
@@ -93,7 +97,7 @@ async fn supervise(online: Arc<CanonOnline>, shutdown: CancellationToken) {
     let errored = Arc::new(Mutex::new(HashSet::new()));
     let mut running = Running::new();
     loop {
-        match online.storage.canon_read(sync::links).await {
+        match online.storage.canon_read(sync_links).await {
             Ok(links) => {
                 let spaces: HashSet<String> = links
                     .iter()
