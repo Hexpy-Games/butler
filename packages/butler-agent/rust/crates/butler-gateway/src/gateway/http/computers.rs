@@ -52,7 +52,10 @@ pub(super) async fn route(
             connection(&state, root, &method, p).await?
         }
         (Method::DELETE, path) if path.starts_with("/computers/") => {
-            (StatusCode::OK, delete(&state, root, path).await?)
+            let force = query(request.uri())
+                .get("force")
+                .is_some_and(|value| value == "true");
+            (StatusCode::OK, delete(&state, root, path, force).await?)
         }
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
@@ -122,6 +125,7 @@ async fn start(
         root,
         path,
         true,
+        false,
         &state.agent_version,
         state.shutdown.clone(),
     )
@@ -185,12 +189,14 @@ async fn delete(
     state: &HttpState,
     root: &std::path::Path,
     path: &str,
+    force: bool,
 ) -> Result<serde_json::Value, HttpError> {
     let data = remote_computers::change(
         &state.application.setup()?,
         root,
         path,
         false,
+        force,
         &state.agent_version,
         state.shutdown.clone(),
     )

@@ -27,7 +27,7 @@ const credentials: CredentialListView = {
 
 export const computerAuthUrl = "http://127.0.0.1:9/oauth";
 type ComputerCall = { method: string; path: string; body: unknown };
-type ComputerStep = "host-key" | "add" | "start" | "edit";
+type ComputerStep = "host-key" | "add" | "start" | "edit" | "delete";
 
 export function computersFocusResponse(path: string): unknown {
   if (path === "/security") {
@@ -52,19 +52,21 @@ export function createComputersFake() {
     respond,
   };
   const ok = (data: unknown, status = 200) => ({ status, json: { protocol_version: "butler.app.v1", data } });
-  const error = (code: string) => ({ status: 422, json: { error: { code, message: "TEST" } } });
+  const error = (code: string, status = 422) => ({ status, json: { error: { code, message: "TEST" } } });
 
   async function respond(call: ComputerCall) {
     calls.push(call);
-    const { method, path, body } = call;
+    const { method, body } = call;
+    const [path = "", search] = call.path.split("?", 2);
     const [, id, action] = path.match(/^\/computers\/([^/]+)(?:\/(.*))?$/u) ?? [];
     const step = method === "PUT" && id && !action ? "edit"
+      : method === "DELETE" && id && !action ? "delete"
       : method !== "POST" ? undefined : path === "/computers/host-key" ? "host-key"
       : path === "/computers" ? "add" : /^\/computers\/[^/]+\/start$/u.test(path) ? "start" : undefined;
     const failure = step && failures.get(step);
     if (step && failure) {
       failures.delete(step);
-      return error(failure);
+      return error(failure, step === "delete" ? 409 : 422);
     }
     if (path === "/credentials" && method === "GET") return ok(credentials);
     if (path === "/computers" && method === "GET") return ok({ computers: fake.computers, main_model: fake.mainModel });
@@ -88,7 +90,7 @@ export function createComputersFake() {
     }
     if (method === "DELETE" && !action) {
       fake.computers = fake.computers.filter((entry) => entry.id !== id);
-      return ok({ deleted: true, remote_cleaned: true });
+      return ok({ deleted: true, remote_cleaned: new URLSearchParams(search).get("force") !== "true" });
     }
     if (step === "start") {
       await fake.startHold;

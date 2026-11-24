@@ -30,12 +30,15 @@ export function computersSection({ section, savedKeys }: {
           }} onAdded={section.added}
           mainModel={computers.mainModel} savedKeys={savedKeys} />
         <ComputerAiDialog key={section.aiFor?.id ?? "none"} computer={section.aiFor} savedKeys={savedKeys} onClose={section.aiClosed} />
-        <ComputerDeleteDialog computer={section.removing} onCancel={() => section.setRemoving(null)} onConfirm={section.confirmRemove} />
+        <ComputerDeleteDialog computer={section.removing?.computer ?? null}
+          unreachable={section.removing?.unreachable ?? false} forget={section.removing?.forget ?? false}
+          onForgetChange={(forget) => section.setRemoving((current) => current && { ...current, forget })}
+          onCancel={() => section.setRemoving(null)} onConfirm={section.confirmRemove} />
       </>}
     >
       {computers.computers.map((computer) => (
         <ComputerRow key={computer.id} computer={computer} status={computers.statusOf(computer)} busy={computers.busy}
-          onEdit={() => section.setEditing(computer)} onRemove={() => section.setRemoving(computer)} />
+          onEdit={() => section.setEditing(computer)} onRemove={() => section.setRemoving({ computer, forget: false, unreachable: false })} />
       ))}
     </SettingsSection>
   );
