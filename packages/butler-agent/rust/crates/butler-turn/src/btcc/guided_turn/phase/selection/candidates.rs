@@ -35,7 +35,12 @@ pub(super) fn provider_candidates(
     for tool in authorized {
         if matches!(
             tool.name.as_str(),
-            "generate_image" | "edit_image" | "canon_read" | "canon_propose" | "canon_queue"
+            "generate_image"
+                | "edit_image"
+                | "canon_read"
+                | "canon_propose"
+                | "canon_queue"
+                | "propose_permission_rule"
         ) || tool.name == ToolName::UpdateTodoList
             || BROWSER_CORE.contains(&tool.name.as_str())
             || tool.name == ToolName::BrowserRead

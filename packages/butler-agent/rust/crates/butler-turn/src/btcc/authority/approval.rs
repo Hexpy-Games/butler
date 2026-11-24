@@ -5,6 +5,7 @@
 //! exact operation paths, without tool contents or credentials.
 
 mod command_risk;
+pub(in crate::btcc) mod command_words;
 mod operation;
 mod schedule;
 mod tool;
@@ -131,6 +132,12 @@ pub(super) struct ApprovalFacts<'a> {
 
 pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
     match facts.capability {
+        "preview_start" if facts.input.get("command").and_then(Value::as_str).is_none() => single(
+            ApprovalActionKind::Other,
+            ApprovalTargetKind::Other,
+            facts.target,
+            ApprovalRisk::Medium,
+        ),
         "run_command" | "preview_start" => command(facts, ApprovalActionKind::RunCommand),
         "run_command_remote_observation" => command(facts, ApprovalActionKind::NetworkCommand),
         "web_read" | "web_search" => single(
@@ -168,16 +175,16 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             &workspace_label(facts.workspace),
             ApprovalRisk::Low,
         ),
+        "propose_permission_rule" | "browser_open" | "browser_read" => single(
+            ApprovalActionKind::Other,
+            ApprovalTargetKind::Other,
+            facts.target,
+            ApprovalRisk::Medium,
+        ),
         "switch_folder" => single(
             ApprovalActionKind::SwitchFolder,
             ApprovalTargetKind::Outside,
             facts.target.strip_prefix("folder:").unwrap_or(facts.target),
-            ApprovalRisk::Medium,
-        ),
-        "browser_open" | "browser_read" => single(
-            ApprovalActionKind::Other,
-            ApprovalTargetKind::Other,
-            facts.target,
             ApprovalRisk::Medium,
         ),
         "browser_act" | "browser_close" => single(

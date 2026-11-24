@@ -64,6 +64,7 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     .collect();
     let command = MutationCommand::Edit(EditMutation {
         context: MutationContext {
+            allowed_folders: Vec::new(),
             butler_data: root.clone(),
             root: root.clone(),
             path_form: crate::workspace::PathForm::RelativeOrAbsolute,
@@ -177,6 +178,7 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
     std::fs::write(root.join("first.txt"), b"one").unwrap();
     std::fs::write(root.join("second.txt"), b"two").unwrap();
     let context = || MutationContext {
+        allowed_folders: Vec::new(),
         butler_data: root.clone(),
         root: root.clone(),
         path_form: crate::workspace::PathForm::RelativeOrAbsolute,

@@ -6,7 +6,7 @@
 //! would ask about fails fast with a reason, and the run is flagged; "run
 //! now" is attended and asks as usual.
 mod sandbox_setting;
-mod unattended;
+pub(super) mod unattended;
 use unattended::run_where;
 
 use super::stub::{self, Script, call};
@@ -82,7 +82,7 @@ async fn auto_works_in_the_project_and_asks_for_risky_steps() -> Result<(), Harn
             s.gw.wait_turn(&chat, &id, &["waiting_for_form"], Duration::from_secs(20))
                 .await?;
         assert_eq!(turn["state"], "waiting_for_form", "{turn}");
-        approve(&s, &chat, "allow").await?;
+        approve(&s, &chat, "allow", None).await?;
     }
     delivered(&s, &chat, &id).await?;
     let asked = u64::from(!contained);
@@ -268,7 +268,7 @@ async fn risky_steps_ask(
             assert_eq!(card["examples"], json!([real]), "{card}");
             assert_eq!(card["risk"], "high", "{card}");
         }
-        approve(s, chat, "deny").await?;
+        approve(s, chat, "deny", None).await?;
         delivered(s, chat, &id).await?;
         assert_counts(s, &id, 1, 0)?;
     }
@@ -484,7 +484,7 @@ async fn unattended_schedule(
             .await?;
     assert_eq!(paused["state"], "waiting_for_form", "{paused}");
     assert_counts(s, &turn, 1, 1)?;
-    approve(s, chat, "deny").await?;
+    approve(s, chat, "deny", None).await?;
     delivered(s, chat, &turn).await?;
     assert_eq!(std::fs::read_to_string(outside)?, "outside-marker");
     eprintln!("PERM-02 run-now: attended=asked authority_count=1");

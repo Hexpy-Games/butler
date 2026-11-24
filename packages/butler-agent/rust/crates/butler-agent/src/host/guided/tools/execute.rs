@@ -470,7 +470,7 @@ fn prior_failure(name: &str, status: &str) -> Result<JsonDocument, ToolExecution
         "The previous {name} call did not complete successfully. Adjust the call or continue with other evidence."
     )}})).map_err(|_| integrity("guided_tool_result_invalid"))
 }
-fn uncertain_mutation(name: &str) -> Result<JsonDocument, ToolExecutionError> {
+pub(super) fn uncertain_mutation(name: &str) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(&json!({"ok":false,"error":{"code":"prior_mutation_completion_unknown",
         "message":format!("A previous {name} call may have changed external state, but its result was not durably recorded. Inspect the target before deciding whether another mutation is safe.")}}))
     .map_err(|_| integrity("guided_tool_result_invalid"))

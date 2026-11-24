@@ -249,6 +249,39 @@ fn ready(line: &str) -> Result<RemoteState, HttpError> {
     Err(remote_error("remote_start_failed", "Remote start failed."))
 }
 
+pub(super) async fn installed(
+    computer: &Computer,
+    cancel: CancellationToken,
+) -> Result<bool, HttpError> {
+    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
+    let target = HostInput {
+        address: computer.address.clone(),
+        port: computer.port.map(i64::from),
+        key_file: computer.key_file.clone(),
+    };
+    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let args = ssh::arguments(
+        &target,
+        &known_hosts.0,
+        "yes",
+        &[],
+        r#"test -x "$HOME/.butler-remote/current/butler-agent""#,
+        home.as_deref(),
+    )?;
+    let output = ssh::run(
+        args,
+        ssh::Stdin::Bytes(Vec::new()),
+        Duration::from_secs(10),
+        cancel,
+    )
+    .await?;
+    if output.exit_code == Some(1) {
+        return Ok(false);
+    }
+    check_exit(&output)?;
+    Ok(true)
+}
+
 pub(super) async fn remove(
     computer: &Computer,
     cancel: CancellationToken,

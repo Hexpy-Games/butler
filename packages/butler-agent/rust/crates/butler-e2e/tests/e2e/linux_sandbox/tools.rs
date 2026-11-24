@@ -7,6 +7,7 @@ fn invoke(command: &str, root: &Path, setup: &Setup) -> Invocation {
         command,
         &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
         root,
+        &[],
         &[&setup.sandbox.data.join("tmp/project-write")],
         &[&setup.sandbox.data],
         None,

@@ -27,12 +27,12 @@ pub(super) async fn execute(
         Err(reason) => return encoded(&json!({"status":"not_dispatched","reason":reason})),
     };
     let target = if call.name == "preview_start" {
-        input["cwd"].as_str()
+        input["cwd"]
+            .as_str()
+            .map_or_else(|| format!("localhost:{}", input["port"]), str::to_owned)
     } else {
-        input["preview_id"].as_str()
-    }
-    .unwrap_or("")
-    .to_owned();
+        input["preview_id"].as_str().unwrap_or("").to_owned()
+    };
     let decision = super::super::access::for_kind(
         owner,
         CapabilityKind::of_call(&call.name, &call.arguments, false),
@@ -92,31 +92,41 @@ async fn prepare_input(
 ) -> Result<Value, &'static str> {
     let mut input = Value::Object(call.arguments.clone());
     if call.name == "preview_start" {
-        let workspace = owner.active_workspace_path();
-        let path = input["cwd"].as_str().unwrap_or(".").to_owned();
-        let cwd = tokio::task::spawn_blocking(move || {
-            let root = butler_platform::secure_fs::canonicalize(&workspace)?;
-            let cwd = butler_platform::secure_fs::canonicalize(root.join(path))?;
-            if !cwd.is_dir() || !butler_platform::secure_fs::is_within(&cwd, &root) {
-                return Err(std::io::Error::other("outside_workspace"));
+        if let Some(command) = input.get("command") {
+            let workspace = owner.active_workspace_path();
+            let path = input["cwd"].as_str().unwrap_or(".").to_owned();
+            let cwd = tokio::task::spawn_blocking(move || {
+                let root = butler_platform::secure_fs::canonicalize(&workspace)?;
+                let cwd = butler_platform::secure_fs::canonicalize(root.join(path))?;
+                if !cwd.is_dir() || !butler_platform::secure_fs::is_within(&cwd, &root) {
+                    return Err(std::io::Error::other("outside_workspace"));
+                }
+                Ok(cwd.to_string_lossy().into_owned())
+            })
+            .await;
+            let Ok(Ok(cwd)) = cwd else {
+                return Err("invalid_cwd");
+            };
+            if command
+                .as_str()
+                .is_none_or(|s| s.trim().is_empty() || s.len() > 8192)
+            {
+                return Err("invalid_preview");
             }
-            Ok(cwd.to_string_lossy().into_owned())
-        })
-        .await;
-        let Ok(Ok(cwd)) = cwd else {
-            return Err("invalid_cwd");
-        };
-        input["cwd"] = json!(cwd);
+            input["cwd"] = json!(cwd);
+        } else {
+            input
+                .as_object_mut()
+                .ok_or("invalid_preview")?
+                .remove("cwd");
+        }
         input["preview_id"] = json!(format!(
             "p-{:x}",
             Sha256::digest(format!("{}:{occurrence}", owner.binding.source_session_id))
         ));
-        if input["command"]
-            .as_str()
-            .is_none_or(|s| s.trim().is_empty() || s.len() > 8192)
-            || input["port"]
-                .as_u64()
-                .is_none_or(|p| !(1024..=65535).contains(&p))
+        if input["port"]
+            .as_u64()
+            .is_none_or(|p| !(1024..=65535).contains(&p))
         {
             return Err("invalid_preview");
         }

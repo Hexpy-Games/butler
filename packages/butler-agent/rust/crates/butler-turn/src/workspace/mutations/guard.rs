@@ -122,10 +122,12 @@ fn path(
     requested: &str,
     leaf: Leaf,
 ) -> std::io::Result<Result<GuardedPath, super::super::path_guard::GuardResult>> {
+    let (root, requested) =
+        super::super::contained_target(&context.root, requested, &context.allowed_folders);
     let guard = resolve_workspace_mutation_guard(MutationGuardInput {
         butler_data: Some(&context.butler_data),
-        root: &context.root,
-        requested,
+        root,
+        requested: &requested,
         path_form: context.path_form,
         leaf,
         installation_root: context.installation_root.as_deref(),
@@ -137,7 +139,12 @@ fn path(
     else {
         return Ok(Err(guard));
     };
-    let public = match absolute.strip_prefix(&guard.root) {
+    let display_root = if root == context.root {
+        &guard.root
+    } else {
+        &context.root
+    };
+    let public = match absolute.strip_prefix(display_root) {
         Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
         Err(_) => absolute.to_string_lossy().replace('\\', "/"),
     };
@@ -145,7 +152,7 @@ fn path(
         read_scope: context
             .path_form
             .contained()
-            .then(|| std::sync::Arc::new((context.root.clone(), context.butler_data.clone()))),
+            .then(|| std::sync::Arc::new((guard.root.clone(), context.butler_data.clone()))),
         public: if public.is_empty() {
             ".".into()
         } else {

@@ -207,7 +207,7 @@ pub struct AuthorityStoredExecution {
     pub decision: RequestDecision,
     pub allow_scope: String,
     pub(crate) alternative_input: Option<String>,
-    pub(crate) outcome: RequestOutcome,
+    pub outcome: RequestOutcome,
     // Passthrough: tool/effect receipts, shaped by the capability.
     pub(crate) outcome_receipt: Option<Value>,
 }
@@ -426,6 +426,7 @@ impl AuthorityAction {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DecisionWrite {
+    pub rules: Vec<crate::btcc::PermissionRuleRow>,
     pub(crate) composer_mode: Option<crate::btcc::AccessMode>,
     pub(crate) request_ref: String,
     pub(crate) owner_session_id: String,
@@ -446,6 +447,8 @@ pub(crate) struct OutcomeWrite {
 }
 
 pub(crate) trait AuthorityRepository {
+    fn add_permission_rule(&mut self, row: &crate::btcc::PermissionRuleRow) -> AuthorityResult<()>;
+    fn revoke_permission_rule(&mut self, id: &str, now: &str) -> AuthorityResult<()>;
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool>;
     fn revoke_permissions(&mut self, grants: &[(String, String)], now: &str)
     -> AuthorityResult<()>;
@@ -475,6 +478,8 @@ pub(crate) trait AuthorityRepository {
         response: &str,
         now: &str,
     ) -> AuthorityResult<()>;
+    fn claim_question_apply(&mut self, request_ref: &str) -> AuthorityResult<bool>;
+    fn finish_question_apply(&mut self, request_ref: &str) -> AuthorityResult<()>;
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()>;
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize>;
 }

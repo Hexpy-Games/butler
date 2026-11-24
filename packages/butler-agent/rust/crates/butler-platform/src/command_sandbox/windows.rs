@@ -278,7 +278,9 @@ fn explicit_script(command: &str) -> Option<&str> {
 
 /// Both reg.exe key paths and PowerShell registry-provider paths.
 pub(super) fn normalize_path_token(path: &str) -> String {
-    path.replace('\\', "/")
+    crate::tool_paths::expand_home(path, crate::user_dirs::home_dir().as_deref())
+        .unwrap_or_else(|_| path.to_owned())
+        .replace('\\', "/")
 }
 
 pub(super) fn is_registry_path(path: &str) -> bool {

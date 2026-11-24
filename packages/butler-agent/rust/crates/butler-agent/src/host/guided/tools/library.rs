@@ -4,7 +4,10 @@
 //! model-readable `{ok: false, error: {code, message}}`.
 use std::time::Duration;
 
-use reqwest::Method;
+use http::Method;
+use tokio::time::Instant;
+
+use crate::host::app::self_api::SelfApi;
 use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
@@ -205,31 +208,28 @@ pub(super) async fn call(
             "The App is not running; the Library cannot be reached.",
         )
     };
-    let current = owner.app_endpoint.snapshot().ok_or_else(unavailable)?;
-    let client = owner
-        .browser_http
-        .get_or_try_init(|| async {
-            tokio::task::spawn_blocking(|| butler_log::http::loopback().build())
-                .await
-                .ok()
-                .and_then(Result::ok)
-                .ok_or(())
-        })
+    let mut path = route.to_owned();
+    if !query.is_empty() {
+        path.push('?');
+        path.push_str(
+            &url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(query)
+                .finish(),
+        );
+    }
+    let response = SelfApi::new(&owner.app_endpoint)
+        .request(
+            method,
+            &path,
+            body,
+            None,
+            Some(Instant::now() + Duration::from_secs(30)),
+        )
         .await
-        .map_err(|()| unavailable())?;
-    let mut request = client
-        .request(method, format!("{}{route}", current.base_url))
-        .query(query)
-        .timeout(Duration::from_secs(30));
-    if let Some(token) = current.local_auth.token() {
-        request = request.bearer_auth(token);
-    }
-    if let Some(body) = body {
-        request = request.json(body);
-    }
-    let response = request.send().await.map_err(|_| unavailable())?;
+        .map_err(|_| unavailable())?;
     let status = response.status();
-    let reply: Value = response.json().await.map_err(|_| unavailable())?;
+    let bytes = response.bytes().await.map_err(|_| unavailable())?;
+    let reply: Value = serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
     if status.is_success() {
         return Ok(reply.get("data").cloned().unwrap_or(Value::Null));
     }

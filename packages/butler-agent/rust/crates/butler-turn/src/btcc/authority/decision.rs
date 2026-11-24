@@ -75,8 +75,13 @@ fn commit_decision(
     clock: &dyn Fn() -> String,
     composer_mode: Option<crate::btcc::AccessMode>,
 ) -> AuthorityResult<AuthorityDecisionResult> {
-    check_allow_scope(&current, input)?;
-    let permission = if action == AuthorityAction::Allow
+    let normalized: serde_json::Value = serde_json::from_str(&current.normalized_input_json)
+        .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    let prefixes = check_allow_scope(&current, input, &normalized)?;
+    let now = clock();
+    let rules = decision_rules(&current, input, action, prefixes, &normalized, &now)?;
+    let permission = if rules.is_empty()
+        && action == AuthorityAction::Allow
         && input.allow_scope.as_deref() == Some("conversation")
     {
         let mut grant = permission::for_record(&current, collation)?;
@@ -86,7 +91,7 @@ fn commit_decision(
         None
     };
     let allow_scope = if action == AuthorityAction::Allow {
-        input.allow_scope.as_deref().unwrap_or("once")
+        execution_allow_scope(input)
     } else {
         "once"
     };
@@ -102,8 +107,9 @@ fn commit_decision(
         action,
         allow_scope: allow_scope.into(),
         permission,
+        rules,
         alternative_input: alternative.map(str::to_owned),
-        now: clock(),
+        now,
     };
     let decided = repository.decide(write)?;
     if let Some(record) = decided {
@@ -127,10 +133,17 @@ fn same(
         AuthorityAction::parse(&input.action)
     };
     record.decision == action.decision()
-        && (action != AuthorityAction::Allow
-            || record.allow_scope == input.allow_scope.as_deref().unwrap_or("once"))
+        && (action != AuthorityAction::Allow || record.allow_scope == execution_allow_scope(input))
         && (action != AuthorityAction::Modify
             || record.private_alternative_input.as_deref() == alternative)
+}
+
+fn execution_allow_scope(input: &AuthorityDecisionInput) -> &str {
+    // The global scope belongs to the rule. The approved operation runs once.
+    match input.allow_scope.as_deref() {
+        None | Some("always") => "once",
+        Some(scope) => scope,
+    }
 }
 
 fn question_decision(
@@ -190,12 +203,66 @@ fn alternative_input(
     }
 }
 
+fn decision_rules(
+    current: &AuthorityRecord,
+    input: &AuthorityDecisionInput,
+    action: AuthorityAction,
+    prefixes: Option<Vec<String>>,
+    normalized: &serde_json::Value,
+    now: &str,
+) -> AuthorityResult<Vec<crate::btcc::PermissionRuleRow>> {
+    use crate::btcc::PermissionRuleRow;
+    let row = |effect, kind, pattern, scope| {
+        PermissionRuleRow::new(
+            effect,
+            kind,
+            pattern,
+            (scope == "conversation").then(|| current.owner_session_id.clone()),
+            now.to_owned(),
+        )
+    };
+    if action == AuthorityAction::Allow && current.capability == "propose_permission_rule" {
+        let effect = match normalized["effect"].as_str() {
+            Some("allow") => "allow",
+            Some("deny") => "deny",
+            _ => return Err(AuthorityError::policy("authority_request_corrupt")),
+        };
+        let kind = match normalized["kind"].as_str() {
+            Some("folder") => "folder",
+            Some("command_prefix") => "command_prefix",
+            _ => return Err(AuthorityError::policy("authority_request_corrupt")),
+        };
+        let pattern = normalized["pattern"]
+            .as_str()
+            .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
+        let scope = normalized["scope"]
+            .as_str()
+            .filter(|value| matches!(*value, "always" | "conversation"))
+            .ok_or_else(|| AuthorityError::policy("authority_request_corrupt"))?;
+        return Ok(vec![row(effect, kind, pattern.to_owned(), scope)]);
+    }
+    let (effect, scope) = match (action, input.allow_scope.as_deref()) {
+        (AuthorityAction::Allow, Some(scope @ ("always" | "conversation"))) => ("allow", scope),
+        (AuthorityAction::Deny, Some("always")) => ("deny", "always"),
+        _ => return Ok(Vec::new()),
+    };
+    Ok(prefixes
+        .into_iter()
+        .flatten()
+        .map(|pattern| row(effect, "command_prefix", pattern, scope))
+        .collect())
+}
+
 fn check_allow_scope(
     current: &AuthorityRecord,
     input: &AuthorityDecisionInput,
-) -> AuthorityResult<()> {
-    let normalized: serde_json::Value = serde_json::from_str(&current.normalized_input_json)
-        .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    normalized: &serde_json::Value,
+) -> AuthorityResult<Option<Vec<String>>> {
+    let operation = super::projection::exact_approval(current, normalized).operation;
+    let prefixes = operation.as_ref().and_then(|op| op.rule_prefixes.clone());
+    if input.allow_scope.as_deref() == Some("always") && prefixes.is_none() {
+        return Err(AuthorityError::policy("rule_scope_invalid"));
+    }
     if input.allow_scope.as_deref() == Some("site")
         && !matches!(
             normalized
@@ -207,11 +274,9 @@ fn check_allow_scope(
         return Err(AuthorityError::policy("site_scope_invalid"));
     }
     if input.allow_scope.as_deref() == Some("conversation")
-        && super::projection::exact_approval(current, &normalized)
-            .operation
-            .is_some_and(|operation| operation.allow_conversation == Some(false))
+        && operation.is_some_and(|operation| operation.allow_conversation == Some(false))
     {
         return Err(AuthorityError::policy("browser_confirm_once_required"));
     }
-    Ok(())
+    Ok(prefixes)
 }

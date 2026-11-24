@@ -307,7 +307,7 @@ fn approval_notices(s: &Scenario) -> Result<i64, HarnessError> {
     )?)
 }
 
-pub(super) async fn run_where(
+pub(in crate::access_tiers) async fn run_where(
     s: &Scenario,
     schedule: &str,
     matches: impl Fn(&Value) -> bool,

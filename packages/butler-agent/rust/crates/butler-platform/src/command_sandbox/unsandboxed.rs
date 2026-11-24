@@ -21,6 +21,7 @@ pub(super) fn project_write(
     invocation: Invocation,
     _environment: &std::collections::HashMap<String, String>,
     _root: &Path,
+    _extra_roots: &[&Path],
     _writable: &[&Path],
     _denied: &[&Path],
     _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,

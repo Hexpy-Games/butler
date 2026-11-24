@@ -42,7 +42,7 @@ async function runIn(tab, path, args, wait = false, source = PAGE) {
   return world ? world.executeJavaScriptInIsolatedWorld(FRAME_WORLD, [{ code }]).catch(() => null) : null;
 }
 /** A frame's current placement, resolving each window.frames step in its parent's world. */
-async function frameAt(tab, path) {
+export async function frameAt(tab, path) {
   let frame = TOP;
   for (let step = 0; step < path.length; step++) {
     const box = await runIn(tab, path.slice(0, step), { op: "frame", index: path[step] }).catch(() => null);

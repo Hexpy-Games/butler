@@ -71,31 +71,31 @@ pub use application::{
     ImageUsageRecord, composite, delegate_capability, mask_bounds,
 };
 pub use application::{
-    AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
-    AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision, AppAuthorityDecisionInput,
-    AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact, AppBranchCanonicalAnswer,
-    AppBranchConversationReader, AppBranchSourceLocation, AppBranchSummarizer, AppBranchSummary,
-    AppBranchSummaryInput, AppBriefingProject, AppCancellation, AppCanonConflict, AppCanonDelegate,
-    AppCanonEvent, AppCanonPort, AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind,
-    AppChatSummary, AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts,
-    AppContextReadPort, AppContextReadQuery, AppContextUsage, AppCreateProjectRequest,
-    AppCreateProjectResult, AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult,
-    AppDocumentCommand, AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite,
-    AppGrantRef, AppGrantView, AppIdentityClock, AppLedgerSourceRequest, AppLibraryChange,
-    AppLibraryCommand, AppLibraryQuery, AppListCursor, AppListPage, AppMemoryCommand,
-    AppMemoryPort, AppMessageFileSnapshot, AppMessageFileStorage, AppModelCatalogCommand,
-    AppModelCatalogPort, AppModelFallbackFacts, AppModelMetadata, AppMonitorPage,
-    AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress, AppNewChatBriefingPort,
-    AppNewChatBriefingRequest, AppPersonalizationCommand, AppPersonalizationEvent,
-    AppPersonalizationPort, AppPersonalizationResult, AppPlanDecisionAction,
-    AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture, AppPlanDecisionLedgerPort,
-    AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult, AppPlanDecisionStatus,
-    AppProjectActionResult, AppProjectDashboardActionProgress, AppProjectDashboardBriefingPort,
-    AppProjectDashboardBriefingPrompt, AppProjectDashboardBriefingRequest,
-    AppProjectDashboardCheckpoint, AppProjectDashboardDisposition, AppProjectDashboardLedgerError,
-    AppProjectDashboardLedgerEvent, AppProjectDashboardLedgerFuture,
-    AppProjectDashboardLedgerHistory, AppProjectDashboardLedgerPort,
-    AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
+    AppAdmissionAuthority, AppAllowedFolder, AppApplication, AppApplicationConfig,
+    AppApplicationDependencies, AppApprovalClaims, AppArtifactMaterializer, AppAuthorityDecision,
+    AppAuthorityDecisionInput, AppAuthorityHandoff, AppAuthorityPage, AppBoundWorkStatusFact,
+    AppBranchCanonicalAnswer, AppBranchConversationReader, AppBranchSourceLocation,
+    AppBranchSummarizer, AppBranchSummary, AppBranchSummaryInput, AppBriefingProject,
+    AppCancellation, AppCanonConflict, AppCanonDelegate, AppCanonEvent, AppCanonPort,
+    AppCanonRequest, AppCanonResource, AppCanonTagExists, AppChatKind, AppChatSummary,
+    AppContextBudgetFacts, AppContextConfigurationFacts, AppContextReadFacts, AppContextReadPort,
+    AppContextReadQuery, AppContextUsage, AppCreateProjectRequest, AppCreateProjectResult,
+    AppCreateSessionInput, AppCreateSessionRequest, AppCreateSessionResult, AppDocumentCommand,
+    AppExecutorReadiness, AppFileDownload, AppFileUpload, AppFileWrite, AppGrantRef, AppGrantView,
+    AppIdentityClock, AppLedgerSourceRequest, AppLibraryChange, AppLibraryCommand, AppLibraryQuery,
+    AppListCursor, AppListPage, AppMemoryCommand, AppMemoryPort, AppMessageFileSnapshot,
+    AppMessageFileStorage, AppModelCatalogCommand, AppModelCatalogPort, AppModelFallbackFacts,
+    AppModelMetadata, AppMonitorPage, AppMonitoringPort, AppNativeAssetResolver, AppNativeIngress,
+    AppNewChatBriefingPort, AppNewChatBriefingRequest, AppPersonalizationCommand,
+    AppPersonalizationEvent, AppPersonalizationPort, AppPersonalizationResult,
+    AppPlanDecisionAction, AppPlanDecisionLedgerError, AppPlanDecisionLedgerFuture,
+    AppPlanDecisionLedgerPort, AppPlanDecisionPlan, AppPlanDecisionRequest, AppPlanDecisionResult,
+    AppPlanDecisionStatus, AppProjectActionResult, AppProjectDashboardActionProgress,
+    AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt,
+    AppProjectDashboardBriefingRequest, AppProjectDashboardCheckpoint,
+    AppProjectDashboardDisposition, AppProjectDashboardLedgerError, AppProjectDashboardLedgerEvent,
+    AppProjectDashboardLedgerFuture, AppProjectDashboardLedgerHistory,
+    AppProjectDashboardLedgerPort, AppProjectDashboardLedgerRecord, AppProjectDashboardManagedPlan,
     AppProjectDashboardManagedWork, AppProjectDashboardPageQuery, AppProjectDashboardPinRef,
     AppProjectDashboardPreferencesUpdate, AppProjectDashboardRecordsQuery,
     AppProjectDashboardReview, AppProjectDashboardSnapshot, AppProjectDashboardSource,
@@ -188,7 +188,7 @@ mod browser_still_delivery;
 pub use browser_still_delivery::AppBrowserStillCommand;
 
 mod application_port;
-pub use application_port::GatewayApplication;
+pub use application_port::{GatewayAllowedFolders, GatewayApplication};
 
 mod inbound_queue;
 mod message_file_store;
@@ -205,6 +205,6 @@ pub fn http_route_templates() -> Vec<&'static str> {
     http::route_templates()
 }
 
-pub use http::{reset_browser_secret_keys, vault_legacy_items};
+pub use http::{InProcessError, InProcessGateway, reset_browser_secret_keys, vault_legacy_items};
 
 pub use protocol::ImageEditRequest;

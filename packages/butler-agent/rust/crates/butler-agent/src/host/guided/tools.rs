@@ -2,9 +2,11 @@
 //! while this owner keeps only occurrence counters and provider-call mapping.
 
 mod access;
+mod admin_client;
 mod answer_blocks;
 mod answer_blocks_stream;
 mod canon;
+mod computers;
 mod permission_mode;
 pub(super) mod permission_surface;
 pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
@@ -38,10 +40,12 @@ mod remote;
 mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod attention;
+mod permission_rule;
 mod profile;
 mod project_artifacts;
 mod project_source;
 mod resume;
+mod rules;
 mod supported;
 mod turn_guard;
 mod wallpaper;
@@ -73,6 +77,7 @@ use resume::ResumePool;
 use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
+    pub response_language: String,
     pub permission_config: permission_surface::Config,
     pub turn_id: String,
     pub(super) open_asks: Arc<Mutex<super::prompt::open_asks::Reminders>>,
@@ -179,7 +184,6 @@ pub(crate) struct GuidedTools {
     session_worktrees: butler_turn::workspace::SessionWorktrees,
     web_session: butler_runtime::web_access::WebSession,
     app_endpoint: Arc<crate::host::ActiveAppEndpoint>,
-    browser_http: OnceCell<butler_log::http::Client>,
     binding: GuidedToolBinding,
     permission_surface: Mutex<Option<Arc<permission_surface::Snapshot>>>,
     state: Mutex<State>,
@@ -316,7 +320,6 @@ impl GuidedTools {
             session_worktrees,
             web_session,
             app_endpoint,
-            browser_http: OnceCell::new(),
             turn_taint: Mutex::new(binding.turn_guard.initial_taint),
             attention_sent: Mutex::new(Default::default()),
             instruction_run: Mutex::new(None),

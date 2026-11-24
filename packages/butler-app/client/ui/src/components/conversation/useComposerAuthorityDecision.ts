@@ -17,6 +17,11 @@ export interface ComposerAuthorityDecision {
   /** What "Always allow in this conversation" covers; the grant needs the legacy `scope`. */
   conversationScope?: string; scope: AuthorityApprovalCard["scope"]; pending: boolean; error?: string;
   composingMessage: boolean; pendingCount: number;
+  rulePrefixes?: string[];
+  ruleText?: string;
+  proposal?: boolean;
+  onAllowAlways?: () => void;
+  onDenyAlways?: () => void;
   allowSite?: "signed_in" | "payment";
   onAllowSite?: () => void;
   onAllow: () => void; onAllowConversation: () => void; onDeny: () => void;
@@ -38,12 +43,13 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const inFlight = useRef(new Set<string>());
   if (!request) return undefined;
   const key = `${sessionId}:${request.requestRef}`;
-  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" = "once") => {
+  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" | "always" = "once") => {
     if (inFlight.current.has(key)) return;
     inFlight.current.add(key); setPending(new Set(inFlight.current)); setFailed(undefined);
     const store = useButlerStore.getState();
     const applied = action === "allow" ? await store.allowAuthorityRequest(request.requestRef, sessionId, scope)
-      : await store.denyAuthorityRequest(request.requestRef, sessionId);
+      : scope === "always" ? await store.denyAuthorityRequest(request.requestRef, sessionId, { scope })
+        : await store.denyAuthorityRequest(request.requestRef, sessionId);
     inFlight.current.delete(key); setPending(new Set(inFlight.current));
     if (!applied) setFailed(key);
   };
@@ -60,6 +66,11 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     composingMessage: collapsed === key, pendingCount: requests.length,
+    rulePrefixes: request.approval?.operation?.rule_prefixes,
+    ruleText: view.ruleText,
+    proposal: request.approval?.operation?.tool === "propose_permission_rule",
+    onAllowAlways: () => void decide("allow", "always"),
+    onDenyAlways: () => void decide("deny", "always"),
     allowSite: request.approval?.operation?.allow_site,
     onAllowSite: () => void decide("allow", "site"),
     onAllow: () => void decide("allow"),

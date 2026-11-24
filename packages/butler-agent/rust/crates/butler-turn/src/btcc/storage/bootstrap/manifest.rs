@@ -54,7 +54,8 @@ pub(super) const TABLES: [&str; 47] = [
 // activation validation. They were never part of the legacy import receipt;
 // keeping that immutable manifest preserves existing activation markers.
 // TABLES is the shipped manifest: never add to it.
-pub(super) const RUNTIME_TABLES: [&str; 3] = [
+pub(super) const RUNTIME_TABLES: [&str; 4] = [
+    "btcc_permission_rules",
     "btcc_subsession_endings",
     "btcc_work_task_waits",
     "btcc_work_tasks",

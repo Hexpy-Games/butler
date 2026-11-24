@@ -56,7 +56,11 @@ pub(super) fn legacy_authorized<'a>(
     names.extend(DISCOVERY.iter().map(|name| (*name).to_owned()));
     names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
+    authorize_computers(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
+    if !scope.worker {
+        names.insert(ToolName::ProposePermissionRule.as_str().into());
+    }
     browser::authorize(&mut names, catalog, policy);
     image_calls(&mut names, policy);
     names.retain(|name| {
@@ -199,6 +203,19 @@ fn authorized_profiles(
     profiles
 }
 
+fn authorize_computers(
+    names: &mut HashSet<String>,
+    policy: &GuidedExecutionPolicy,
+    scope: AuthorizationScope,
+) {
+    if !scope.worker {
+        names.insert("computer_list".into());
+    }
+    if policy.role == PolicyRole::Butler && policy.access_mode != AccessMode::ReadOnly {
+        names.extend(["computer_add", "computer_edit", "computer_remove"].map(str::to_owned));
+    }
+}
+
 /// Full access adds effect-free tools, commands, file writes and MCP calls.
 /// Ask-first keeps the non-full allowlist with commands, file writes and MCP
 /// calls (each asks before it runs) and the required tools of its
@@ -266,6 +283,10 @@ fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
         names.remove("resolve_ask");
+        names.remove("computer_list");
+        names.remove("computer_add");
+        names.remove("computer_edit");
+        names.remove("computer_remove");
         // A child turn is bound to its relation's Work before its first round,
         // and start_work refuses a bound turn.
         names.remove("start_work");
@@ -348,7 +369,7 @@ pub(super) fn legacy_visible<'a>(
             }
         }
     }
-    names.extend(["generate_image", "edit_image"]);
+    names.extend(["generate_image", "edit_image", "propose_permission_rule"]);
     if names.contains("run_command") {
         names.insert("switch_folder");
     }
@@ -362,7 +383,7 @@ pub(super) fn legacy_visible<'a>(
 pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
     if matches!(
         tool.name.as_str(),
-        "canon_read" | "canon_propose" | "canon_queue"
+        "canon_read" | "canon_propose" | "canon_queue" | "propose_permission_rule"
     ) {
         return true;
     }

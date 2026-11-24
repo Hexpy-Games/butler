@@ -10,6 +10,7 @@ fn invoke(command: &str, setup: &Setup) -> Invocation {
         command,
         &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
         root,
+        &[],
         &[&setup.sandbox.data.join("tmp/project-write")],
         &denied,
         None,
@@ -198,6 +199,10 @@ async fn project_write_cancellation_still_quarantines() -> Result<(), HarnessErr
     let owner = Commands::new();
     let result = owner
         .submit_guided(GuidedCommandInput {
+            allowed_folders: Vec::new(),
+            extra_write_roots: Vec::new(),
+            protected_roots: Vec::new(),
+            installation_root: None,
             command: "mkdir sub/.git; echo complete > sub/.git/config; sleep 30".into(),
             cwd: None,
             workspace_root: root.clone(),

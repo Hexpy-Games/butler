@@ -5,6 +5,7 @@ use super::super::path_guard::GuardResult;
 
 /// Where a mutation may write.
 pub struct MutationContext {
+    pub allowed_folders: Vec<PathBuf>,
     pub butler_data: PathBuf,
     pub root: PathBuf,
     pub path_form: crate::workspace::PathForm,

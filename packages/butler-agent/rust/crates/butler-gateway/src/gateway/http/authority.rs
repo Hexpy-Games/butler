@@ -22,6 +22,9 @@ pub(super) async fn route(
     let timing = crate::gateway::command_timing::CommandTiming::new("authority_http");
     let method = request.method().clone();
     let path = uri.path();
+    if path == "/allowed-folders" || path == "/allowed-folders/remove" {
+        return super::authority_permissions::folders(&state, path, request).await;
+    }
     let session_id = authority_session_id(uri);
     let owner = state
         .application
@@ -59,7 +62,7 @@ pub(super) async fn route(
     {
         let request_ref = decode_component(reference)?;
         let (allow_scope, alternative_input) = match action {
-            "allow" => (Some(allow_scope(request).await?), None),
+            "allow" | "deny" => (decision_scope(request, action).await?, None),
             "answer" => (None, Some(question_answer(request).await?)),
             "modify" => (None, Some(modify_input(request).await?)),
             _ => (None, None),
@@ -91,16 +94,22 @@ pub(super) async fn route(
     Err(HttpError::public(404, "not_found", "Route not found."))
 }
 
-async fn allow_scope(request: Request<Body>) -> Result<String, HttpError> {
+async fn decision_scope(request: Request<Body>, action: &str) -> Result<Option<String>, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     if butler_core::public_text::trim_js_whitespace(&String::from_utf8_lossy(&bytes)).is_empty() {
-        return Ok("once".into());
+        return Ok((action == "allow").then(|| "once".into()));
     }
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| scope_error())?;
     match value.get("scope").and_then(Value::as_str) {
-        Some("once") => Ok("once".into()),
-        Some("conversation") => Ok("conversation".into()),
-        Some("site") => Ok("site".into()),
+        Some("always") => Ok(Some("always".into())),
+        Some(scope @ ("once" | "conversation" | "site")) if action == "allow" => {
+            Ok(Some(scope.into()))
+        }
+        Some("once") if action == "deny" => Ok(None),
+        None if action == "allow" && value.is_object() && value.get("scope").is_none() => {
+            Ok(Some("once".into()))
+        }
+        None if action == "deny" && value.is_object() && value.get("scope").is_none() => Ok(None),
         _ => Err(scope_error()),
     }
 }

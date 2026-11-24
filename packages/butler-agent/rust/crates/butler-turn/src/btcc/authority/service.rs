@@ -167,6 +167,14 @@ impl PrincipalAuthority {
             .await
     }
     /// Records the outcome of an allowed operation.
+    pub async fn claim_question_apply(&self, request_ref: String) -> AuthorityResult<bool> {
+        self.in_lane(move |repo| repo.claim_question_apply(&request_ref))
+            .await
+    }
+    pub async fn finish_question_apply(&self, request_ref: String) -> AuthorityResult<()> {
+        self.in_lane(move |repo| repo.finish_question_apply(&request_ref))
+            .await
+    }
     pub async fn record_outcome(&self, input: AuthorityOutcomeInput) -> AuthorityResult<()> {
         let collation = self.collation.clone();
         let clock = self.clock.clone();

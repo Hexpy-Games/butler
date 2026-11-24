@@ -143,6 +143,10 @@ impl Fixture {
     fn guided(&self, command: &str) -> GuidedCommandInput {
         let host_environment = fixture_environment();
         GuidedCommandInput {
+            allowed_folders: Vec::new(),
+            extra_write_roots: Vec::new(),
+            protected_roots: Vec::new(),
+            installation_root: None,
             command: command.into(),
             cwd: None,
             workspace_root: self.0.clone(),

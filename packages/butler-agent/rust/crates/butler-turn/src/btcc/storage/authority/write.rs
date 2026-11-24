@@ -132,10 +132,35 @@ pub(super) fn decide(
             params![grant.grant_ref,grant.owner_session_id,grant.workspace_path,grant.scope_key,
                 grant.title,grant.description,grant.created_at]).map_err(query::sql)?;
     }
+    for rule in &write.rules {
+        add_permission_rule(&transaction, rule)?;
+    }
     let stored = query::find(&transaction, "request_ref", &write.request_ref)?;
     transaction.commit().map_err(query::sql)?;
     Ok(stored)
 }
+pub(super) fn claim_question_apply(db: &Connection, request_ref: &str) -> AuthorityResult<bool> {
+    db.execute(
+        "UPDATE btcc_authority_requests SET outcome='uncertain' WHERE request_ref=?1 \
+         AND capability='ask_user' AND decision='modified' AND outcome='pending' \
+         AND json_extract(private_alternative_input,'$.status')='answered'",
+        [request_ref],
+    )
+    .map(|count| count != 0)
+    .map_err(query::sql)
+}
+
+pub(super) fn finish_question_apply(db: &Connection, request_ref: &str) -> AuthorityResult<()> {
+    db.execute(
+        "UPDATE btcc_authority_requests SET outcome='applied' WHERE request_ref=?1 \
+         AND capability='ask_user' AND decision='modified' AND outcome='uncertain' \
+         AND json_extract(private_alternative_input,'$.status')='answered'",
+        [request_ref],
+    )
+    .map(|_| ())
+    .map_err(query::sql)
+}
+
 pub(super) fn record_outcome(db: &Connection, write: &OutcomeWrite) -> AuthorityResult<()> {
     db.execute(
         "UPDATE btcc_authority_requests \
@@ -179,14 +204,53 @@ pub(super) fn revoke_permissions(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(query::sql)?;
     for (owner, reference) in grants {
-        let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM btcc_conversation_permissions WHERE grant_ref=?1 AND owner_session_id=?2)",
-            params![reference, owner], |row| row.get(0)).map_err(query::sql)?;
+        let sql = if reference.starts_with("rule-") {
+            "SELECT EXISTS(SELECT 1 FROM btcc_permission_rules WHERE rule_id=?1 AND IFNULL(owner_session_id,'')=?2 AND kind='command_prefix')"
+        } else {
+            "SELECT EXISTS(SELECT 1 FROM btcc_conversation_permissions WHERE grant_ref=?1 AND owner_session_id=?2)"
+        };
+        let exists: bool = tx
+            .query_row(sql, params![reference, owner], |row| row.get(0))
+            .map_err(query::sql)?;
         if !exists {
             return Err(AuthorityError::policy("authority_permission_not_found"));
         }
     }
     for (owner, reference) in grants {
-        revoke_permission(&tx, owner, reference, now)?;
+        if reference.starts_with("rule-") {
+            revoke_permission_rule(&tx, reference, now)?;
+        } else {
+            revoke_permission(&tx, owner, reference, now)?;
+        }
     }
     tx.commit().map_err(query::sql)
+}
+
+pub(super) fn add_permission_rule(
+    db: &Connection,
+    rule: &crate::btcc::PermissionRuleRow,
+) -> AuthorityResult<()> {
+    db.execute(
+        "INSERT OR IGNORE INTO btcc_permission_rules
+         (rule_id, effect, kind, pattern, owner_session_id, created_at) VALUES (?1,?2,?3,?4,?5,?6)",
+        params![
+            rule.rule_id,
+            rule.effect,
+            rule.kind,
+            rule.pattern,
+            rule.owner_session_id,
+            rule.created_at
+        ],
+    )
+    .map_err(query::sql)?;
+    Ok(())
+}
+
+pub(super) fn revoke_permission_rule(db: &Connection, id: &str, now: &str) -> AuthorityResult<()> {
+    db.execute(
+        "UPDATE btcc_permission_rules SET revoked_at=?1 WHERE rule_id=?2 AND revoked_at IS NULL",
+        params![now, id],
+    )
+    .map_err(query::sql)?;
+    Ok(())
 }

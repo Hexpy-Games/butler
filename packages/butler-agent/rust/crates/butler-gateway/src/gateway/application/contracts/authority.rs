@@ -37,12 +37,20 @@ pub struct AppGrantView {
     pub target: String,
     pub cwd: Option<String>,
     pub scope: &'static str,
+    pub effect: &'static str,
     pub session_id: String,
     pub workspace_path: String,
     pub created_at: String,
     pub session_title: Option<String>,
     pub project_id: Option<String>,
     pub project_name: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct AppAllowedFolder {
+    pub rule_id: String,
+    pub path: String,
+    pub created_at: String,
 }
 
 pub trait AppAuthorityHandoff: Send + Sync + 'static {
@@ -82,6 +90,15 @@ pub trait AppAuthorityHandoff: Send + Sync + 'static {
         owner_session_id: String,
         turns: Vec<String>,
     ) -> ApplicationFuture<(Vec<Value>, Vec<Value>)>;
+    fn allowed_folders(&self) -> ApplicationFuture<Vec<AppAllowedFolder>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn add_allowed_folder(&self, _path: String) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn remove_allowed_folder(&self, _rule_id: String) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
     fn list_all_permissions(&self) -> ApplicationFuture<Vec<AppGrantView>>;
     fn revoke_permissions(&self, grants: Vec<AppGrantRef>) -> ApplicationFuture<()>;
     fn list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;

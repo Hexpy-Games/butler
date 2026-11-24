@@ -29,6 +29,9 @@ pub(super) fn boundaries() {
         ("call_mcp_tool", Connector),
         ("deliver_files", DeliverFiles),
         ("output_publish", ButlerOutput),
+        ("computer_add", CapabilityKind::ComputerSetup),
+        ("computer_edit", CapabilityKind::ComputerSetup),
+        ("computer_remove", CapabilityKind::ComputerSetup),
         (
             "document_create",
             Exempt(ApprovalExemptAction::DocumentWrite),
@@ -85,6 +88,7 @@ pub(super) fn contained_read_rechecks_swapped_secret() {
     std::fs::write(root.join(".env"), "SECRET_IN_ENV").unwrap();
     let data = root.with_extension("data");
     let roots = ScopeRoots {
+        allowed_folders: &[],
         attachments: &[],
         project: Some(&root),
         butler_data: &data,

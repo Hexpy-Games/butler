@@ -140,6 +140,10 @@ fn authority_handoff(context: Context<'_>, owners: &AppServerOwners) -> Arc<Auth
         context.runtime.authority.clone(),
         context.runtime.continuity.clone(),
         owners.queue.clone(),
+        (
+            context.data_root.to_path_buf(),
+            context.installation.root().to_path_buf(),
+        ),
         Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
     ))
 }

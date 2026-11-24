@@ -17,6 +17,12 @@ impl<'a> SqliteAuthorityRepository<'a> {
     }
 }
 impl AuthorityRepository for SqliteAuthorityRepository<'_> {
+    fn add_permission_rule(&mut self, row: &crate::btcc::PermissionRuleRow) -> AuthorityResult<()> {
+        write::add_permission_rule(self.db, row)
+    }
+    fn revoke_permission_rule(&mut self, id: &str, now: &str) -> AuthorityResult<()> {
+        write::revoke_permission_rule(self.db, id, now)
+    }
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool> {
         query::has_permission(self.db, grant_ref)
     }
@@ -104,6 +110,12 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         now: &str,
     ) -> AuthorityResult<()> {
         write::record_question_followup(self.db, request_ref, response, now)
+    }
+    fn claim_question_apply(&mut self, request_ref: &str) -> AuthorityResult<bool> {
+        write::claim_question_apply(self.db, request_ref)
+    }
+    fn finish_question_apply(&mut self, request_ref: &str) -> AuthorityResult<()> {
+        write::finish_question_apply(self.db, request_ref)
     }
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()> {
         write::record_outcome(self.db, &write)

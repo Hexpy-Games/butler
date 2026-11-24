@@ -14,7 +14,7 @@ mod mutations;
 mod path_guard;
 mod path_messages;
 mod target_scope;
-pub use target_scope::{ScopeRoots, TargetScope, classify_targets, real_target};
+pub use target_scope::{ScopeRoots, TargetScope, classify_targets, contained_target, real_target};
 mod reference;
 mod session_folder;
 mod session_recovery;
@@ -49,7 +49,7 @@ pub use reference::WorkspaceReference;
 pub use session_folder::{
     CHAT_FOLDER_LABEL, FolderInspection, FolderRefusal, FolderRelation, FolderRoots,
     SESSION_FOLDER_KEY, SessionFolderMarker, SessionFolders, SwitchSessionFolder,
-    SwitchSessionFolderResult, active_session_folder, chat_folder, is_chat_folder,
+    SwitchSessionFolderResult, active_session_folder, allowed_folder, chat_folder, is_chat_folder,
     read_session_folder, session_folder_marker,
 };
 pub use session_recovery::{

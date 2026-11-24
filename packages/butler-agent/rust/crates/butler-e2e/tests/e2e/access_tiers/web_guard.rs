@@ -53,7 +53,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
             ],
         );
         let turn = paused(&s, "general", prompt).await?;
-        approve(&s, "general", "allow").await?;
+        approve(&s, "general", "allow", None).await?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         loop {
             let cards = s.gw.approval_requests("general").await?;
@@ -70,7 +70,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
         assert_counts(&s, &turn, 2, 1)?;
-        approve(&s, "general", "deny").await?;
+        approve(&s, "general", "deny", None).await?;
         delivered(&s, "general", &turn).await?;
         assert_counts(&s, &turn, 2, 0)?;
         let results = outputs(&s, "general", &turn, &script, prompt).await?;
@@ -93,7 +93,7 @@ async fn external_content_web_requests_ask_with_exact_targets() -> Result<(), Ha
         ],
     );
     let turn = paused(&s, "general", &prompt).await?;
-    approve(&s, "general", "allow").await?;
+    approve(&s, "general", "allow", None).await?;
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 1, 0)?;
     unattended(&s, &script, &query).await?;
@@ -235,7 +235,7 @@ async fn external_content_scores_individual_path_segments() -> Result<(), Harnes
             ],
         );
         let turn = paused(&s, "general", &prompt).await?;
-        approve(&s, "general", "allow").await?;
+        approve(&s, "general", "allow", None).await?;
         if carries {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             loop {
@@ -251,7 +251,7 @@ async fn external_content_scores_individual_path_segments() -> Result<(), Harnes
                 );
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
-            approve(&s, "general", "deny").await?;
+            approve(&s, "general", "deny", None).await?;
         }
         delivered(&s, "general", &turn).await?;
         assert_counts(&s, &turn, if carries { 2 } else { 1 }, 0)?;

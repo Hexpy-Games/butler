@@ -15,8 +15,8 @@ use tokio::net::TcpListener;
 
 use butler_gateway::gateway::{
     AppApplication, AppApplicationConfig, AppApplicationDependencies, AppIdentityClock,
-    AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InboundQueue,
-    LocalAuthConfig,
+    AppMessageFiles, GatewayApplicationError, GatewayConfig, GatewayServer, InProcessGateway,
+    InboundQueue, LocalAuthConfig,
 };
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
@@ -79,6 +79,10 @@ impl AppServer {
 
     pub(crate) fn local_addr(&self) -> SocketAddr {
         self.address
+    }
+
+    pub(crate) fn in_process(&self) -> Option<InProcessGateway> {
+        self.listener.as_ref().map(GatewayServer::in_process)
     }
 
     /// Reserve the address before any startup persistence or runtime DB opens.

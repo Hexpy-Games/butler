@@ -19,6 +19,8 @@ pub(in crate::gateway) enum ModelSource {
 #[serde(deny_unknown_fields)]
 pub(in crate::gateway) struct ModelInput {
     pub model_source: ModelSource,
+    #[serde(default)]
+    pub open_sign_in: bool,
 }
 
 pub(in crate::gateway) async fn update(

@@ -36,8 +36,8 @@ export function startComputer(id: string) {
   return api<{ state: "ready" | "busy"; version: string }>(`/computers/${encodeURIComponent(id)}/start`, { method: "POST" });
 }
 
-export function deleteComputer(id: string): Promise<{ deleted: boolean; remote_cleaned: boolean }> {
-  return api(`/computers/${encodeURIComponent(id)}`, { method: "DELETE" });
+export function deleteComputer(id: string, force = false): Promise<{ deleted: boolean; remote_cleaned: boolean }> {
+  return api(`/computers/${encodeURIComponent(id)}${force ? "?force=true" : ""}`, { method: "DELETE" });
 }
 
 export function reconnectComputer(id: string): Promise<{ state: ComputerConnection; error: string | null }> {

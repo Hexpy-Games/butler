@@ -5,8 +5,8 @@
 //! - `GET /security/signins`: availability and one row per site.
 //! - `POST /security/signins`: add `{site, username, password}` (or a takeover
 //!   save `{origin, username, password}`).
-//! - `POST /security/signins/offer`: `{origin, username, password}` → `{offer}`; never answers a secret.
-//! - `POST /security/signins/accounts`: `{origin}` → `{accounts}`.
+//! - `POST /security/signins/offer`: `{origin, username, password, frame_origin?}` → `{offer}`; never answers a secret.
+//! - `POST /security/signins/accounts`: `{origin, frame_origin?}` → `{accounts}`.
 //! - `POST /security/signins/fill`: `{entry_id, origin}` → `{token}`.
 //! - `PATCH /security/signins/{id}`: `{policy}`.
 //! - `DELETE /security/signins/{id}`: delete the password and its entry.
@@ -108,6 +108,19 @@ pub(super) fn login_origin(raw: &str) -> Option<(String, String)> {
         .then(|| (url.origin().ascii_serialization(), site))
 }
 
+/// A framed form counts only on the top page's site: same scheme and eTLD+1.
+fn same_site_frame(origin: &str, body: &Value) -> bool {
+    let Some(frame) = body["frame_origin"].as_str() else {
+        return true;
+    };
+    let (Ok(top), Ok(frame)) = (url::Url::parse(origin), url::Url::parse(frame)) else {
+        return false;
+    };
+    top.scheme() == frame.scheme()
+        && butler_runtime::browser::site_of(top.as_str())
+            .is_some_and(|site| Some(site) == butler_runtime::browser::site_of(frame.as_str()))
+}
+
 async fn offer(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError> {
     let password = match body.get_mut("password") {
         Some(Value::String(value)) => Some(SecretText::new(std::mem::take(value))),
@@ -124,6 +137,7 @@ async fn offer(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpErr
     };
     if username.is_empty()
         || username.chars().count() > 256
+        || !same_site_frame(origin, &body)
         || !signin_secrets::available(state).await
     {
         return Ok(json!({"offer": false}));
@@ -260,7 +274,7 @@ async fn accounts(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpErr
     let Some((_, site)) = login_origin(origin) else {
         return Ok(json!({"accounts": []}));
     };
-    if !signin_secrets::available(state).await {
+    if !same_site_frame(origin, body) || !signin_secrets::available(state).await {
         return Ok(json!({"accounts": []}));
     }
     let entries = state

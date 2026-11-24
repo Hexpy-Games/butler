@@ -263,6 +263,8 @@ export interface AuthorityRequestRecord {
 export interface ApprovalSummaryWire {
   operation?: {
     image?: unknown; tool: string; access: "read_only" | "change"; targets: string[]; command?: string;
+    rule_prefixes?: string[];
+    permission_rule?: { effect: "allow" | "deny"; kind: "command_prefix" | "folder"; scope: "conversation" | "always"; reason: string };
     allow_conversation?: boolean; allow_site?: "signed_in" | "payment";
     browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string;
     browser_steps?: { action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }[];

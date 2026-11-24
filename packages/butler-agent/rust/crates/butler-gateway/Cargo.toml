@@ -46,6 +46,7 @@ zeroize.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
+tower = { version = "0.5.3", default-features = false, features = ["util"] }
 tz-rs.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true

@@ -77,7 +77,7 @@ async fn install(force_l: bool) -> Result<(), HarnessError> {
 
 fn tier(root: &Path, force_l: bool) -> Result<&'static str, HarnessError> {
     let policy =
-        command_sandbox::project_write_shell("true", &HashMap::new(), root, &[], &[], None)
+        command_sandbox::project_write_shell("true", &HashMap::new(), root, &[], &[], &[], None)
             .unwrap();
     let policy: Value = serde_json::from_str(&policy.arguments[1])?;
     Ok(if force_l || policy["mountns"] != true {
