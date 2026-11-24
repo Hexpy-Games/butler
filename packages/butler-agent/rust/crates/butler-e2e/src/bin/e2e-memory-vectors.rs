@@ -184,6 +184,7 @@ async fn snapshot(table: &Table) -> Value {
         "row_count": rows.len(),
         "fragments": table.stats().await.unwrap().fragment_stats.num_fragments,
         "rows": rows,
+        "version": table.version().await.unwrap(),
         "versions": table.list_versions().await.unwrap().len(),
         "full_fragment_ids": full_fragment_ids
     })
