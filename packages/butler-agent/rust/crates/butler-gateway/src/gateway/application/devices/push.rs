@@ -2,8 +2,8 @@ mod expo;
 
 use crate::gateway::AppSettingsFactsProvider;
 use crate::gateway::{
-    AppEventEnvelope, GatewayApplicationError,
-    application::{AppApplication, AppStorage, AppStorageError, app_error, settings},
+    AppEventEnvelope,
+    application::{AppApplication, AppStorage, AppStorageError, settings},
     ui_language::UiLanguage,
 };
 use butler_log::http::{self, Client};
@@ -52,18 +52,17 @@ impl AppApplication {
         tokio::spawn(async move {
             let _subscription = subscription;
             loop {
-                tokio::select! {
+                let next = tokio::select! {
                     () = shutdown.cancelled() => return,
-                    next = rx.recv() => {
-                        let Some(push) = next else { return };
-                        if let Err(error) = deliver(&storage, settings_facts.as_ref(), &client, &url, push).await {
-                            let code = match &error {
-                                GatewayApplicationError::Public { code, .. } => code.as_str(),
-                                GatewayApplicationError::Internal { .. } => "internal",
-                            };
-                            tracing::warn!(code, "push delivery failed");
-                        }
-                    }
+                    next = rx.recv() => next,
+                };
+                let Some(push) = next else { return };
+                let result = tokio::select! {
+                    () = shutdown.cancelled() => return,
+                    result = deliver(&storage, settings_facts.as_ref(), &client, &url, push) => result,
+                };
+                if let Err(code) = result {
+                    tracing::warn!(code, "push delivery failed");
                 }
             }
         });
@@ -122,15 +121,16 @@ async fn deliver(
     client: &Client,
     url: &str,
     push: Push,
-) -> Result<(), GatewayApplicationError> {
-    let facts = settings_facts.snapshot()?;
+) -> Result<(), &'static str> {
+    let facts = settings_facts.snapshot().map_err(|_| "internal")?;
     let (language, skip, targets) = storage
         .read(move |db| {
             let language = settings::ui_language(db, &facts)?;
             let skip = if let Some(id) = push.turn_id {
                 db.query_row(
                     "SELECT COALESCE(json_type(execution_controls_json,'$.subsession_result')='object'
-                                  OR json_type(execution_controls_json,'$.schedule_run')='object',0)
+                                  OR json_type(execution_controls_json,'$.schedule_run')='object'
+                                  OR fresh_retry_queue_id IS NOT NULL,0)
                      FROM turns WHERE id=?1",
                     [id],
                     |row| row.get::<_, bool>(0),
@@ -151,7 +151,7 @@ async fn deliver(
             Ok((language, skip, targets))
         })
         .await
-        .map_err(app_error)?;
+        .map_err(|error| error.code())?;
     if skip || targets.is_empty() {
         return Ok(());
     }
@@ -169,9 +169,9 @@ async fn deliver(
     let messages: Vec<_> = targets.iter().map(|(_, token)| {
         json!({"to":token,"title":title,"body":body,"sound":"default","data":data})
     }).collect();
-    let unregistered = expo::send(client, url, &messages).await.map_err(|error| {
-        GatewayApplicationError::public(502, error.code, "Push delivery failed.")
-    })?;
+    let unregistered = expo::send(client, url, &messages)
+        .await
+        .map_err(|error| error.code)?;
     for index in unregistered {
         let (id, token) = targets[index].clone();
         storage
@@ -184,7 +184,7 @@ async fn deliver(
                 Ok(())
             })
             .await
-            .map_err(app_error)?;
+            .map_err(|error| error.code())?;
     }
     Ok(())
 }

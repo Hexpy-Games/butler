@@ -32,7 +32,7 @@ export function PushRouting() {
 
   useEffect(() => {
     if (client && pairing) void syncPush(client, pairing.butlerId);
-  }, [client]);
+  }, [client, pairing]);
 
   return null;
 }

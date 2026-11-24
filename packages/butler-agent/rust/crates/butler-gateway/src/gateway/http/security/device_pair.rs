@@ -151,7 +151,7 @@ pub(in crate::gateway::http) async fn set_push_request(
         return Err(HttpError::public(
             403,
             "device_token_required",
-            "Only a paired device can disconnect itself.",
+            "Only a paired device can register for notifications.",
         ));
     }
     let id = state

@@ -51,7 +51,7 @@ export default function Settings() {
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
       </ListGroup> : null}
       {pairing ? <ListGroup>
-        <ListRow icon={icons.AlertCircle} title={copy.settings.notifications}
+        <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
           trailing={<Switch value={push} label={copy.settings.notifications} disabled={!client}
             onValueChange={on => void toggle(on)} />} />
       </ListGroup> : null}
