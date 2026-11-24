@@ -60,6 +60,7 @@ pub(super) fn sidebar_peek(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -
             .bg(ds.color(Color::AdaptivePanelBg))
             .shadow(shadow)
             .overflow_hidden()
+            .occlude()
             .on_hover(move |on, window, cx| {
                 if *on {
                     enter_peek.pointer_enter(cx);

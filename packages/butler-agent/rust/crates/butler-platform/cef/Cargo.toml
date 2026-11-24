@@ -44,8 +44,6 @@ required-features = ["cef"]
 
 [lib]
 name = "butler_cef_host"
-# The DLL `bootstrapc.exe` (renamed butler_cef_host.exe) loads on Windows; rlib for the bin.
-crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "butler-cef-host"
@@ -53,7 +51,7 @@ path = "src/main.rs"
 required-features = ["cef"]
 
 [lints.rust]
-# The audited CEF boundary (D-P2): only the Windows bootstrap export, allowed where it is.
+# The audited CEF boundary (D-P2): OSR GPU interop and the Linux lifeline, allowed where they are.
 unsafe_code = "deny"
 unreachable_pub = "deny"
 

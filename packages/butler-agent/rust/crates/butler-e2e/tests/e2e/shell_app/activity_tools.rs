@@ -2,6 +2,7 @@
 //! child).
 use super::driver::{SERIAL, SHOTS, Shell};
 use super::observer_dialog::finished_child;
+use super::popover_scroll::{anchor_y, layout};
 use super::*;
 
 /// The id of the phase activity (a model-authored decision) the stub child's checkpoint
@@ -30,7 +31,9 @@ fn bounds(layout: &Value, anchor: &str) -> [f64; 4] {
 /// SHELL-APP-14 — The tools of a step listed in the activity dialog read as in Electron's
 /// `WorkActivityToolGroup`: several tools are one control that opens their list, a click on a tool
 /// opens its details under it, and neither the hover on the control nor the opening moves what is
-/// above or beside it.
+/// above or beside it; in an open card's activity details a wheel moves only the details; a
+/// trackpad gesture and its momentum that reach the details' end stop there; the next gesture
+/// moves the conversation.
 #[tokio::test]
 async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -52,14 +55,115 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
         format!("wait-anchor sidebar-row-{chat}"),
         format!("open {chat}"),
     );
-    let eye = format!("steward-observer-open-{}", child.session);
-    let timeline = format!("turn-activity-{}", child.turn);
-    let group = format!("activity-{activity}-group-button");
-    let tool = |index: usize| format!("activity-{activity}-group-row-{index}");
+    let sid = &child.session;
+    let det = format!("work-details-{sid}");
+    let edge = format!("work-details-edge-{sid}");
     shell
         .run(&[
             &row,
             &open,
+            "size 900 600",
+            &format!("wait-anchor steward-disclosure-{sid}"),
+            &format!("reveal steward-disclosure-{sid} chat-transcript"),
+            &format!("click steward-disclosure-{sid}"),
+            &format!("wait-anchor {det}"),
+            &format!("wheel steward-observer-open-{sid} -120"),
+            "wait 500",
+            &format!("expect-anchor {edge}:start"),
+        ])
+        .await?;
+    activity_details_scroll(&mut shell, &det, &edge).await?;
+    shell
+        .run(&[
+            &format!("reveal steward-disclosure-{sid} chat-transcript"),
+            &format!("click-at steward-disclosure-{sid} 0.5 0.02"),
+            &format!("wait-no-anchor {det}"),
+        ])
+        .await?;
+    activity_dialog(&mut shell, sid, &child.turn, &activity).await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+async fn activity_details_scroll(
+    shell: &mut Shell,
+    det: &str,
+    edge: &str,
+) -> Result<(), HarnessError> {
+    let a0 = layout(shell, "a0", det).await?;
+    shell
+        .run(&[&format!("wheel {det} 60 0.5 0.3"), "wait 500"])
+        .await?;
+    let a1 = layout(shell, "a1", det).await?;
+    let control = anchor_y(&a1, det).expect("details y") - anchor_y(&a0, det).expect("details y");
+    shell
+        .run(&[
+            &format!("wheel {det} -20 0.5 0.3"),
+            "wait 500",
+            &format!("expect-anchor {edge}:middle"),
+        ])
+        .await?;
+    let a2 = layout(shell, "a2", det).await?;
+    let inner = anchor_y(&a2, det).expect("details y") - anchor_y(&a1, det).expect("details y");
+    shell
+        .run(&[
+            &format!("wheel {det} -10 0.5 0.3 started"),
+            &format!("wheel {det} -2000 0.5 0.3 moved"),
+            &format!("wheel {det} -100 0.5 0.3 moved"),
+            &format!("wheel {det} 0 0.5 0.3 ended"),
+            &format!("wheel {det} -300 0.5 0.3 momentum"),
+            &format!("wheel {det} -300 0.5 0.3 momentum"),
+            "wait 500",
+            &format!("expect-anchor {edge}:end"),
+        ])
+        .await?;
+    let a3 = layout(shell, "a3", det).await?;
+    let fling = anchor_y(&a3, det).expect("details y") - anchor_y(&a2, det).expect("details y");
+    shell
+        .run(&[
+            &format!("wheel {det} -10 0.5 0.3 started"),
+            &format!("wheel {det} -40 0.5 0.3 moved"),
+            &format!("wheel {det} 0 0.5 0.3 ended"),
+            "wait 500",
+        ])
+        .await?;
+    let a4 = layout(shell, "a4", det).await?;
+    let next = anchor_y(&a4, det).expect("details y") - anchor_y(&a3, det).expect("details y");
+    let measured = format!(
+        "chat movement: control {control}; inner wheel {inner}; fling and momentum {fling}; \
+         next gesture {next}"
+    );
+    println!("SHELL-APP-14 {measured}");
+    let mut failed = Vec::new();
+    if control <= 20. {
+        failed.push("(control) the wheel the details could not follow did not move the chat");
+    }
+    if inner.abs() > 0.5 {
+        failed.push("the wheel in the details moved the chat");
+    }
+    if fling.abs() > 0.5 {
+        failed.push("the gesture or its momentum moved the chat at the details' end");
+    }
+    if next >= -5. {
+        failed.push("the next gesture did not move the chat toward its end");
+    }
+    assert!(failed.is_empty(), "{failed:?}: {measured}");
+    Ok(())
+}
+
+async fn activity_dialog(
+    shell: &mut Shell,
+    sid: &str,
+    turn: &str,
+    activity: &str,
+) -> Result<(), HarnessError> {
+    let eye = format!("steward-observer-open-{sid}");
+    let timeline = format!("turn-activity-{turn}");
+    let group = format!("activity-{activity}-group-button");
+    let tool = |index: usize| format!("activity-{activity}-group-row-{index}");
+    shell
+        .run(&[
             "size 800 1400",
             &format!("wait-anchor {eye}"),
             &format!("click {eye}"),
@@ -85,6 +189,12 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
             "app-quit",
         ])
         .await?;
+    assert_activity_dialog(shell, activity)
+}
+
+fn assert_activity_dialog(shell: &Shell, activity: &str) -> Result<(), HarnessError> {
+    let group = format!("activity-{activity}-group-button");
+    let tool = |index: usize| format!("activity-{activity}-group-row-{index}");
     let rest = shell.report("rest.layout")?;
     let hovered = shell.report("hovered.layout")?;
     assert_eq!(
@@ -136,7 +246,5 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
         second_after[1] - first_after[1] > second[1] - first[1] + 4.,
         "the details did not open under the tool: {second:?} -> {second_after:?}"
     );
-    shell.finish().await?;
-    sandbox.mark_success();
     Ok(())
 }

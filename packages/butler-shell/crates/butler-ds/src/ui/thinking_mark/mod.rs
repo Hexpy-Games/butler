@@ -159,7 +159,8 @@ fn layer(
                     canvas.layer(area, alpha, |canvas| paint_screen(canvas, area, &look, ink));
                 }
             });
-            if !window.paint_live(key, bounds, snapshot.start_ms, live) {
+            // A covered layer's fallback paints first, below the layer, so it never covers the layer itself.
+            if window.live_covered(key) {
                 let seconds =
                     gpui::animation_time_ms().wrapping_sub(snapshot.start_ms) as f32 / 1000.;
                 let look = paint(seconds);
@@ -168,6 +169,7 @@ fn layer(
                 }
                 motion::live_fallback_frame(window);
             }
+            window.paint_live(key, bounds, snapshot.start_ms, live);
         },
     )
 }

@@ -210,13 +210,21 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .context("missing scroll port")?;
     let position = port.center();
     let delta = target.center().y - position.y;
-    wheel_at(h, h.handle, position, -delta)
+    wheel_at(h, h.handle, position, -delta, (TouchPhase::Moved, false))
 }
 
-/// `wheel <anchor> <dy> [fx fy]`: one wheel step of `dy` px (positive scrolls toward the start) with the pointer at the anchor's fractions (default its centre), wherever the anchor is (a popover's surface is its own layer).
+/// `wheel <anchor> <dy> [fx fy] [started|moved|ended|momentum]`: one wheel step of `dy` px
+/// (positive scrolls toward the start) with the pointer at the anchor's fractions (default its
+/// centre), wherever the anchor is (a popover's surface is its own layer). Without a phase word,
+/// sends a phase-less mouse-wheel tick.
 fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
-    let mut parts = arg.split_whitespace();
+    let mut parts: Vec<&str> = arg.split_whitespace().collect();
+    let phase = parts.last().and_then(|word| wheel_phase(word));
+    if phase.is_some() {
+        parts.pop();
+    }
+    let mut parts = parts.into_iter();
     let anchor = parts.next().context("wheel anchor")?;
     let dy: f32 = parts.next().context("wheel dy")?.parse()?;
     let fx: f32 = parts.next().unwrap_or("0.5").parse()?;
@@ -226,7 +234,24 @@ fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
         bounds.left() + bounds.size.width * fx,
         bounds.top() + bounds.size.height * fy,
     );
-    wheel_at(h, handle, position, px(dy))
+    wheel_at(
+        h,
+        handle,
+        position,
+        px(dy),
+        phase.unwrap_or((TouchPhase::Moved, false)),
+    )
+}
+
+/// A trackpad phase word of `wheel`: (phase, momentum).
+fn wheel_phase(word: &str) -> Option<(TouchPhase, bool)> {
+    match word {
+        "started" => Some((TouchPhase::Started, false)),
+        "moved" => Some((TouchPhase::Moved, false)),
+        "ended" => Some((TouchPhase::Ended, false)),
+        "momentum" => Some((TouchPhase::Moved, true)),
+        _ => None,
+    }
 }
 
 /// One wheel step of `dy` with the pointer at `position` in the window `handle`, then settles.
@@ -235,6 +260,7 @@ fn wheel_at(
     handle: gpui::AnyWindowHandle,
     position: gpui::Point<gpui::Pixels>,
     dy: gpui::Pixels,
+    (touch_phase, momentum): (TouchPhase, bool),
 ) -> anyhow::Result<()> {
     move_pointer(h, handle, position, None)?;
     h.cx.update_window(handle, |_, w, cx| {
@@ -243,7 +269,8 @@ fn wheel_at(
                 position,
                 delta: ScrollDelta::Pixels(point(px(0.), dy)),
                 modifiers: Default::default(),
-                touch_phase: TouchPhase::Moved,
+                touch_phase,
+                momentum,
             }),
             cx,
         );
