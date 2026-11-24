@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { useCanonOnlineAvailable } from "@/app/canonOnline.ts";
+import { CanonJoinDialog } from "../canon/CanonJoinDialog.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -24,6 +27,8 @@ import { SpaceRow } from "./SpaceRow";
 /** One sticky browse region; its measured height offsets nested tree headers. */
 export function SpaceBrowseHeader() {
   useAppLocale();
+  const onlineAvailable = useCanonOnlineAvailable();
+  const [joinOpen, setJoinOpen] = useState(false);
   const tab = useOrganization((s) => s.tab);
   const setTab = useOrganization((s) => s.setTab);
   const setDialog = useOrganization((s) => s.setDialog);
@@ -31,7 +36,7 @@ export function SpaceBrowseHeader() {
   const hasGeneral = useButlerStore((s) =>
     s.navigation.chats.some((c) => c.id === "general"),
   );
-  return (
+  return (<>
     <Stack gap={tab === "all" ? "sm" : "lg"} compactGap="lg">
       <Stack gap="md">
         <SegmentedControl
@@ -74,6 +79,7 @@ export function SpaceBrowseHeader() {
                 <DropdownMenuItem onSelect={() => useButlerStore.getState().setProjectCreateDialogOpen(true)}>
                   {appCopy.space.newProject}
                 </DropdownMenuItem>
+                {onlineAvailable && <DropdownMenuItem onSelect={() => setJoinOpen(true)}>{appCopy.canon.online.join}</DropdownMenuItem>}
                 <DropdownMenuItem onSelect={() => useButlerStore.getState().openSettings("archive")}>
                   {archiveCount ? appCopy.clearChat.archiveCount(archiveCount) : appCopy.space.archives}
                 </DropdownMenuItem>
@@ -83,5 +89,6 @@ export function SpaceBrowseHeader() {
         }
       />
     </Stack>
-  );
+    {joinOpen && <CanonJoinDialog onOpenChange={setJoinOpen} />}
+  </>);
 }

@@ -1,3 +1,6 @@
+import { useCanonOnlineLink, useCanonOnlineLock } from "@/app/canonOnline.ts";
+import { CanonOnlineDialog } from "./CanonOnlineDialog.tsx";
+import { CanonOnlineStatusButton } from "./CanonOnlineStatusButton.tsx";
 import { CanonTagChooser } from "./CanonTagChooser.tsx";
 import { useCanonTagEditor } from "./useCanonTagEditor.tsx";
 import { CanonBoardPlanSelect } from "./CanonBoardPlanSelect.tsx";
@@ -6,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { canonEpicPlan } from "./canonPlanSelection.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, Grid, KanbanDragScope, Plus, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, Grid, KanbanDragScope, Plus, Stack, Tooltip, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { canComplete, canonCards } from "./canonLanes.ts";
 import { useCanonBoard } from "./useCanonBoard.ts";
@@ -19,6 +22,9 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   const locale = useAppLocale();
   const disconnected = useButlerStore(state => state.liveConnectionLost);
   const board = useCanonBoard(projectId);
+  const link = useCanonOnlineLink(projectId, { poll: true });
+  const locked = useCanonOnlineLock(projectId);
+  const [onlineOpen, setOnlineOpen] = useState(false);
   const selectionDetail = useCanonSelection(projectId);
   const [create, setCreate] = useState<{ planId: string | null } | null>(null);
   const [planForm, setPlanForm] = useState<{ plan?: CanonPlan } | null>(null);
@@ -44,29 +50,30 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   }, [canon, selectionDetail.selected, selection]);
   const selectedPlan = canon?.plans.find(plan => plan.id === selection.id);
   const cards = useMemo(() => new Map(canon ? canonCards(canon).map(card => [card.id, card]) : []), [canon]);
-  return <Stack gap="lg" data-test-class="canon-board">
+  return <><Stack gap="lg" data-test-class="canon-board">
     {disconnected && <Typo.Caption role="status">{appCopy.projectSignpost.disconnected}</Typo.Caption>}
     <Stack align="row" cross="center" justify="between" gap="sm" wrap>
     <Stack align="row" cross="center" gap="sm" minWidth="0" shrink wrap><Box minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} bottomInset={bottomInset} onChange={id => { selection.select(id); selectionDetail.select(null); }} /></Box>
-      <Box minWidth="0" shrink><CanonTagChooser filter tags={tags} value={tagFilter} onChange={setTagFilter} disabled={tagEditor.busy} onCreate={tagEditor.onCreate} onManage={tagEditor.onManage} /></Box></Stack>
+      <Box minWidth="0" shrink><CanonTagChooser filter tags={tags} value={tagFilter} onChange={setTagFilter} disabled={tagEditor.busy} onCreate={locked ? undefined : tagEditor.onCreate} onManage={locked ? undefined : tagEditor.onManage} /></Box></Stack>
     <ButtonContainer size="sm" justify="end">
-      <Button size="sm" variant="outline" onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button>
-      <Button size="sm" onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button>
+      {link && <CanonOnlineStatusButton link={link} onOpen={() => setOnlineOpen(true)} />}
+      <Tooltip label={locked}><Button size="sm" variant="outline" disabled={Boolean(locked)} onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button></Tooltip>
+      <Tooltip label={locked}><Button size="sm" disabled={Boolean(locked)} onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button></Tooltip>
     </ButtonContainer>
     </Stack>
     {Boolean(board.error) && <Stack align="row" cross="center"><Typo.Caption role="status">{appCopy.feedback.dashboardRetry}</Typo.Caption>
       <Button size="sm" variant="ghost" onClick={() => void board.refresh()}>{appCopy.feedback.retry}</Button></Stack>}
     {!canon && !board.error && <Typo.Caption role="status">{appCopy.feedback.dashboardLoading}</Typo.Caption>}
     {canon && <Grid columns="1" cross="start" gap="lg">
-      <KanbanDragScope onMove={move => void board.move(move)} disabled={board.busy || board.moving}
+      <KanbanDragScope onMove={move => void board.move(move)} disabled={board.busy || board.moving || Boolean(locked)}
         canDrop={(id, lane) => canComplete(cards.get(id), lane)} labels={copy.drag}>
       <Stack gap="xl">
         {!selectedPlan && <Box data-canon-backlog><CanonPlanLanes plan={{ id: null, title: copy.backlog, works: canon.backlog }}
           caption={planCaption({ works: canon.backlog, due_on: null }, locale)} matches={matches} selected={selectionDetail.selected}
-          onSelect={selectionDetail.select} onCreate={planId => setCreate({ planId })} /></Box>}
+          onSelect={selectionDetail.select} locked={locked} onCreate={planId => setCreate({ planId })} /></Box>}
         {selectedPlan && <CanonPlanLanes key={selectedPlan.id} plan={selectedPlan} caption={planCaption(selectedPlan, locale)}
           matches={matches} selected={selectionDetail.selected} onSelect={selectionDetail.select} onCreate={planId => setCreate({ planId })}
-          onEdit={() => setPlanForm({ plan: selectedPlan })} />}
+          locked={locked} onEdit={() => setPlanForm({ plan: selectedPlan })} />}
       </Stack>
       </KanbanDragScope>
     </Grid>}
@@ -74,7 +81,9 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
       onRefresh={board.refresh} onCreated={epic => { selectionDetail.select(epic.id); }} />}
     {planForm && <PlanFormDialog projectId={projectId} plan={planForm.plan} onCreated={id => { selection.select(id); selectionDetail.select(null); }} onClose={() => setPlanForm(null)} onRefresh={board.refresh} />}
     {tagEditor.dialog}
-  </Stack>;
+  </Stack>
+    {onlineOpen && <CanonOnlineDialog key={projectId} projectId={projectId} open={onlineOpen} onOpenChange={setOnlineOpen} />}
+  </>;
 }
 function planCaption(plan: { works: Array<{ canon_status: string }>; due_on: string | null }, locale: string): string {
   const progress = appCopy.canon.done(plan.works.filter(epic => epic.canon_status === "done").length, plan.works.length);

@@ -790,6 +790,10 @@ const butlerApp = Object.freeze({
     method: "POST", body: JSON.stringify(request ?? {}),
   }),
   getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
+  getCanonOnline: () => requestBridgeResult("/setup/canon-online"),
+  postCanonOnline: (request) => requestBridgeResult("/setup/canon-online", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
   postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
     method: "POST", body: JSON.stringify(request ?? {}),
   }),

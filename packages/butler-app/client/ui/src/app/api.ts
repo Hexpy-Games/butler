@@ -408,6 +408,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/setup/butler-backup") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postButlerBackup", parseBody(options.body)));
   }
+  if (method === "GET" && url.pathname === "/setup/canon-online") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getCanonOnline"));
+  }
+  if (method === "POST" && url.pathname === "/setup/canon-online") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postCanonOnline", parseBody(options.body)));
+  }
   if (method === "GET" && url.pathname === "/setup/butler-account") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerAccount"));
   }

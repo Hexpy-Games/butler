@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useCanonOnlineAvailable } from "@/app/canonOnline.ts";
+import { CanonOnlineDialog } from "../canon/CanonOnlineDialog.tsx";
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { ImageIcon, MessageSquarePlus, OverflowActionMenu } from "@/butler-ds";
+import { Globe2, ImageIcon, MessageSquarePlus, OverflowActionMenu } from "@/butler-ds";
 import { Button, ButtonContainer } from "@/butler-ds";
 import { DashboardHeader } from "@/butler-ds";
 import type {
@@ -22,6 +24,8 @@ export function ProjectDashboardHeader({
 }) {
   useAppLocale();
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const [onlineOpen, setOnlineOpen] = useState(false);
+  const onlineAvailable = useCanonOnlineAvailable();
   return (
     <>
       <DashboardHeader
@@ -36,7 +40,10 @@ export function ProjectDashboardHeader({
               <MessageSquarePlus size="md" /> {appCopy.space.newChat}</Button>
             <OverflowActionMenu
               label={appCopy.sidebar.projectMenu}
-              items={[{ icon: <ImageIcon size="sm" />, label: appCopy.projectSignpost.wallpaper, onSelect: () => setWallpaperOpen(true) }]}
+              items={[
+                { icon: <ImageIcon size="sm" />, label: appCopy.projectSignpost.wallpaper, onSelect: () => setWallpaperOpen(true) },
+                ...(onlineAvailable ? [{ icon: <Globe2 size="sm" />, label: appCopy.canon.online.title, onSelect: () => setOnlineOpen(true) }] : []),
+              ]}
             />
           </ButtonContainer>
         ) : undefined}
@@ -51,6 +58,7 @@ export function ProjectDashboardHeader({
           onOpenChange={setWallpaperOpen}
         />
       )}
+      {project && onlineOpen && <CanonOnlineDialog key={project.id} projectId={project.id} open={onlineOpen} onOpenChange={setOnlineOpen} />}
     </>
   );
 }
