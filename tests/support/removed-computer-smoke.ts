@@ -138,11 +138,18 @@ async function captureConversation(page: Page, copy: ReturnType<typeof getAppCop
   await page.getByText(answer, { exact: true }).waitFor();
   const send = button(copy.composer.send);
   assert(await send.isDisabled());
+  assert.equal(await page.locator("[data-test-class='attachment-button']").count(), 0);
   assert.equal(await page.locator('[data-test-class="composer-toolbar-spacer"]').count(), 0);
   await send.hover();
   await page.getByRole("tooltip").getByText(copy.computers.removedComputerSend, { exact: true }).waitFor();
   await page.mouse.move(0, 0);
   await page.getByRole("tooltip").waitFor({ state: "hidden" });
 
+  const preview = page.locator("[data-slot='composer-compact-preview']");
+  assert.equal(await preview.textContent(), copy.computers.removedComputerSend);
   await shot("R2-removed-conversation");
+
+  if (await preview.isVisible()) await preview.click();
+  await page.locator("[data-expanded='true'] [data-slot='composer-expanded-body']")
+    .getByText(copy.computers.removedComputerSend, { exact: true }).waitFor();
 }

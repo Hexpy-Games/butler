@@ -5,7 +5,7 @@ import { ComposerCardCompactPreview } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 import { focusComposer } from "./editor/focusComposer";
 
-export function ComposerCompactPreview() {
+export function ComposerCompactPreview({ placeholder }: { placeholder?: string }) {
   useAppLocale();
   const epic = useActiveCanonEpic();
   const large = useComposerStore((store) => store.large);
@@ -13,9 +13,9 @@ export function ComposerCompactPreview() {
   const text = useComposerStore((store) => store.text);
   const textAreaRef = useComposerStore((store) => store.textAreaRef);
   const preview = text.trim() ||
-    (epic ? appCopy.canon.epicPlaceholder : large
+    (placeholder ?? (epic ? appCopy.canon.epicPlaceholder : large
       ? appCopy.composer.placeholder
-      : appCopy.composer.placeholderFollowUp);
+      : appCopy.composer.placeholderFollowUp));
   const engage = () => {
     setEngaged(true);
     window.requestAnimationFrame(() => {

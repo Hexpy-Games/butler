@@ -22,7 +22,7 @@ import { ComposerLocationSelect } from "./ComposerLocationSelect";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
-export const ComposerToolbar = memo(function ComposerToolbar() {
+export const ComposerToolbar = memo(function ComposerToolbar({ computerRemoved }: { computerRemoved: boolean }) {
   useAppLocale();
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
@@ -33,14 +33,12 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
   const reconnecting = useButlerStore((store) => store.liveConnectionLost);
   const agentNotice = useButlerStore((store) => store.agentNotice);
   const computerId = useButlerStore((store) => sessionFromNavigation(store.navigation, store.activeChatId)?.computer_id);
-  const computerName = useButlerStore((store) => sessionFromNavigation(store.navigation, store.activeChatId)?.computer_name);
-  const computerRemoved = computerId && !computerName;
   const computerUnreachable = useComputerConnections((store) => computerId && store.states[computerId] === "unreachable");
 
   return (
     <ComposerCardToolbar>
-      <ComposerAttachmentMenu />
-      <ComposerCompactPreview />
+      {!computerRemoved && <ComposerAttachmentMenu />}
+      <ComposerCompactPreview placeholder={computerRemoved ? appCopy.computers.removedComputerSend : undefined} />
       {!computerRemoved && (
         <ComposerCardExpandedControls>
           <AccessModeMenu />

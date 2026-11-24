@@ -50,9 +50,10 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, compu
     finally { setBusy(false); }
   };
   return <ComposerDock backdrop={backdrop} onHeightChange={onHeightChange} accessory={accessory}>
-    <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
+    <Composer value={text} onChangeText={setText} placeholder={computerRemoved ? appCopy.computers.removedComputerSend : copy.chat.placeholder} canSend={canSend}
       mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={() => { void send(); }} onStop={stop}
-      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
+      sendLabel={copy.chat.send} stopLabel={copy.chat.stop}
+      attach={computerRemoved ? undefined : { label: copy.chat.attach, onPress: () => setSheet("attach") }}
       attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
         key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" && item.uri ? { uri: item.uri } : undefined,
         extension: item.reference ? documentKindLabel(item.reference.source.kind, appCopy)
