@@ -6066,7 +6066,7 @@
       "definition": {
         "type": "function",
         "name": "computer_remove",
-        "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+        "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card. If this returns computer_unreachable or computer_not_synced, nothing was deleted and the user can retry or remove an unreachable computer from Settings.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -11927,7 +11927,7 @@
     "computer_remove": {
       "type": "function",
       "name": "computer_remove",
-      "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+      "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card. If this returns computer_unreachable or computer_not_synced, nothing was deleted and the user can retry or remove an unreachable computer from Settings.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

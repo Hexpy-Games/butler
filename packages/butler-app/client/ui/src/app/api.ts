@@ -601,7 +601,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (connectors) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, connectors.action, connectors.input));
   const signIns = signInBridgeCall(method, url.pathname, options.body);
   if (signIns) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, signIns.action, signIns.input));
-  const computers = computerBridgeCall(method, url.pathname, options.body);
+  const computers = computerBridgeCall(method, url.pathname, options.body, url.searchParams);
   if (computers) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, computers.action, computers.input));
   const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
   if (method === "DELETE" && deviceMatch) {

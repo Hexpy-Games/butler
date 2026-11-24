@@ -33,6 +33,8 @@ export type SecurityBridgeRoute =
   | "rotateConnectionCode"
   | "updateSecuritySettings";
 
+export type DeleteComputerInput = { id: string; force?: boolean };
+
 export type SecurityBridgeResult =
   | { ok: true; data: unknown }
   | {
