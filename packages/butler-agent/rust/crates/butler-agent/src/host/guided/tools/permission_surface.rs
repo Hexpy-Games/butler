@@ -23,7 +23,9 @@ tokio::task_local! { static ADMISSION: Option<Arc<Snapshot>>; }
 
 impl GuidedTools {
     pub(super) fn authorized(&self, name: &str) -> bool {
-        if super::remote::unavailable(name) {
+        if super::remote::unavailable(name)
+            || (self.unattended() && super::computers::supports(name))
+        {
             return false;
         }
         super::permission_mode::approved_capability(name)

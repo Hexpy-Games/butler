@@ -8,7 +8,7 @@ use butler_e2e::e2e::{
 };
 use serde_json::{Value, json};
 
-fn call(id: &str, name: &str, args: &Value) -> Value {
+pub(super) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"role":"assistant","content":null,"tool_calls":[{"id":id,"type":"function",
         "function":{"name":name,"arguments":args.to_string()}}]})
 }

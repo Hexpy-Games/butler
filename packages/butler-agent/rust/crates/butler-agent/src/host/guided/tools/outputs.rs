@@ -108,29 +108,14 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
             state.output_images += 1;
         }
     }
-    let Some(endpoint) = owner.app_endpoint.snapshot() else {
+    let Some(admin) = super::admin_client::AdminClient::new(owner).await else {
         return json!({"status":"unavailable","reason":"no_browser"});
     };
-    let data = owner.binding.butler_data.clone();
-    let admin = tokio::task::spawn_blocking(move || {
-        let file = butler_platform::secure_fs::open_read_no_follow(
-            &data.join("app/runtime/auth/local-admin.json"),
-        )?;
-        serde_json::from_reader::<_, Value>(file).map_err(std::io::Error::other)
-    })
-    .await;
-    let Ok(Ok(admin)) = admin else {
-        return json!({"status":"unavailable","reason":"no_browser"});
-    };
-    let Ok(client) = butler_log::http::loopback().build() else {
-        return json!({"status":"unavailable","reason":"no_browser"});
-    };
-    let bearer = endpoint.local_auth.token().unwrap_or_default();
     if image
         && !vision(
-            &client,
-            &endpoint.base_url,
-            &bearer,
+            &admin.client,
+            &admin.base,
+            &admin.bearer,
             &invocation.model_execution.active_model_ref(),
         )
         .await
@@ -145,10 +130,8 @@ async fn check(owner: &GuidedTools, invocation: &GuidedInvocation<'_>, args: &Va
             .as_ref()
             .unwrap_or(&owner.binding.source_session_id)
     );
-    let request = client
-        .post(format!("{}/internal/browser/calls", endpoint.base_url))
-        .bearer_auth(bearer)
-        .header("x-butler-admin", admin["secret"].as_str().unwrap_or(""))
+    let request = admin
+        .request(reqwest::Method::POST, "/internal/browser/calls")
         .json(&args)
         .timeout(std::time::Duration::from_secs(9))
         .send();

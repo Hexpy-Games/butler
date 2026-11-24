@@ -22,6 +22,7 @@ pub enum CapabilityKind {
     Connector,
     FileEdit,
     Schedule,
+    ComputerSetup,
     SettingsWrite,
     ProjectRecord,
     CanonProposal,
@@ -132,7 +133,12 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
-        Exempt(_) | InternalRead | WorkRecord | ButlerOutput | DeliverFiles => Allow,
+        Exempt(_)
+        | InternalRead
+        | WorkRecord
+        | ButlerOutput
+        | DeliverFiles
+        | CapabilityKind::ComputerSetup => Allow,
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
@@ -194,6 +200,7 @@ impl CapabilityKind {
             },
             Self::FileEdit
             | Self::Schedule
+            | Self::ComputerSetup
             | Self::SettingsWrite
             | Self::ProjectRecord
             | Self::CanonProposal
@@ -297,6 +304,9 @@ impl CapabilityKind {
             WriteFile | EditFile => Self::FileEdit,
             CreateAutomation | UpdateAutomation | DeleteAutomation | RunDueAutomations => {
                 Self::Schedule
+            }
+            ToolName::ComputerAdd | ToolName::ComputerEdit | ToolName::ComputerRemove => {
+                Self::ComputerSetup
             }
             SetWallpaper | SaveWallpaperModule => Self::SettingsWrite,
             StartTopicConversation => Self::CrossConversation,

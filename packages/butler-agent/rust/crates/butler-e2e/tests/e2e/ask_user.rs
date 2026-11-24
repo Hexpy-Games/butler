@@ -22,16 +22,15 @@ use butler_platform::sqlite;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> {
-    let s = Setup::new(name)?
-        .stub_cassette(stub::cassette()?)
-        .start()
-        .await?;
-    let turn = s.gw.say_turn("general", stub::PROMPT).await?;
+pub(super) async fn pending(
+    s: &Scenario,
+    turn: &str,
+    questions: Value,
+) -> Result<Value, HarnessError> {
     let parked =
         s.gw.wait_turn(
             "general",
-            &turn,
+            turn,
             &["waiting_for_form", "failed", "delivered"],
             Duration::from_secs(20),
         )
@@ -40,9 +39,9 @@ async fn pending(name: &str) -> Result<(Scenario, String, Value), HarnessError> 
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.status, 200, "{}", view.text);
     let question = view.data()["pending_questions"][0].clone();
-    assert_eq!(question["questions"], stub::questions());
-    assert_attention(&s, true).await?;
-    Ok((s, turn, question))
+    assert_eq!(question["questions"], questions);
+    assert_attention(s, true).await?;
+    Ok(question)
 }
 pub(super) fn answer() -> Value {
     json!({"status":"answered","answers":[{"id":"format","selected":["full"],"custom":null,"skipped":false}]})
@@ -86,7 +85,15 @@ async fn completed(s: &Scenario, turn: &str) -> Result<(), HarnessError> {
 #[tokio::test]
 async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, turn, q) = pending("ASK-USER").await?;
+    let (s, turn, q) = {
+        let s = Setup::new("ASK-USER")?
+            .stub_cassette(stub::cassette()?)
+            .start()
+            .await?;
+        let turn = s.gw.say_turn("general", stub::PROMPT).await?;
+        let q = pending(&s, &turn, stub::questions()).await?;
+        (s, turn, q)
+    };
     history::seed_history(&s, &q).await?;
     for _ in 0..20 {
         let view = s.gw.get("/session-view?session_id=general").await?;
@@ -153,7 +160,15 @@ async fn ask_user_answer_continues_same_turn() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn ask_user_restart_pending_keeps_question_and_queued_followup() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, turn, q) = pending("ASK-USER-RESTART").await?;
+    let (mut s, turn, q) = {
+        let s = Setup::new("ASK-USER-RESTART")?
+            .stub_cassette(stub::cassette()?)
+            .start()
+            .await?;
+        let turn = s.gw.say_turn("general", stub::PROMPT).await?;
+        let q = pending(&s, &turn, stub::questions()).await?;
+        (s, turn, q)
+    };
     // A pending question retains the active queue claim; follow-ups stay queued across shutdown.
     let queued = s.gw.post("/session-queue", json!({"chat_id":"general","text":stub::PROMPT,"client_message_id":"ask-user-followup"})).await?;
     assert_eq!(queued.status, 202, "{}", queued.text);
@@ -213,7 +228,15 @@ async fn ask_user_restart_pending_keeps_question_and_queued_followup() -> Result
 async fn ask_user_deferred_restores_and_later_answer_enters_existing_queue()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, turn, q) = pending("ASK-USER-LATER").await?;
+    let (mut s, turn, q) = {
+        let s = Setup::new("ASK-USER-LATER")?
+            .stub_cassette(stub::cassette()?)
+            .start()
+            .await?;
+        let turn = s.gw.say_turn("general", stub::PROMPT).await?;
+        let q = pending(&s, &turn, stub::questions()).await?;
+        (s, turn, q)
+    };
     reply(&s, &q, json!({"status":"deferred"})).await?;
     let done =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(20))

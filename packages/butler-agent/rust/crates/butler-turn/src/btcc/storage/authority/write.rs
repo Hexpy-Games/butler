@@ -136,6 +136,28 @@ pub(super) fn decide(
     transaction.commit().map_err(query::sql)?;
     Ok(stored)
 }
+pub(super) fn claim_question_apply(db: &Connection, request_ref: &str) -> AuthorityResult<bool> {
+    db.execute(
+        "UPDATE btcc_authority_requests SET outcome='uncertain' WHERE request_ref=?1 \
+         AND capability='ask_user' AND decision='modified' AND outcome='pending' \
+         AND json_extract(private_alternative_input,'$.status')='answered'",
+        [request_ref],
+    )
+    .map(|count| count != 0)
+    .map_err(query::sql)
+}
+
+pub(super) fn finish_question_apply(db: &Connection, request_ref: &str) -> AuthorityResult<()> {
+    db.execute(
+        "UPDATE btcc_authority_requests SET outcome='applied' WHERE request_ref=?1 \
+         AND capability='ask_user' AND decision='modified' AND outcome='uncertain' \
+         AND json_extract(private_alternative_input,'$.status')='answered'",
+        [request_ref],
+    )
+    .map(|_| ())
+    .map_err(query::sql)
+}
+
 pub(super) fn record_outcome(db: &Connection, write: &OutcomeWrite) -> AuthorityResult<()> {
     db.execute(
         "UPDATE btcc_authority_requests \
