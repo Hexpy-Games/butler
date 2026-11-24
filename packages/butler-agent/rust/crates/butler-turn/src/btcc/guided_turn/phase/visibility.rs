@@ -58,6 +58,9 @@ pub(super) fn legacy_authorized<'a>(
     authorize_schedules(&mut names, policy, scope);
     authorize_computers(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
+    if !scope.worker {
+        names.insert(ToolName::ProposePermissionRule.as_str().into());
+    }
     browser::authorize(&mut names, catalog, policy);
     image_calls(&mut names, policy);
     names.retain(|name| {
@@ -366,7 +369,7 @@ pub(super) fn legacy_visible<'a>(
             }
         }
     }
-    names.extend(["generate_image", "edit_image"]);
+    names.extend(["generate_image", "edit_image", "propose_permission_rule"]);
     if names.contains("run_command") {
         names.insert("switch_folder");
     }
@@ -380,7 +383,7 @@ pub(super) fn legacy_visible<'a>(
 pub(super) fn phase_allows(phase: GuidedPhase, tool: &GuidedCatalogTool) -> bool {
     if matches!(
         tool.name.as_str(),
-        "canon_read" | "canon_propose" | "canon_queue"
+        "canon_read" | "canon_propose" | "canon_queue" | "propose_permission_rule"
     ) {
         return true;
     }

@@ -327,6 +327,7 @@ async fn grep_and_edit_readback_refuse_credential_hard_link_content() -> Result<
     assert_eq!(result.reason, Some("sensitive_path_blocked"));
     assert!(result.matches.is_empty());
     let scope = butler_turn::workspace::EffectFileScope {
+        allowed_folders: Vec::new(),
         inventory: None,
         workspace: root.clone(),
         butler_data: s.sandbox.data.clone(),

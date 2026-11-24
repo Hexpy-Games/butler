@@ -267,11 +267,13 @@ async fn read_request(
     request: &Request,
     offset: Option<usize>,
 ) -> Result<WorkspaceFileRead, CapabilityError> {
+    let (root, path) =
+        butler_turn::workspace::contained_target(root, &request.path, input.allowed_folders);
     workspace
         .read_one(ReadFileInput {
             butler_data: input.butler_data.to_path_buf(),
             root: root.to_path_buf(),
-            path: request.path.clone(),
+            path,
             path_form: super::arguments::path_form(input),
             protected_roots: super::arguments::read_protected_roots(input),
             start_line: request.start_line,

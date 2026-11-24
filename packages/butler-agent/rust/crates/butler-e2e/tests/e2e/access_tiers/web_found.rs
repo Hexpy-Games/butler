@@ -95,7 +95,7 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
             "{card}"
         );
         assert_eq!(card["reason"], "authority.taintReason", "{card}");
-        approve(&s, "general", "deny").await?;
+        approve(&s, "general", "deny", None).await?;
     }
     delivered(&s, "general", &turn).await?;
     assert_counts(&s, &turn, 2, 0)?;

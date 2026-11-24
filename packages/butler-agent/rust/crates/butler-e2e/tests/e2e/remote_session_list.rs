@@ -117,7 +117,7 @@ async fn waiting_approval_shows_attention() -> Result<(), HarnessError> {
         }
     };
     wait_for_attention(true).await?;
-    access_tiers::approve(&d.s, &chat, "allow").await?;
+    access_tiers::approve(&d.s, &chat, "allow", None).await?;
     access_tiers::delivered(&d.s, &chat, &turn).await?;
     wait_for_attention(false).await?;
 

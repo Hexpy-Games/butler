@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 
 use butler_core::json::JsonDocument;
 use butler_runtime::context::ToolOutput;
-use butler_turn::btcc::BtccError;
+use butler_turn::btcc::{BtccError, TargetScope};
 use butler_turn::workspace::{
     Commands, GuidedAccess, GuidedCommandInput, LegacyShell, StructuredCommandInput,
     WorkspaceReference,
@@ -46,6 +46,10 @@ pub(crate) enum CommandExecution {
 
 #[derive(Clone)]
 pub(crate) struct CommandScope<'a> {
+    pub target_scope: TargetScope,
+    pub allowed_folders: Vec<PathBuf>,
+    pub extra_write_roots: Vec<PathBuf>,
+    pub protected_roots: &'a [PathBuf],
     pub workspace_reference: Option<&'a WorkspaceReference>,
     pub workspace_path: &'a Path,
     pub butler_data: &'a Path,
@@ -205,16 +209,14 @@ impl GuidedCommand {
         }
         let before = Some(self.artifact_snapshot(&scope).await?);
         let started = std::time::SystemTime::now();
-        let input = GuidedCommandInput {
-            command: command.to_owned(),
+        let input = observation_input(
+            &scope,
+            root.clone(),
+            command,
             cwd,
-            workspace_root: root.clone(),
-            butler_data: scope.butler_data.to_path_buf(),
             timeout_ms,
-            access: observation_access(scope.contained_reads),
-            host_environment: (*self.host_environment).clone(),
-            abort: scope.abort.clone(),
-        };
+            &self.host_environment,
+        );
         let spooled = self
             .commands
             .submit_guided(input)
@@ -244,6 +246,30 @@ impl GuidedCommand {
         project_write: bool,
     ) -> Result<PreparedCommandEffect, BtccError> {
         effect::prepare(self, args, scope, project_write).await
+    }
+}
+
+fn observation_input(
+    scope: &CommandScope<'_>,
+    root: PathBuf,
+    command: &str,
+    cwd: Option<String>,
+    timeout_ms: Option<f64>,
+    host_environment: &HashMap<String, String>,
+) -> GuidedCommandInput {
+    GuidedCommandInput {
+        allowed_folders: scope.allowed_folders.clone(),
+        extra_write_roots: Vec::new(),
+        protected_roots: scope.protected_roots.to_vec(),
+        installation_root: scope.installation_root.map(Path::to_path_buf),
+        command: command.to_owned(),
+        cwd,
+        workspace_root: root,
+        butler_data: scope.butler_data.to_path_buf(),
+        timeout_ms,
+        access: observation_access(scope.contained_reads),
+        host_environment: host_environment.clone(),
+        abort: scope.abort.clone(),
     }
 }
 

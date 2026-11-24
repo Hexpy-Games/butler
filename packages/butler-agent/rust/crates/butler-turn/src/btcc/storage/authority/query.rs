@@ -392,3 +392,36 @@ pub(super) fn list_all_permissions(
         .collect::<Result<Vec<_>, _>>()
         .map_err(sql)
 }
+
+pub(super) fn permission_rules(
+    db: &Connection,
+    owner: Option<Option<&str>>,
+) -> AuthorityResult<Vec<crate::btcc::PermissionRuleRow>> {
+    const ACTIVE: &str = "SELECT rule_id, effect, kind, pattern, owner_session_id, created_at
+        FROM btcc_permission_rules WHERE revoked_at IS NULL";
+    let scoped = format!("{ACTIVE} AND (owner_session_id IS NULL OR owner_session_id = ?1)");
+    let (statement, args): (_, &[&dyn ToSql]) = match &owner {
+        Some(owner) => (scoped.as_str(), &[owner]),
+        None => (ACTIVE, &[]),
+    };
+    let mut statement = db.prepare_cached(statement).map_err(sql)?;
+    let rows = statement
+        .query_map(args, |row| {
+            let effect: String = row.get(1)?;
+            let kind: String = row.get(2)?;
+            Ok(crate::btcc::PermissionRuleRow {
+                rule_id: row.get(0)?,
+                effect: if effect == "allow" { "allow" } else { "deny" },
+                kind: if kind == "folder" {
+                    "folder"
+                } else {
+                    "command_prefix"
+                },
+                pattern: row.get(3)?,
+                owner_session_id: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(sql)?;
+    rows.collect::<Result<_, _>>().map_err(sql)
+}

@@ -208,9 +208,8 @@ async fn prepare_command(
             "command must be a string",
         ));
     }
-    let cwd = resolve_guided_cwd(
-        &input.workspace_root,
-        input.cwd.as_deref(),
+    let cwd = super::guided_invocation::resolve_guided_cwd(
+        input,
         if matches!(
             input.access,
             GuidedAccess::ContainedObservation | GuidedAccess::ProjectWrite
@@ -395,20 +394,6 @@ async fn send_completion(
     if let Err(Ok(output)) = sender.send(result) {
         let _ = tokio::fs::remove_file(output.payload_source.path).await;
     }
-}
-
-pub(super) async fn resolve_guided_cwd(
-    root: &std::path::Path,
-    cwd: Option<&str>,
-    path_form: crate::workspace::PathForm,
-) -> Result<PathBuf, CommandError> {
-    let root = root.to_path_buf();
-    let cwd = cwd.map(str::to_owned);
-    tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref(), path_form))
-        .await
-        .map_err(|error| {
-            CommandError::new(CommandCode::CommandCwdFailed, error.to_string()).with_source(error)
-        })?
 }
 
 pub(super) fn guarded_directory(

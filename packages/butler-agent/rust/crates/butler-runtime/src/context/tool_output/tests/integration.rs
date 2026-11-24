@@ -82,6 +82,10 @@ async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts(
     }
     let guided = commands
         .submit_guided(GuidedCommandInput {
+            allowed_folders: Vec::new(),
+            extra_write_roots: Vec::new(),
+            protected_roots: Vec::new(),
+            installation_root: None,
             command: "printf guided".into(),
             cwd: None,
             workspace_root: fixture.root.clone(),

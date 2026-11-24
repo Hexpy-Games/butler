@@ -268,12 +268,13 @@ interface ButlerStore {
   allowAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
-    scope?: "once" | "conversation" | "site",
+    scope?: "once" | "conversation" | "site" | "always",
   ) => Promise<boolean>;
   revokeConversationPermission: (grantRef: string, sessionId?: string) => Promise<boolean>;
   denyAuthorityRequest: (
     requestRef: string,
     sessionId?: string,
+    options?: { scope: "always" },
   ) => Promise<boolean>;
   modifyAuthorityRequest: (
     requestRef: string,
@@ -805,7 +806,7 @@ function normalizedAuthorityAlternative(value: string): string | null {
 
 async function submitAuthorityDecision(input: {
   action: AuthorityDecisionAction;
-  scope?: "once" | "conversation" | "site";
+  scope?: "once" | "conversation" | "site" | "always";
   alternative?: string;
   decision: AuthorityDecisionKind;
   requestRef: string;
@@ -816,6 +817,7 @@ async function submitAuthorityDecision(input: {
     {
       method: "POST",
       ...(input.action === "allow" ? { body: JSON.stringify({ scope: input.scope ?? "once" }) } : {}),
+      ...(input.action === "deny" && input.scope === "always" ? { body: JSON.stringify({ scope: input.scope }) } : {}),
       ...(input.action === "modify"
         ? { body: JSON.stringify({ alternative: input.alternative }) }
         : {}),
@@ -1592,11 +1594,13 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
   denyAuthorityRequest: async (
     requestRef,
     sessionId = get().activeChatId,
+    options,
   ) => {
     if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
     try {
       if (!await submitAuthorityDecision({
         action: "deny",
+        scope: options?.scope,
         decision: "denied",
         requestRef,
         sessionId,

@@ -17,6 +17,12 @@ impl<'a> SqliteAuthorityRepository<'a> {
     }
 }
 impl AuthorityRepository for SqliteAuthorityRepository<'_> {
+    fn add_permission_rule(&mut self, row: &crate::btcc::PermissionRuleRow) -> AuthorityResult<()> {
+        write::add_permission_rule(self.db, row)
+    }
+    fn revoke_permission_rule(&mut self, id: &str, now: &str) -> AuthorityResult<()> {
+        write::revoke_permission_rule(self.db, id, now)
+    }
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool> {
         query::has_permission(self.db, grant_ref)
     }

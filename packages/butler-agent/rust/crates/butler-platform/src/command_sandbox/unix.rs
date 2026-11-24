@@ -59,5 +59,6 @@ pub(super) fn is_registry_path(_path: &str) -> bool {
 }
 
 pub(super) fn normalize_path_token(path: &str) -> String {
-    path.to_owned()
+    crate::tool_paths::expand_home(path, crate::user_dirs::home_dir().as_deref())
+        .unwrap_or_else(|_| path.to_owned())
 }

@@ -36,6 +36,7 @@ export interface ApprovalRequestView {
   risk: ApprovalRisk;
   /** What "Always allow in this conversation" covers. */
   conversationScope?: string;
+  ruleText?: string;
   /** Picks the icon; `other` for unknown kinds and agents without `approval`. */
   actionKind: ApprovalActionKind;
 }
@@ -115,7 +116,16 @@ function normalizeOperation(value: unknown): ApprovalSummary["operation"] {
   const targets = (Array.isArray(value.targets) ? value.targets : [])
     .filter((target): target is string => typeof target === "string" && Boolean(target.trim()));
   const browser_steps = normalizeBrowserSteps(value.browser_steps);
+  const rule_prefixes = Array.isArray(value.rule_prefixes)
+    ? value.rule_prefixes.filter((prefix): prefix is string => typeof prefix === "string" && !!prefix)
+    : [];
+  const rule = value.permission_rule;
   return { tool: value.tool, access: value.access, targets,
+    ...(rule_prefixes.length ? { rule_prefixes } : {}),
+    ...(isRecord(rule) && (rule.effect === "allow" || rule.effect === "deny")
+      && (rule.kind === "command_prefix" || rule.kind === "folder")
+      && (rule.scope === "conversation" || rule.scope === "always") && typeof rule.reason === "string"
+      ? { permission_rule: { effect: rule.effect, kind: rule.kind, scope: rule.scope, reason: rule.reason } } : {}),
     ...(normalizeImageOperation(value.image) ? { image: normalizeImageOperation(value.image) } : {}),
     ...(typeof value.browser_tab === "string" ? { browser_tab: value.browser_tab } : {}),
     ...(browser_steps ? { browser_steps } : {}),
@@ -151,6 +161,20 @@ export function approvalRequestView(
   const actionKind = knownActionKind(approval);
   const workspace = workspaceLabel(approval, copy);
   const operation = approval.operation;
+  if (operation?.tool === "propose_permission_rule" && operation.permission_rule) {
+    const { effect, kind, scope, reason } = operation.permission_rule;
+    return {
+      title: copy.proposeRule.title, risk: approval.risk ?? "medium", actionKind: "other",
+      details: [
+        ...(card.reason === "authority.taintReason" ? [copy.taintReason] : []),
+        kind === "folder" ? copy.proposeRule.folder : copy.proposeRule.effect[effect][scope],
+        { code: operation.targets[0] ?? "" },
+        reason,
+      ],
+    };
+  }
+  const ruleText = operation?.rule_prefixes?.length
+    ? appCopy.interfaceDetails.rulePrefixes(operation.rule_prefixes.join(", ")) : undefined;
   // A tool without a readable label reads as its action kind's sentence, never its internal name.
   const label = operation ? toolLabels[operation.tool] : undefined;
   return {
@@ -163,9 +187,10 @@ export function approvalRequestView(
     pathDetails: operation?.targets.map(target => chatFolderShown(target, copy.chatFolder)) ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
-    conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
+    ruleText,
+    conversationScope: ruleText ?? (approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
       : COMMAND_KINDS.has(actionKind) ? copy.covers.command(workspace)
-        : copy.covers.other,
+        : copy.covers.other),
     actionKind,
   };
 }

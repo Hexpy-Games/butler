@@ -18,6 +18,7 @@ pub(super) fn writable(s: &Setup, command: &str) -> Invocation {
         &environment(s),
         &s.sandbox.workspace,
         &[],
+        &[],
         &denied,
         None,
     )
@@ -256,6 +257,10 @@ async fn guided_sweep_uses_command_auth_profile_inventory() -> Result<(), Harnes
     host_environment.insert("PATH".into(), std::env::var("PATH").unwrap());
     let result = owner
         .submit_guided(GuidedCommandInput {
+            allowed_folders: Vec::new(),
+            extra_write_roots: Vec::new(),
+            protected_roots: Vec::new(),
+            installation_root: None,
             command: format!("ln -s '{}' src/alias", profile.join("entry").display()),
             cwd: None,
             workspace_root: root.clone(),

@@ -1147,6 +1147,13 @@ const butlerApp = Object.freeze({
     `/sessions/${encodeURIComponent(sessionId ?? "")}/pending-asks/${encodeURIComponent(askId ?? "")}/dismiss`,
     { method: "POST" },
   ),
+  getAllowedFolders: () => requestJson("/allowed-folders"),
+  addAllowedFolder: ({ path } = {}) => requestJson("/allowed-folders", {
+    method: "POST", body: JSON.stringify({ path }),
+  }),
+  removeAllowedFolder: ({ rule_id } = {}) => requestJson("/allowed-folders/remove", {
+    method: "POST", body: JSON.stringify({ rule_id }),
+  }),
   getAuthorityPermissions: () => requestJson("/authority-permissions"),
   revokeAuthorityPermissions: ({ grants } = {}) => requestJson("/authority-permissions/revoke", {
     method: "POST", body: JSON.stringify({ grants }),
@@ -1166,11 +1173,11 @@ const butlerApp = Object.freeze({
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-permissions/${encodeURIComponent(grantRef ?? "")}?${params.toString()}`, { method: "DELETE" });
   },
-  denyAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+  denyAuthorityRequest: ({ sessionId, requestRef, scope } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(
       `/authority-requests/${encodeURIComponent(requestRef ?? "")}/deny?${params.toString()}`,
-      { method: "POST" },
+      { method: "POST", ...(scope === "always" ? { body: JSON.stringify({ scope }) } : {}) },
     );
   },
   answerUserQuestions: ({ response, sessionId, requestRef } = {}) => {

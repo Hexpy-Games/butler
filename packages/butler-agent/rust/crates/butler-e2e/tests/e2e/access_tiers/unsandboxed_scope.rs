@@ -162,10 +162,10 @@ async fn matrix(effect: &str) -> Result<(), HarnessError> {
         assert_eq!(cards[0]["approval"]["operation"]["command"], form.command);
         if form.protected {
             // Literal credential paths must still be refused after Allow.
-            approve(&s, &chat, "allow").await?;
+            approve(&s, &chat, "allow", None).await?;
         } else {
             assert_eq!(cards[0]["reason"], REASON, "{}: {cards:?}", form.name);
-            approve(&s, &chat, "deny").await?;
+            approve(&s, &chat, "deny", None).await?;
         }
         delivered(&s, &chat, &turn).await?;
         let output = outputs(&s, &chat, &turn, &script, &prompt)
@@ -293,7 +293,7 @@ async fn resolved_project_commands_keep_plain_behavior() -> Result<(), HarnessEr
             let cards = s.gw.approval_requests(&chat).await?;
             assert_eq!(cards.len(), 1, "{cards:?}");
             assert_ne!(cards[0]["reason"], REASON, "{cards:?}");
-            approve(&s, &chat, "allow").await?;
+            approve(&s, &chat, "allow", None).await?;
         }
         delivered(&s, &chat, &turn).await?;
         let output = outputs(&s, &chat, &turn, &script, command)

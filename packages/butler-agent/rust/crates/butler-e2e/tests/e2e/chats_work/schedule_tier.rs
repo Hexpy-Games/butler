@@ -18,7 +18,7 @@ async fn decide(s: &Scenario, command: &str, action: &str) -> Result<(), Harness
             .iter()
             .any(|c| c["approval"]["operation"]["command"] == command)
         {
-            return crate::access_tiers::approve(s, "general", action).await;
+            return crate::access_tiers::approve(s, "general", action, None).await;
         }
         assert!(
             Instant::now() < deadline,

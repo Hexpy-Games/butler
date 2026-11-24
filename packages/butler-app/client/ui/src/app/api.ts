@@ -106,6 +106,9 @@ interface ButlerAppBridge extends PendingAsksBridge {
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
   getWorkStatus?: () => Promise<WorkStatusView>;
+  getAllowedFolders?: () => Promise<unknown>;
+  addAllowedFolder?: (input: unknown) => Promise<unknown>;
+  removeAllowedFolder?: (input: unknown) => Promise<unknown>;
   getAuthorityPermissions?: () => Promise<unknown>;
   revokeAuthorityPermissions?: (input: unknown) => Promise<unknown>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
@@ -835,6 +838,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: url.searchParams.get("session_id") ?? "general",
     });
   }
+  if (method === "GET" && url.pathname === "/allowed-folders") {
+    return await callBridge<T>(bridge, "getAllowedFolders", {});
+  }
+  if (method === "POST" && url.pathname === "/allowed-folders") {
+    return await callBridge<T>(bridge, "addAllowedFolder", parseBody(options.body));
+  }
+  if (method === "POST" && url.pathname === "/allowed-folders/remove") {
+    return await callBridge<T>(bridge, "removeAllowedFolder", parseBody(options.body));
+  }
   if (method === "GET" && url.pathname === "/authority-permissions") {
     return await callBridge<T>(bridge, "getAuthorityPermissions", {});
   }
@@ -870,6 +882,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "denyAuthorityRequest", {
       sessionId: url.searchParams.get("session_id") ?? undefined,
       requestRef: decodeURIComponent(authorityDenyMatch[1] ?? ""),
+      scope: parseBody(options.body).scope,
     });
   }
   const questionAnswerMatch = url.pathname.match(/^\/authority-requests\/([^/]+)\/answer$/u);

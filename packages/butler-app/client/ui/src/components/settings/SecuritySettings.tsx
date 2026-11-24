@@ -4,6 +4,7 @@ import { useComputersSection } from "./hooks/useComputersSection";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
+import { useAllowedFolders } from "./useAllowedFolders";
 import { useGrants } from "./useGrants";
 import { memo, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
@@ -30,6 +31,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   const savedKeys = useSavedKeys();
   const accounts = useConnectedAccounts();
   const grants = useGrants();
+  const folders = useAllowedFolders();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
@@ -56,7 +58,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           errorMessage={load === "admin-required" ? settingsCopy.security.adminRequired : undefined}
           onRetry={security.retry}
         />
-        {securityAuthoritySections({ savedKeys, grants, accounts })}
+        {securityAuthoritySections({ savedKeys, grants, accounts, folders })}
       </SettingsPage>
     );
   }
@@ -81,7 +83,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
         </>
       )}
       {computersSection({ section: computersState, savedKeys: savedKeys.credentials })}
-      {securityAuthoritySections({ savedKeys, grants, accounts })}
+      {securityAuthoritySections({ savedKeys, grants, accounts, folders })}
       {view && securityAdvancedSection({
         security, open: advancedOpen, onToggle: () => setAdvancedOpen(!advancedOpen), panelId, hintId, contentHintId,
       })}

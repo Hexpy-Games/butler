@@ -45,6 +45,10 @@ mod work;
 
 use std::sync::Arc;
 
+pub use access::rules::{
+    CommandRule, PermissionRuleRow, PermissionRules, RuleEffect, RuleVerdict, apply_allow,
+    proposal_shape, rule_verdict,
+};
 pub use access::{
     AccessDecision, AccessRequest, ApprovalExemptAction, CapabilityKind, CommandSandbox,
     DenyReason, FullOnlyAction, GrantUse, TargetScope, TurnTaint, command_access_risk,
@@ -110,6 +114,7 @@ pub use agent_loop::{
     AdmittedModelSelection, ButlerContext, EmptyResponsePolicy, ExecutionPolicy, TrackingMode,
 };
 pub use agent_loop::{nested_post_tool, nested_pre_tool};
+pub use authority::approval::command_words::segments as command_segments;
 pub use authority::approval::{
     ApprovalActionKind, ApprovalRisk, ApprovalTarget, ApprovalTargetKind, AuthorityApproval,
 };

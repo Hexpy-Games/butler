@@ -61,11 +61,13 @@ impl GuidedFileEffects {
     /// The same effects for writes that run without approval because their
     /// targets are inside the project: every guard re-checks containment,
     /// secrets and symlink escapes at the moment it touches the file.
-    pub(crate) fn contained(&self) -> Self {
+    pub(crate) fn contained(&self, allowed_folders: &[std::path::PathBuf]) -> Self {
         let mut context = self.context.clone();
         context.contained = true;
+        context.allowed_folders = allowed_folders.to_vec();
         let mut scope = self.scope.clone();
         scope.contained = true;
+        scope.allowed_folders = allowed_folders.to_vec();
         Self::new(self.capabilities.clone(), context, scope)
     }
 

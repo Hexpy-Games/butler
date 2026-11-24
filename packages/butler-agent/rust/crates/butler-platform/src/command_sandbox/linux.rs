@@ -261,11 +261,12 @@ pub(super) fn project_write(
     invocation: Invocation,
     environment: &HashMap<String, String>,
     root: &Path,
+    extra_roots: &[&Path],
     writable: &[&Path],
     denied: &[&Path],
     _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
-    if !super::project_write_available() {
+    if !extra_roots.is_empty() || !super::project_write_available() {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
     let real = crate::secure_fs::canonicalize(root)?;

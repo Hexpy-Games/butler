@@ -15,6 +15,13 @@ pub(super) fn project(stored: &Map<String, Value>, output: &mut Map<String, Valu
                 .unwrap_or(true)
         ),
     );
+    output.insert(
+        "command_sandbox_reads".into(),
+        json!(
+            command_sandbox::cached_capabilities()
+                .is_some_and(command_sandbox::SandboxCapabilities::approval_free_reads)
+        ),
+    );
     // Unknown availability stays false while the runtime warms the probe.
     // Never start or wait for a probe on the settings storage reader.
     output.insert(

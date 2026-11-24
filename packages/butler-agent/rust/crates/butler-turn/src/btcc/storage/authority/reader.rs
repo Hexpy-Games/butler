@@ -20,6 +20,12 @@ impl<'a> SqliteAuthorityReader<'a> {
     pub(crate) fn stop_confirmed(&self, turn_id: &str) -> AuthorityResult<bool> {
         query::stop_confirmed(self.db, turn_id)
     }
+    pub(crate) fn permission_rules(
+        &self,
+        owner: Option<Option<&str>>,
+    ) -> AuthorityResult<Vec<crate::btcc::PermissionRuleRow>> {
+        query::permission_rules(self.db, owner)
+    }
     pub(crate) fn list_pending(&self, owner: &str) -> AuthorityResult<Vec<AuthorityRecord>> {
         query::list_pending(self.db, owner)
     }

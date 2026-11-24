@@ -5,7 +5,6 @@ mod cursor;
 mod response;
 mod search;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -69,17 +68,7 @@ pub(super) async fn execute(
             "evidence_capability_receipts":evidence::grep_limitation("missing_pattern")}),
         );
     }
-    let query = super::cursor::query_hash(&json!({
-        "workspace_root":workspace_root,"root":options.root,"pattern":options.pattern,
-        "regex":options.regex,"case_sensitive":options.case_sensitive,
-        "include_globs":options.include,"exclude_globs":options.exclude,
-        "context_lines":options.context_lines,"max_matches":options.max_matches,
-        "max_bytes_per_file":options.max_bytes_per_file,"max_output_bytes":options.max_output_bytes,
-        "limits":{"maxResults":options.limits.max_results,"maxFiles":options.limits.max_files,
-            "maxDirs":options.limits.max_dirs,"maxDepth":options.limits.max_depth,
-            "elapsedMs":options.limits.elapsed_ms}
-    }))
-    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
+    let query = request_query(&workspace_root, &options)?;
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
@@ -92,10 +81,15 @@ pub(super) async fn execute(
         ));
     }
     let deadline = started + Duration::from_millis(options.limits.elapsed_ms);
+    let (admitted_root, requested_root) = butler_turn::workspace::contained_target(
+        std::path::Path::new(&workspace_root),
+        &options.root,
+        input.allowed_folders,
+    );
     let outcome = workspace
         .list_files(WorkspaceListInput {
-            root: PathBuf::from(&workspace_root),
-            requested_root: options.root.clone(),
+            root: admitted_root.to_path_buf(),
+            requested_root,
             path_form: super::arguments::path_form(&input),
             protected_roots: super::arguments::read_protected_roots(&input),
             include_globs: options.include.clone(),
@@ -135,7 +129,7 @@ pub(super) async fn execute(
     };
     let searched = search::execute(
         workspace,
-        arguments::read_context(&input, PathBuf::from(&workspace_root)),
+        arguments::read_context(&input, admitted_root.to_path_buf()),
         &listed,
         matcher,
         &options,
@@ -155,4 +149,18 @@ pub(super) async fn execute(
 
 pub(super) fn utf8_prefix_end(text: &str, max_bytes: usize) -> usize {
     butler_turn::workspace::utf8_prefix_end(text, max_bytes)
+}
+
+fn request_query(workspace_root: &str, options: &args::Options) -> Result<String, CapabilityError> {
+    super::cursor::query_hash(&json!({
+        "workspace_root":workspace_root,"root":options.root,"pattern":options.pattern,
+        "regex":options.regex,"case_sensitive":options.case_sensitive,
+        "include_globs":options.include,"exclude_globs":options.exclude,
+        "context_lines":options.context_lines,"max_matches":options.max_matches,
+        "max_bytes_per_file":options.max_bytes_per_file,"max_output_bytes":options.max_output_bytes,
+        "limits":{"maxResults":options.limits.max_results,"maxFiles":options.limits.max_files,
+            "maxDirs":options.limits.max_dirs,"maxDepth":options.limits.max_depth,
+            "elapsedMs":options.limits.elapsed_ms}
+    }))
+    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))
 }
