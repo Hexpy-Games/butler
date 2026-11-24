@@ -74,10 +74,9 @@ impl RecordReader {
     }
 }
 
-#[derive(Clone, Copy, Default, Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Target {
-    #[default]
     Api,
     Content,
 }
@@ -88,7 +87,6 @@ struct RequestHead {
     v: u8,
     ts: u64,
     rid: String,
-    #[serde(default)]
     target: Target,
     method: String,
     path: String,

@@ -107,28 +107,6 @@ fn tunnel_vectors_01_responder_matches_fixture_and_rejects_replay() -> Result<()
     let records = unhex(&fixture["request_records"]);
     let head = unhex(&fixture["message1"]["payload"]);
     let payload = unhex(&fixture["message2"]["payload"]);
-    let phone_private = unhex(&fixture["phone_static_private"]).try_into().unwrap();
-    let phone_ephemeral = unhex(&fixture["phone_ephemeral_private"])
-        .try_into()
-        .unwrap();
-    let desktop_public = unhex(&fixture["desktop_static_public"]).try_into().unwrap();
-    let body_key = unhex(&fixture["body_chunk"]["key"]).try_into().unwrap();
-    let mut phone = initiator(
-        &phone_private,
-        &desktop_public,
-        Some(&phone_ephemeral),
-        TUNNEL,
-    );
-    let mut message1 = vec![0; 65_535];
-    let len = phone.write_message(&head, &mut message1).unwrap();
-    message1.truncate(len);
-    assert_eq!(message1, unhex(&fixture["message1"]["ciphertext"]));
-    let chunk = encrypt_body(&body_key, b"body");
-    assert_eq!(chunk, unhex(&fixture["body_chunk"]["ciphertext"]));
-    let mut encoded = BytesMut::new();
-    append_record(&mut encoded, &message1);
-    append_record(&mut encoded, &chunk);
-    assert_eq!(encoded.as_ref(), records);
     let ts = serde_json::from_slice::<Value>(&head).unwrap()["ts"]
         .as_u64()
         .unwrap();

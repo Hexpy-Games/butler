@@ -22,19 +22,12 @@ pub(super) struct Phone([u8; 32]);
 #[derive(Deserialize)]
 pub(super) struct Reply {
     pub(super) status: u16,
-    #[allow(
-        dead_code,
-        reason = "Return the complete response head to the scenario"
-    )]
-    pub(super) headers: BTreeMap<String, String>,
     #[serde(skip)]
     pub(super) body: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub(super) struct Reset(
-    #[allow(dead_code, reason = "A relay RESET returns its wire reason")] pub(super) u8,
-);
+pub(super) struct Reset;
 
 impl Phone {
     pub(super) fn new() -> Self {
@@ -118,7 +111,7 @@ impl Phone {
                                 .unwrap();
                         }
                         3 => break,
-                        4 => return Err(Reset(bytes.get_u8())),
+                        4 => return Err(Reset),
                         _ => panic!("unexpected frame type {kind}"),
                     }
                 }

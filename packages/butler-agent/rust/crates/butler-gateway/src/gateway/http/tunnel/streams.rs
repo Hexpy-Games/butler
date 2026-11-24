@@ -147,14 +147,6 @@ impl Streams {
             frames::RESET => self.remove(id),
             frames::WINDOW => {
                 let credit = payload.get_u32() as usize;
-                if credit > CREDIT.saturating_sub(entry.credit.available_permits()) {
-                    self.remove(id);
-                    return Some(frames::message(
-                        frames::RESET,
-                        id,
-                        &[frames::FLOW_VIOLATION],
-                    ));
-                }
                 entry.credit.add_permits(credit);
             }
             _ => (),

@@ -2,7 +2,6 @@ use std::{sync::Arc, time::Duration};
 
 use butler_log::http::{Connection, ConnectionStream, Purpose};
 use futures_util::{SinkExt as _, StreamExt as _};
-use serde_json::Value;
 use tokio::{
     sync::{mpsc, oneshot, watch},
     time::{Instant, MissedTickBehavior},
@@ -86,6 +85,10 @@ pub(super) async fn run(
     let key = Arc::new(key);
     let mut wake = butler_platform::system_wake::wake_events();
     let mut backoff = INITIAL_BACKOFF;
+    let tls = tokio::task::spawn_blocking(tls_connector)
+        .await
+        .ok()
+        .and_then(Result::ok);
     let stopped = loop {
         tunnel.transition(&session, TunnelState::Connecting);
         let account = tokio::select! {
@@ -104,7 +107,7 @@ pub(super) async fn run(
                     }
                     break None;
                 }
-                result = tokio::time::timeout(CONNECT_TIMEOUT, connect(&account)) => result.unwrap_or(Ok(None)),
+                result = tokio::time::timeout(CONNECT_TIMEOUT, connect(&account, tls.as_ref())) => result.unwrap_or(Ok(None)),
             },
             Ok(None) => break Some(Stop::SignedOut),
             Err(_) => Ok(None),
@@ -158,8 +161,20 @@ fn settle(first: &mut Option<FirstAttempt>, result: Result<(), HttpError>) {
     }
 }
 
-async fn connect(account: &TunnelAccount) -> Result<Option<Socket>, Stop> {
-    async fn attempt(account: &TunnelAccount) -> Result<Socket, Error> {
+fn tls_connector() -> Result<Connector, std::io::Error> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+    let provider = rustls::crypto::ring::default_provider();
+    let config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_safe_default_protocol_versions()
+        .map_err(std::io::Error::other)?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(Connector::Rustls(Arc::new(config)))
+}
+
+async fn connect(account: &TunnelAccount, tls: Option<&Connector>) -> Result<Option<Socket>, Stop> {
+    async fn attempt(account: &TunnelAccount, tls: Option<&Connector>) -> Result<Socket, Error> {
         let invalid_url = || std::io::Error::from(std::io::ErrorKind::InvalidInput);
         let url = format!("{}/v1/tunnel/connect", account.base_url);
         let mut url = url::Url::parse(&url).map_err(|_| invalid_url())?;
@@ -187,19 +202,8 @@ async fn connect(account: &TunnelAccount) -> Result<Option<Socket>, Stop> {
             .max_frame_size(limit);
         let tls = if scheme == "wss" {
             Some(
-                tokio::task::spawn_blocking(|| {
-                    let mut roots = rustls::RootCertStore::empty();
-                    roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
-                    let provider = rustls::crypto::ring::default_provider();
-                    let config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
-                        .with_safe_default_protocol_versions()
-                        .map_err(std::io::Error::other)?
-                        .with_root_certificates(roots)
-                        .with_no_client_auth();
-                    Ok::<_, std::io::Error>(Connector::Rustls(Arc::new(config)))
-                })
-                .await
-                .map_err(std::io::Error::other)??,
+                tls.cloned()
+                    .ok_or_else(|| std::io::Error::other("TLS connector unavailable"))?,
             )
         } else {
             None
@@ -213,21 +217,14 @@ async fn connect(account: &TunnelAccount) -> Result<Option<Socket>, Stop> {
         upgraded.map(|(socket, _)| socket)
     }
 
-    let stop = match attempt(account).await {
+    let stop = match attempt(account, tls).await {
         Ok(socket) => return Ok(Some(socket)),
-        Err(Error::Http(response)) => {
-            let body: Value = response
-                .body()
-                .as_deref()
-                .and_then(|bytes| serde_json::from_slice(bytes).ok())
-                .unwrap_or_default();
-            match (response.status().as_u16(), body["error"]["code"].as_str()) {
-                (401, _) => Some(Stop::Unauthorized),
-                (403, Some("tunnel_not_in_plan")) => Some(Stop::NotInPlan),
-                (404, Some("tunnel_not_found")) => Some(Stop::NotFound),
-                _ => None,
-            }
-        }
+        Err(Error::Http(response)) => match response.status().as_u16() {
+            401 => Some(Stop::Unauthorized),
+            403 => Some(Stop::NotInPlan),
+            404 => Some(Stop::NotFound),
+            _ => None,
+        },
         Err(_) => None,
     };
     stop.map_or(Ok(None), Err)
