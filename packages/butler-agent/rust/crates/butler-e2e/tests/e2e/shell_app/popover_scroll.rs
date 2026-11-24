@@ -28,7 +28,8 @@ pub(super) async fn layout(
     shell.report(&format!("{name}.layout"))
 }
 
-/// A message row that intersects the transcript's viewport, to follow while the list may scroll.
+/// The message row nearest the transcript viewport's centre among those that intersect it, to
+/// follow while the list may scroll.
 fn visible_message(layout: &Value) -> String {
     let top = anchor_field(layout, "chat-transcript", "y").expect("transcript");
     let height = anchor_field(layout, "chat-transcript", "h").expect("transcript");
@@ -37,13 +38,19 @@ fn visible_message(layout: &Value) -> String {
         .expect("layout")
         .iter()
         .filter_map(|item| item["anchor"].as_str())
-        .find(|anchor| {
-            anchor.starts_with("message-")
-                && anchor_y(layout, anchor).is_some_and(|y| {
-                    y < top + height
-                        && anchor_field(layout, anchor, "h").is_some_and(|h| y + h > top)
-                })
+        .filter_map(|anchor| {
+            if !anchor.starts_with("message-") {
+                return None;
+            }
+            let y = anchor_y(layout, anchor)?;
+            let h = anchor_field(layout, anchor, "h")?;
+            (y < top + height && y + h > top).then(|| {
+                let distance = (y + h / 2. - (top + height / 2.)).abs();
+                (anchor, distance)
+            })
         })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(anchor, _)| anchor)
         .expect("a message in view")
         .to_owned()
 }
