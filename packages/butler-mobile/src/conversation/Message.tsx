@@ -1,8 +1,8 @@
 import { MessageResults } from "@/outputs/MessageResults";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import type { ConversationMessage, ProgressSummaryRow, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, ProgressSummaryRow, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectionScope, useTokens } from "@/ds";
@@ -46,9 +46,9 @@ export function UserMessage({ message, children, selectable }: {
   </View>;
 }
 
-export function Message({ message, latestTurn, sessionId, projectId, stewardChild, liveRows }: {
+export const Message = memo(function Message({ message, retryable, sessionId, projectId, stewardChild, liveRows }: {
   stewardChild?: { child: StewardChild; turn: SessionViewTurn };
-  message: ConversationMessage; latestTurn?: SessionView["latest_turn"]; sessionId?: string; projectId?: string;
+  message: ConversationMessage; retryable?: boolean; sessionId?: string; projectId?: string;
   liveRows?: ProgressSummaryRow[];
 }) {
   const copy = useMobileCopy();
@@ -74,9 +74,9 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
     {stewardChild ? <StewardCard child={stewardChild.child} /> : null}
     {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
       sessionId={sessionId} projectId={projectId}
-      retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
+      retryable={failed && retryable} /> : null}
   </View>;
-}
+});
 
 function MessageInfo({ message, retryable, sessionId, projectId }: {
   message: ConversationMessage; retryable?: boolean; sessionId?: string; projectId?: string;

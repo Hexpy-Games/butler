@@ -1,9 +1,11 @@
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { getAppCopy } from "../../../../butler-i18n/src/index.ts";
 import { compactTokens } from "../../../../butler-app/client/ui/src/components/usage/compactTokens.ts";
-import { Text, useTokens } from "@/ds";
+import { ListGroup, ListRow, Text, useTokens } from "@/ds";
 import { useAppLocale } from "@/i18n";
 import { usageTime, type QuotaSummary } from "./usageView";
+
+const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 
 export function PlanUsage({ summary }: { summary: QuotaSummary }) {
   const t = useTokens();
@@ -38,6 +40,7 @@ export function PlanUsage({ summary }: { summary: QuotaSummary }) {
           <Text variant="caption" numeric="tabular">{`${total === undefined ? "—" : compactTokens(total, locale)} ${copy.composer.usage.tokens}`}</Text>
         </View>;
       })}
+      <ListGroup><ListRow title={copy.chatgptPlan.manageUsage} accent onPress={() => { void Linking.openURL(CHATGPT_USAGE_URL); }} /></ListGroup>
     </> : null}
   </View>;
 }

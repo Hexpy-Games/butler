@@ -7,6 +7,7 @@ import type { Pairing } from "@/connection/pairings";
 import { pairingStore } from "@/connection/store";
 import { showToast } from "@/ds";
 import { useMobileCopy } from "@/i18n";
+import { clearSessionViews } from "./sessionViewCache";
 
 interface ConversationContext {
   connect(pairing: Pairing): void;
@@ -42,7 +43,10 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     setPairing(null);
     setClient(null);
     try {
-      if (current) await pairingStore.clear(current.butlerId);
+      if (current) {
+        await pairingStore.clear(current.butlerId);
+        clearSessionViews();
+      }
     } finally {
       if (router.canDismiss()) router.dismissAll();
       router.replace("/pair");
