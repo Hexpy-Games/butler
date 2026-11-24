@@ -169,7 +169,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             &workspace_label(facts.workspace),
             ApprovalRisk::Low,
         ),
-        "propose_permission_rule" => single(
+        "propose_permission_rule" | "browser_open" | "browser_read" => single(
             ApprovalActionKind::Other,
             ApprovalTargetKind::Other,
             facts.target,
@@ -179,12 +179,6 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalActionKind::SwitchFolder,
             ApprovalTargetKind::Outside,
             facts.target.strip_prefix("folder:").unwrap_or(facts.target),
-            ApprovalRisk::Medium,
-        ),
-        "browser_open" | "browser_read" => single(
-            ApprovalActionKind::Other,
-            ApprovalTargetKind::Other,
-            facts.target,
             ApprovalRisk::Medium,
         ),
         "browser_act" | "browser_close" => single(

@@ -171,11 +171,12 @@ pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {
     let first = matches!(mode, AccessMode::AskExceptReads | AccessMode::Auto);
     match kind {
         CapabilityKind::FileRead => first,
-        CapabilityKind::CommandObservation { sandboxed: true } => *mode != AccessMode::FullAccess,
+        CapabilityKind::CommandObservation { sandboxed: true } | CapabilityKind::FolderSwitch => {
+            *mode != AccessMode::FullAccess
+        }
         CapabilityKind::CommandObservation { sandboxed: false }
         | CapabilityKind::CommandMutation { .. } => first || *mode == AccessMode::ReadOnly,
         CapabilityKind::FileEdit => *mode == AccessMode::Auto,
-        CapabilityKind::FolderSwitch => *mode != AccessMode::FullAccess,
         _ => false,
     }
 }

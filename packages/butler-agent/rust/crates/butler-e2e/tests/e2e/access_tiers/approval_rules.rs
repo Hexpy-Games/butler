@@ -18,10 +18,10 @@ async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessErro
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let parent = setup.sandbox.home.join("project");
     std::fs::create_dir_all(&parent)?;
-    let mut s = setup.start().await?;
-    let chat = crate::project_workspace::bind_project(&mut s, &parent).await?;
+    let mut scenario = setup.start().await?;
+    let chat = crate::project_workspace::bind_project(&mut scenario, &parent).await?;
     let project = parent.join("작업 Project");
-    let navigation = s.gw.get("/navigation").await?;
+    let navigation = scenario.gw.get("/navigation").await?;
     let project_id = navigation.data()["projects"]
         .as_array()
         .unwrap()
@@ -54,23 +54,24 @@ async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessErro
             )],
         );
     }
-    let a = paused(&s, &chat, "Stage file a.").await?;
-    let cards = s.gw.approval_requests(&chat).await?;
+    let first_turn = paused(&scenario, &chat, "Stage file a.").await?;
+    let cards = scenario.gw.approval_requests(&chat).await?;
     assert_eq!(
         cards[0]["approval"]["operation"]["rule_prefixes"],
         json!(["git add"])
     );
-    approve(&s, &chat, "allow", Some("conversation")).await?;
-    delivered(&s, &chat, &a).await?;
-    let b = s.gw.say_turn(&chat, "Stage file b.").await?;
-    delivered(&s, &chat, &b).await?;
-    assert_counts(&s, &b, 0, 0)?;
+    approve(&scenario, &chat, "allow", Some("conversation")).await?;
+    delivered(&scenario, &chat, &first_turn).await?;
+    let conversation_turn = scenario.gw.say_turn(&chat, "Stage file b.").await?;
+    delivered(&scenario, &chat, &conversation_turn).await?;
+    assert_counts(&scenario, &conversation_turn, 0, 0)?;
     assert!(project.join(".git/index").is_file());
 
     let mut chats = Vec::new();
     for title in ["Second chat", "Third chat"] {
-        let reply =
-            s.gw.post(
+        let reply = scenario
+            .gw
+            .post(
                 "/sessions",
                 json!({"kind":"project","project_id":project_id,
             "workspace_mode":"local","title":title}),
@@ -79,13 +80,13 @@ async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessErro
         assert_eq!(reply.status, 201, "{}", reply.text);
         chats.push(reply.data()["session"]["id"].as_str().unwrap().to_owned());
     }
-    let c = paused(&s, &chats[0], "Stage file c.").await?;
-    approve(&s, &chats[0], "allow", Some("always")).await?;
-    delivered(&s, &chats[0], &c).await?;
-    let d = s.gw.say_turn(&chats[1], "Stage file d.").await?;
-    delivered(&s, &chats[1], &d).await?;
-    assert_counts(&s, &d, 0, 0)?;
-    let listed = s.gw.get("/authority-permissions").await?;
+    let approval_turn = paused(&scenario, &chats[0], "Stage file c.").await?;
+    approve(&scenario, &chats[0], "allow", Some("always")).await?;
+    delivered(&scenario, &chats[0], &approval_turn).await?;
+    let always_turn = scenario.gw.say_turn(&chats[1], "Stage file d.").await?;
+    delivered(&scenario, &chats[1], &always_turn).await?;
+    assert_counts(&scenario, &always_turn, 0, 0)?;
+    let listed = scenario.gw.get("/authority-permissions").await?;
     let listed = listed.data();
     let saved = listed["permissions"]
         .as_array()
@@ -93,15 +94,16 @@ async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessErro
         .iter()
         .find(|row| row["target"] == "git add" && row["scope"] == "always")
         .unwrap();
-    let revoked =
-        s.gw.post(
+    let revoked = scenario
+        .gw
+        .post(
             "/authority-permissions/revoke",
             json!({"grants":[{"grant_ref":saved["grant_ref"],"session_id":saved["session_id"]}]}),
         )
         .await?;
     assert_eq!(revoked.status, 200, "{}", revoked.text);
-    paused(&s, &chats[1], "Stage file e.").await?;
-    s.finish().await?;
+    paused(&scenario, &chats[1], "Stage file e.").await?;
+    scenario.finish().await?;
     server.abort();
     Ok(())
 }

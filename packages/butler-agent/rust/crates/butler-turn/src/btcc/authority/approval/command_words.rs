@@ -133,7 +133,7 @@ fn word(rest: &str) -> Option<(Word, &str)> {
                 && offset == 1
                 && home =>
             {
-                word.text.push(ch)
+                word.text.push(ch);
             }
             None if "$`\\(){}<>!%^@~#".contains(ch) => return None,
             None => {
@@ -278,7 +278,7 @@ pub(in crate::btcc) fn rule_prefix(words: &[String]) -> Option<Vec<String>> {
         return None;
     }
     let mut prefix = vec![name];
-    match prefix[0].as_str() {
+    match prefix.first()?.as_str() {
         "git" | "npm" | "pnpm" | "yarn" | "bun" | "cargo" | "go" | "docker" | "kubectl" | "gh"
         | "dotnet" | "brew" | "pip" | "pip3" | "uv" | "poetry" | "make" | "terraform" => {
             let sub = words.get(1)?.as_str();
@@ -326,7 +326,7 @@ pub(in crate::btcc) fn normalize_prefix(text: &str) -> Option<Vec<String>> {
         .any(|word| word.is_empty() || word.chars().any(char::is_whitespace))
         || rule_prefix(&prefix).as_ref() != Some(&prefix)
         || !segments(&prefix.join(" ")).is_some_and(|segments| {
-            segments.len() == 1 && segments[0].iter().map(|word| &word.text).eq(&prefix)
+            matches!(segments.as_slice(), [words] if words.iter().map(|word| &word.text).eq(&prefix))
         })
     {
         return None;
