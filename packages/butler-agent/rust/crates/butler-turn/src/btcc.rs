@@ -12,8 +12,8 @@ mod capability_handoff;
 mod thinking;
 mod tool_arguments;
 pub use authority::questions::{
-    AnsweredQuestion, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
-    UserQuestionAnswer, UserQuestionResponse, UserQuestions,
+    AnsweredQuestion, OptionKind, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
+    UserQuestionAnswer, UserQuestionResponse, UserQuestions, question_request_ref,
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 pub use thinking::set_capture as set_thinking_capture;

@@ -389,13 +389,7 @@ fn suspended(turn: &TurnRecord, reason: SuspensionReason) -> TurnOutcome {
     let question = turn
         .authority_continuation
         .as_ref()
-        .is_some_and(|continuation| {
-            continuation
-                .batch
-                .calls
-                .get(continuation.batch.next_call_index)
-                .is_some_and(|call| call.name == "ask_user")
-        });
+        .is_some_and(|continuation| continuation.request_ref.starts_with("question-ref-"));
     TurnOutcome {
         result: TurnOutcomeKind::Suspended {
             turn_id: turn.turn_id.clone(),

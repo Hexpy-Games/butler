@@ -22,6 +22,7 @@ pub enum CapabilityKind {
     Connector,
     FileEdit,
     Schedule,
+    ComputerSetup,
     SettingsWrite,
     ProjectRecord,
     CanonProposal,
@@ -92,8 +93,8 @@ pub enum AccessDecision {
 pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     use AccessDecision::{Allow, Ask, Deny};
     use CapabilityKind::{
-        ButlerOutput, CommandMutation, CommandObservation, Connector, DeliverFiles, Exempt,
-        FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
+        ButlerOutput, CommandMutation, CommandObservation, ComputerSetup, Connector, DeliverFiles,
+        Exempt, FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, ProjectRecord,
         WorkRecord,
     };
     if request.taint == TurnTaint::ConnectorEvent
@@ -135,7 +136,9 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     let auto = *mode == AccessMode::Auto;
     let first = auto || *mode == AccessMode::AskExceptReads;
     match request.kind {
-        Exempt(_) | InternalRead | WorkRecord | ButlerOutput | DeliverFiles => Allow,
+        Exempt(_) | InternalRead | WorkRecord | ButlerOutput | DeliverFiles | ComputerSetup => {
+            Allow
+        }
         CommandMutation {
             sandbox: CommandSandbox::Disabled,
         } if auto => Ask(GrantUse::Honor),
@@ -198,6 +201,7 @@ impl CapabilityKind {
             },
             Self::FileEdit
             | Self::Schedule
+            | Self::ComputerSetup
             | Self::SettingsWrite
             | Self::ProjectRecord
             | Self::CanonProposal
@@ -301,6 +305,9 @@ impl CapabilityKind {
             WriteFile | EditFile => Self::FileEdit,
             CreateAutomation | UpdateAutomation | DeleteAutomation | RunDueAutomations => {
                 Self::Schedule
+            }
+            ToolName::ComputerAdd | ToolName::ComputerEdit | ToolName::ComputerRemove => {
+                Self::ComputerSetup
             }
             SetWallpaper | SaveWallpaperModule | ToolName::ProposePermissionRule => {
                 Self::SettingsWrite

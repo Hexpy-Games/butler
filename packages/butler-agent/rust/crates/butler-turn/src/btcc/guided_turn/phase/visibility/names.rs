@@ -11,6 +11,10 @@ pub(super) const DISCOVERY: &[&str] = &[
     "list_files",
 ];
 pub(super) const NON_FULL: &[&str] = &[
+    "computer_list",
+    "computer_add",
+    "computer_edit",
+    "computer_remove",
     "connector_fetch",
     "connector_rule_list",
     "connector_rule_remove",
@@ -82,6 +86,9 @@ pub(super) const SCHEDULE_WRITES: &[&str] = &[
     "delete_automation",
 ];
 pub(super) const ASK_FIRST_WRITES: &[&str] = &[
+    "computer_add",
+    "computer_edit",
+    "computer_remove",
     "output_publish",
     "library_organize",
     "document_create",

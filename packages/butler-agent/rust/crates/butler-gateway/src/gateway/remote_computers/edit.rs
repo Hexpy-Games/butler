@@ -61,7 +61,10 @@ pub(in crate::gateway) async fn edit(
             root,
             &format!("/computers/{id}"),
             version,
-            ModelInput { model_source },
+            ModelInput {
+                model_source,
+                open_sign_in: input.open_sign_in,
+            },
             cancel,
         )
         .await

@@ -189,6 +189,7 @@ fn text(s: &str, max: usize) -> bool {
 
 /// The exact tool occurrence asking the owner, independent of Work/Plan permissions.
 pub struct QuestionBinding {
+    pub executable: Option<String>,
     pub owner_session_id: String,
     pub source_session_id: String,
     pub turn_id: String,
@@ -196,6 +197,13 @@ pub struct QuestionBinding {
     pub model_ref: String,
     pub reasoning_effort: String,
 }
+pub fn question_request_ref(turn_id: &str, call_id: &str) -> String {
+    format!("question-ref-{}", question_digest(turn_id, call_id))
+}
+fn question_digest(turn_id: &str, call_id: &str) -> String {
+    identity::digest(&format!("ask_user\0{turn_id}\0{call_id}"))
+}
+
 impl PrincipalAuthority {
     pub async fn ask_user(
         &self,
@@ -216,10 +224,7 @@ impl PrincipalAuthority {
         let collation = self.collation.clone();
         let now = (self.clock)();
         self.in_lane(move |repo| {
-            let sha = identity::digest(&format!(
-                "ask_user\0{}\0{}",
-                binding.turn_id, binding.call_id
-            ));
+            let sha = question_digest(&binding.turn_id, &binding.call_id);
             if let Some(record) = repo.find_identity(&sha)? {
                 if record.owner_session_id != binding.owner_session_id
                     || record.source_session_id != binding.source_session_id
@@ -285,7 +290,7 @@ fn question_record(
         // Preserve the deployed table CHECK; the capability identifies the question subtype.
         category: "reviewed_effect".into(),
         reason: "Answer questions".into(),
-        executable: "ask_user".into(),
+        executable: b.executable.unwrap_or_else(|| "ask_user".into()),
         command_count: 1,
         decision: RequestDecision::Pending,
         allow_scope: "once".into(),

@@ -7,6 +7,7 @@ impl GuidedTools {
     pub(crate) fn supports(name: &str) -> bool {
         connector(name)
             || canon(name)
+            || super::computers::supports(name)
             || name == ToolName::ProposePermissionRule
             || builtin(name)
             || documents::supports(name)

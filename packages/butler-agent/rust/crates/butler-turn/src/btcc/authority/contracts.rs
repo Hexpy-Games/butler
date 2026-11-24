@@ -207,7 +207,7 @@ pub struct AuthorityStoredExecution {
     pub decision: RequestDecision,
     pub allow_scope: String,
     pub(crate) alternative_input: Option<String>,
-    pub(crate) outcome: RequestOutcome,
+    pub outcome: RequestOutcome,
     // Passthrough: tool/effect receipts, shaped by the capability.
     pub(crate) outcome_receipt: Option<Value>,
 }
@@ -478,6 +478,8 @@ pub(crate) trait AuthorityRepository {
         response: &str,
         now: &str,
     ) -> AuthorityResult<()>;
+    fn claim_question_apply(&mut self, request_ref: &str) -> AuthorityResult<bool>;
+    fn finish_question_apply(&mut self, request_ref: &str) -> AuthorityResult<()>;
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()>;
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize>;
 }

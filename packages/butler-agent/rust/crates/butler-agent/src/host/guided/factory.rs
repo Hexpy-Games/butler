@@ -77,6 +77,17 @@ impl GuidedTurnFactoryAdapter {
         ))
     }
 
+    fn effect_service(&self) -> Arc<butler_turn::btcc::EffectService> {
+        Arc::new(butler_turn::btcc::EffectService::new(
+            self.effects.clone(),
+            Arc::new(|| {
+                butler_models::models::ModelConfigurationClock::now_iso(
+                    &crate::host::SystemIdentity,
+                )
+            }),
+        ))
+    }
+
     async fn prepare(
         &self,
         start: &GuidedTurnStart<'_>,
@@ -209,14 +220,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.capabilities.clone(),
                 self.command.clone(),
                 self.tool_artifacts.clone(),
-                Arc::new(butler_turn::btcc::EffectService::new(
-                    self.effects.clone(),
-                    Arc::new(|| {
-                        butler_models::models::ModelConfigurationClock::now_iso(
-                            &crate::host::SystemIdentity,
-                        )
-                    }),
-                )),
+                self.effect_service(),
                 self.effects.clone(),
                 self.preparation.authority.clone(),
                 self.file_effects(&workspace, &phase),
@@ -242,6 +246,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 self.app_endpoint.clone(),
                 semantic.authority.as_ref(),
                 GuidedToolBinding {
+                    response_language: language.clone(),
                     permission_config: self.permission_config().await,
                     turn_id: start.turn.turn_id.clone(),
                     open_asks: open_asks.clone(),
