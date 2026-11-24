@@ -81,7 +81,7 @@ pub(super) fn known_name(lang: Lang, card: &CardId) -> Option<&'static str> {
     })
 }
 
-/// firstRun.providerDescriptions
+/// A card's description: its own words when its key is a different kind (or a top pick), otherwise the plain API key label.
 pub(super) fn description(lang: Lang, card: &CardId) -> &'static str {
     match card {
         CardId::Chatgpt => match lang {
@@ -101,29 +101,9 @@ pub(super) fn description(lang: Lang, card: &CardId) -> &'static str {
                 Lang::Ko => "Google AI Studio 키로 연결",
                 Lang::En => "Use a Google AI Studio key",
             },
-            "openai" => match lang {
-                Lang::Ko => "OpenAI API 키",
-                Lang::En => "OpenAI API key",
-            },
-            "xai" => match lang {
-                Lang::Ko => "xAI API 키",
-                Lang::En => "xAI API key",
-            },
-            "qwen" => match lang {
-                Lang::Ko => "Qwen Cloud API 키",
-                Lang::En => "Qwen Cloud API key",
-            },
-            "kimi" => match lang {
-                Lang::Ko => "Moonshot API 키",
-                Lang::En => "Moonshot API key",
-            },
             "zai" => match lang {
                 Lang::Ko => "코딩 플랜 키",
                 Lang::En => "Coding Plan key",
-            },
-            "zai-api" => match lang {
-                Lang::Ko => "Z.AI API 키",
-                Lang::En => "Z.AI API key",
             },
             "opencode-go" => match lang {
                 Lang::Ko => "OpenCode Go 키",
