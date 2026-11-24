@@ -13,6 +13,7 @@ import { QuestionAnswerCard, QuestionCard } from "./QuestionCard";
 import { SessionInfoSheet } from "./SessionInfoSheet";
 import { SESSION_PAGE, useSessionView } from "./useSessionView";
 import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { NewChatIntro } from "./NewChatIntro";
 import { Message, UserMessage } from "./Message";
 import { useSessionQueue } from "./useSessionQueue";
@@ -45,6 +46,11 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const [dockHeight, setDockHeight] = useState(0);
   const [keyboard, setKeyboard] = useState(0);
   const [atEnd, setAtEnd] = useState(true);
+  const [latest, setLatest] = useState("");
+  const [unread, setUnread] = useState(false);
+  const [jumps, setJumps] = useState(0);
+  useEffect(() => { if (atEnd) setUnread(false); }, [atEnd]);
+  useEffect(() => { if (!atEnd && latest) setUnread(true); }, [latest]);
   const [sends, setSends] = useState(0);
   const decision = view ? pendingDecision(view) : null;
   const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
@@ -61,7 +67,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
       setText={setText} onSend={value => { void composer.current?.send(value); }} />
-      : <ConversationMessages {...session} dockHeight={dockHeight} keyboard={keyboard} sends={sends} onAtEndChange={setAtEnd}>{anchors => <>
+      : <ConversationMessages {...session} dockHeight={dockHeight} keyboard={keyboard} sends={sends} jumps={jumps} onAtEndChange={setAtEnd} onLatestChange={setLatest}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -72,14 +78,16 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh}
       onHeightChange={(height, covered) => { setDockHeight(height); setKeyboard(covered); }}
-      onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }} />
+      onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }}
+      accessory={<ScrollToBottomButton visible={!atEnd && latest !== ""} unread={unread}
+        onPress={() => { setUnread(false); setJumps(value => value + 1); }} />} />
   </Surface>;
 }
 
-function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, keyboard, sends, onAtEndChange, children }: {
+function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, keyboard, sends, jumps, onAtEndChange, onLatestChange, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
-  dockHeight: number; keyboard: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
-  onAtEndChange(atEnd: boolean): void;
+  dockHeight: number; keyboard: number; sends: number; jumps: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  onAtEndChange(atEnd: boolean): void; onLatestChange(latest: string): void;
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -104,6 +112,8 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
       || (view?.session_id !== "general" && (!!message.turn_activity_rows?.length || (message.status !== "streaming" && !!message.work_blocks?.length))))));
   useEffect(() => { atBottom.current = true; onAtEndChange(true); }, [sends, onAtEndChange]);
+  useLatestRow(rows, onLatestChange);
+  useEffect(() => { if (!jumps) return; atBottom.current = true; list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }); }, [jumps]);
   useEffect(() => {
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
@@ -164,6 +174,13 @@ function PendingRequest({ decision, view, reload }: { decision: PendingDecision;
 type ScrollMetrics = { contentSize: { height: number }; layoutMeasurement: { height: number }; contentOffset: { y: number } };
 const nearEnd = ({ contentSize, layoutMeasurement, contentOffset }: ScrollMetrics) =>
   contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
+
+/** Reports the last row's version ("" with no rows or once the list unmounts); it changes when a row is added or the last row grows (desktop latestMessageVersion). */
+function useLatestRow(rows: ConversationRow[], report: (latest: string) => void) {
+  const last = rows.at(-1);
+  const latest = !last ? "" : "questionAnswer" in last ? last.id : `${last.id}:${last.status ?? ""}:${last.text.length}`;
+  useEffect(() => { report(latest); return () => report(""); }, [latest, report]);
+}
 
 function TurnStatus({ view, hasDecision, anchors }: {
   view: SessionView; hasDecision: boolean; anchors: ReturnType<typeof anchoredStewardChildren>;
