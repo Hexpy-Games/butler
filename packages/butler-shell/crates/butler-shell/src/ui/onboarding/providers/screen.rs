@@ -252,7 +252,10 @@ pub(crate) fn screen(
         .footer_start(
             Stack::new()
                 .cross(Cross::Start)
-                .child(crate::ui::widgets::anchored(toggle, "first-run-more-toggle")),
+                .child(crate::ui::widgets::anchored(
+                    toggle,
+                    "first-run-more-toggle",
+                )),
         )
         .into_any_element()
 }
