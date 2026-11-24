@@ -10,7 +10,7 @@ use butler_e2e::e2e::{
     remote_home::versions_on_disk,
     scenario::{Scenario, Setup},
     security::AdminClient,
-    sshd::TestSshd,
+    sshd::{TestSshd, user_ssh_config},
     stop_intent::StopOnDrop,
 };
 use butler_platform::local_socket;
@@ -79,6 +79,11 @@ pub(super) async fn deployed_with(
     for (key, value) in main_env {
         setup = setup.env(key, *value);
     }
+    let home = setup.sandbox.home.clone();
+    let setup = setup.env(
+        butler_platform::remote_ssh::CONFIG_FIXTURE,
+        user_ssh_config(&home)?.to_string_lossy(),
+    );
     let s = setup.start().await?;
     let health = s.gw.get("/health").await?;
     let version = health.data()["agent_version"]
@@ -122,7 +127,7 @@ pub(super) async fn deployed_with(
         .send(Method::POST, "/computers/host-key", Some(host), &[])
         .await?;
     assert_eq!(seen.status, 200, "{seen:?}");
-    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work"),"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
+    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work")})), &[]).await?;
     assert_eq!(added.status, 201, "{added:?}");
     let id = added.data()["computer"]["id"]
         .as_str()
@@ -298,16 +303,18 @@ async fn sending_a_saved_key_seals_it_on_the_computer() -> Result<(), HarnessErr
         .await?;
     assert_eq!(saved.status, 201);
     let cid = saved.data()["credential"]["id"].as_str().unwrap();
-    let path = format!("/computers/{id}/credentials");
+    let path = format!("/computers/{id}");
     let sent = api
-        .send(Method::POST, &path, Some(json!({"credential_id":cid})), &[])
+        .send(
+            Method::PATCH,
+            &path,
+            Some(json!({"model_source":{"key":cid}})),
+            &[],
+        )
         .await?;
     assert_eq!(sent.status, 200);
-    assert_eq!(sent.data()["credential"]["provider_id"], "openai");
-    if sent.data()["credential"]["masked_value"].as_str().unwrap() == key {
-        return Err(harness_error("the sent credential was returned unmasked"));
-    }
-    assert_eq!(sent.data()["created"], true);
+    assert_eq!(sent.data()["computer"]["model_source"]["key"], cid);
+    assert!(!serde_json::to_string(sent.data())?.contains(&key));
     let cipher = fs::read(remote.0.data.join("auth/remote-credentials.age"))?;
     assert!(
         !cipher
@@ -334,9 +341,9 @@ async fn sending_a_saved_key_seals_it_on_the_computer() -> Result<(), HarnessErr
     assert!(map.values().any(|value| value == &key));
     let missing = api
         .send(
-            Method::POST,
+            Method::PATCH,
             &path,
-            Some(json!({"credential_id":"missing"})),
+            Some(json!({"model_source":{"key":"missing"}})),
             &[],
         )
         .await?;
@@ -344,9 +351,9 @@ async fn sending_a_saved_key_seals_it_on_the_computer() -> Result<(), HarnessErr
     assert_eq!(missing.error_code(), Some("credential_not_found"));
     let invalid = api
         .send(
-            Method::POST,
+            Method::PATCH,
             &path,
-            Some(json!({"credential_id":cid,"x":1})),
+            Some(json!({"model_source":{"key":cid},"x":1})),
             &[],
         )
         .await?;

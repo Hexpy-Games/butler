@@ -58,6 +58,7 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       ? state.summary.branch_info
       : undefined,
   );
+  const computerName = activeSession?.computer_name;
   const hasWorkspaceIdentity = branchInfo?.workspace_binding === "session_worktree" ||
     branchInfo?.workspace_binding === "project";
   const canOpenSessionFolder = Boolean(hasWorkspaceIdentity && branchInfo?.workspace_status === "available");
@@ -66,10 +67,11 @@ export function Titlebar({ sidebarOpen, splitChatWidth }: { sidebarOpen?: boolea
       title={<span data-test-class="titlebar-title">{storeView.kind === "library" ? libraryTitle(storeView) : title}</span>}
       back={back}
       subtitle={
-        subtitle || hasWorkspaceIdentity ? (
+        subtitle || hasWorkspaceIdentity || computerName ? (
           <TitlebarWorkspaceSubtitle
             branchInfo={branchInfo}
             projectLabel={subtitle}
+            computerName={computerName}
           />
         ) : undefined
       }

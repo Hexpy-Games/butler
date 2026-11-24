@@ -32,6 +32,8 @@ The header row stays icon, small label and title. The default
 | `placement` | `composer` (default): in place of the composer input, inside ComposerCard. `conversation`: in the transcript, inside its own flat `Card radius="lg"` with a 12px inset and control-radius buttons; the media keeps its narrow layout under 420px |
 | `media` | `{ content, label, onOpen? }`: a 16:10 page thumbnail (a `LiveTabFrame` of the tab the decision acts on) beside the title and details, top-aligned at the row's end, 144px wide, 112px in a composer under 600px. In a composer under 420px it sits under the details in the text column (the title's inset), as wide as that column, 12px under the text, and shows the top of the page: 16:10 up to `--decision-media-narrow-height` (140px), then cropped from the top (never letterboxed or stretched). `onOpen` opens the tab; without it (no in-app browser) the thumbnail is a plain image with no open affordance. `label` names the target |
 
+- `{ quote }` is quoted prose (an instruction, a message) in a bordered frame in the body font; it wraps instead of scrolling. Use `{ code }` for commands, paths and code.
+
 ## When to use this component
 Use it when a pending decision replaces the composer input: a plan waiting
 for acceptance, or an authority (permission) request.

@@ -12,6 +12,7 @@ import { receiveUpdateProgress } from "@/stores/updateProgressStore";
 import { authorityPermissionsChanged } from "@/app/authorityPermissionEvents.ts";
 import { receiveTaskGraphEvent, refreshVisibleTaskGraphs } from "@/app/taskGraphState.ts";
 import { publishMemoryEvent } from "@/app/memoryEvents.ts";
+import { publishComputerEvent } from "@/app/computerEvents.ts";
 import { publishConnectorEvent } from "@/components/settings/connections/connectorEvents";
 import { publishLibraryEvent } from "@/app/libraryEvents";
 import { refreshSessionViewSubscriptions } from "@/components/layout/hooks/useSessionViewSubscription.ts";
@@ -101,6 +102,7 @@ export function useLiveSessionEvents(): void {
       publishChatGptEvent(event);
       publishLibraryEvent(event);
       publishConnectorEvent(event);
+      publishComputerEvent(event);
       publishDocumentEvent(event);
       publishCanonEvent(event);
       publishCanonQueueEvent(event);

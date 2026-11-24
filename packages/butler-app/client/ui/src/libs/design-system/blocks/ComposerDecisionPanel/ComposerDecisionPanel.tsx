@@ -25,6 +25,7 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   /**
    * Lines under the title (examples, a "+N more" line). Each wraps in full: what is decided is never cut.
    * `{ code }` is a command body in a code frame: monospace, its own spaces and line breaks; it scrolls both ways and fades each edge that hides content.
+   * `{ quote }` is prose in the same frame, set in the body font and wrapped.
    */
   details?: readonly ComposerDecisionDetail[];
   /** With `detailsShowLessLabel`, clamps long details to four lines behind an inline "Show more". */

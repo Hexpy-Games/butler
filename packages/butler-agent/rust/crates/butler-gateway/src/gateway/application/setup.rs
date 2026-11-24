@@ -269,6 +269,13 @@ pub trait AppSetupPort: Send + Sync + 'static {
     /// and where new keys go.
     fn list_credentials(&self) -> ApplicationFuture<CredentialList>;
     fn saved_provider_key(&self, name: String) -> ApplicationFuture<SavedProviderKey>;
+    /// The main's model plan for a computer (`None` = follow the default model). Reads no secret.
+    fn computer_model(
+        &self,
+        _credential_id: Option<String>,
+    ) -> ApplicationFuture<butler_models::models::ComputerModel> {
+        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
+    }
     fn computer_key(&self, id: String) -> ApplicationFuture<SecretText>;
     fn delete_computer_key(&self, id: String) -> ApplicationFuture<()>;
     /// Import a finished turn from a registered computer.

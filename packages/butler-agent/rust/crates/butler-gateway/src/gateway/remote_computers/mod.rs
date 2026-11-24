@@ -1,12 +1,16 @@
 //! Owner-confirmed SSH computers and their main-managed remote service.
 mod deploy;
+mod edit;
+pub(super) use edit::edit;
 mod forward;
 mod live;
 mod live_pump;
 mod live_records;
 mod memory;
+mod model_sync;
+pub(super) use model_sync::{ModelInput, ModelSource, update as update_model};
 mod pending;
-pub(super) use live::LiveRelays;
+pub(super) use live::{Connection, LiveRelays};
 pub(super) use live_records::names_running_turn;
 pub(in crate::gateway) use pending::{
     decide as decide_pending, get as get_pending, list as list_pending,
@@ -15,13 +19,15 @@ mod relay;
 mod sessions;
 pub(super) use relay::{Reply, data};
 pub(super) use sessions::{Link, create_session, forward, open_stream};
+mod session_state;
 mod ssh;
 mod store;
 mod streams;
 mod transcripts;
+pub(super) use session_state::{SessionStateCache, SessionStateRow, session_state_path};
 pub(super) use streams::RemoteStream;
 
-use super::{AppSetupPort, SavedProviderKey, http::HttpError};
+use super::{AppSetupPort, http::HttpError};
 use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -42,6 +48,12 @@ pub(super) struct Computer {
     arch: String,
     glibc: Option<String>,
     stops_on_logout: bool,
+    #[serde(default)]
+    pub ai_connected: bool,
+    #[serde(default)]
+    model_source: ModelSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sent_credential: Option<String>,
     host_keys: Vec<String>,
     added_at: String,
 }
@@ -51,10 +63,15 @@ impl Computer {
         &self.id
     }
 
+    pub(super) fn name(&self) -> &str {
+        &self.name
+    }
+
     pub(super) fn wire(&self) -> Result<serde_json::Value, HttpError> {
         let mut value = serde_json::to_value(self).map_err(|_| HttpError::Internal)?;
         if let Some(object) = value.as_object_mut() {
             object.remove("host_keys");
+            object.remove("sent_credential");
         }
         Ok(value)
     }
@@ -112,13 +129,8 @@ pub(super) struct AddInput {
     port: Option<i64>,
     key_file: Option<String>,
     folder: String,
-    host_fingerprint: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct SendCredential {
-    pub credential_id: String,
+    #[serde(default)]
+    model_source: ModelSource,
 }
 
 impl AddInput {
@@ -161,13 +173,8 @@ pub(super) async fn host_key(
 ) -> Result<serde_json::Value, HttpError> {
     input.validate()?;
     let records = list(data).await?;
-    let host = ssh::host_key(&input, &records, cancel).await?;
-    Ok(match host.fingerprint {
-        Some(fingerprint) => {
-            serde_json::json!({"trusted": false, "fingerprint": fingerprint, "key_type": host.key_type})
-        }
-        None => serde_json::json!({"trusted": true}),
-    })
+    ssh::host_key(&input, &records, cancel).await?;
+    Ok(serde_json::json!({"trusted": true}))
 }
 
 pub(super) async fn add(
@@ -184,15 +191,8 @@ pub(super) async fn add(
     target.validate()?;
     let records = list(data).await?;
     store::unique_name(&records, &name)?;
-    let host = ssh::host_key(&target, &records, cancel.clone()).await?;
-    if host.fingerprint.is_some() && host.fingerprint != input.host_fingerprint {
-        return Err(HttpError::public(
-            409,
-            "host_key_unconfirmed",
-            "Confirm this computer's host key.",
-        ));
-    }
-    let platform = ssh::probe(&target, &folder, &records, &host.host_keys, cancel).await?;
+    let host_keys = ssh::host_key(&target, &records, cancel.clone()).await?;
+    let platform = ssh::probe(&target, &folder, &records, &host_keys, cancel).await?;
     let computer = Computer {
         id: uuid::Uuid::new_v4().to_string(),
         name,
@@ -204,7 +204,10 @@ pub(super) async fn add(
         arch: platform.arch,
         glibc: platform.glibc,
         stops_on_logout: platform.stops_on_logout,
-        host_keys: host.host_keys,
+        ai_connected: false,
+        model_source: input.model_source,
+        sent_credential: None,
+        host_keys,
         added_at: chrono::Utc::now().to_rfc3339(),
     };
     store::add(data.join("config/computers.json"), computer).await
@@ -219,6 +222,11 @@ pub(super) async fn delete(
     let cleaned = deploy::remove(computer, cancel).await.is_ok();
     store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
     setup.delete_computer_key(computer.id.clone()).await?;
+    if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(computer_id = %computer.id, %error, "Remote computer session state was not removed");
+    }
     Ok(cleaned)
 }
 
@@ -247,7 +255,7 @@ pub(super) async fn change(
     }
     let (_lock, computer) = locked(root, id).await?;
     if start {
-        let remote = connect(setup, root, version, &computer, cancel).await?;
+        let (remote, _) = connect(setup, root, version, &computer, cancel).await?;
         Ok(
             serde_json::json!({"state": if remote.started { "ready" } else { "busy" }, "version": remote.version}),
         )
@@ -277,7 +285,7 @@ async fn connect(
     version: &str,
     computer: &Computer,
     cancel: CancellationToken,
-) -> Result<deploy::RemoteState, HttpError> {
+) -> Result<(deploy::RemoteState, Result<(), HttpError>), HttpError> {
     let state = deploy::ensure_running((root, version), computer, cancel.clone()).await?;
     let identity = setup.computer_key(computer.id.clone()).await?;
     if pending::pull(computer, root, cancel.clone()).await.is_err() {
@@ -291,37 +299,21 @@ async fn connect(
         let _ = error;
     }
     relay::unlock(computer, &identity, cancel.clone()).await?;
+    let sync = model_sync::sync(setup, root, computer, cancel.clone()).await;
+    if sync.is_err() {
+        butler_core::diagnostic!("[remote-model] sync failed computer={}", computer.id);
+    }
     transcripts::spawn_pull(
         Link {
             setup: setup.clone(),
             root: root.to_path_buf(),
             version: version.to_owned(),
             cancel,
+            relays: None,
         },
         computer.id.clone(),
     );
-    Ok(state)
-}
-
-pub(super) async fn send_credential(
-    setup: &Arc<dyn AppSetupPort>,
-    root: &Path,
-    path: &str,
-    version: &str,
-    key: SavedProviderKey,
-    cancel: CancellationToken,
-) -> Result<serde_json::Value, HttpError> {
-    let id = path
-        .strip_prefix("/computers/")
-        .and_then(|p| p.strip_suffix("/credentials"))
-        .filter(|id| !id.is_empty() && !id.contains('/'))
-        .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let (_lock, computer) = locked(root, id).await?;
-    connect(setup, root, version, &computer, cancel.clone()).await?;
-    let body = serde_json::json!({"provider_id": key.provider_id, "api_key": key.api_key.expose()})
-        .to_string()
-        .into_bytes();
-    relay::data(relay::request(&computer, "POST", "/credentials", body, cancel).await?)
+    Ok((state, sync))
 }
 
 #[derive(Deserialize, Default)]
@@ -340,7 +332,7 @@ pub(super) async fn oauth_start(
     shutdown: CancellationToken,
 ) -> Result<Value, HttpError> {
     let (_lock, computer) = locked(root, id).await?;
-    connect(setup, root, version, &computer, shutdown.clone()).await?;
+    let _ = connect(setup, root, version, &computer, shutdown.clone()).await?;
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
         .map_err(|_| HttpError::Internal)?;
@@ -397,6 +389,7 @@ pub(super) async fn oauth_flow(
     if view["status"] != "pending" {
         forward::stop(id, flow_id);
     }
+    record_completed_sign_in(root, &computer, &view).await?;
     Ok(view)
 }
 
@@ -415,5 +408,25 @@ pub(super) async fn oauth_cancel(
     let view =
         relay::data(relay::request(&computer, "POST", &path, b"{}".to_vec(), cancel).await?)?;
     forward::stop(id, flow_id);
+    record_completed_sign_in(root, &computer, &view).await?;
     Ok(view)
+}
+
+async fn record_completed_sign_in(
+    root: &Path,
+    computer: &Computer,
+    view: &Value,
+) -> Result<(), HttpError> {
+    if view["status"] == "completed" {
+        store::update(
+            root.join("config/computers.json"),
+            computer.id.clone(),
+            |c| {
+                c.ai_connected = true;
+                c.model_source = ModelSource::Chatgpt;
+            },
+        )
+        .await?;
+    }
+    Ok(())
 }

@@ -11,8 +11,8 @@ use butler_gateway::gateway::{
     ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SavedProviderKey,
 };
 use butler_models::models::{
-    CredentialError, CredentialList, DeletedCredential, ModelCatalogError, ModelConfiguration,
-    ProviderKeyCheckError, ProviderKeySaveError,
+    ComputerModel, CredentialError, CredentialList, DeletedCredential, ModelCatalogError,
+    ModelConfiguration, ProviderKeyCheckError, ProviderKeySaveError,
 };
 
 /// Checks `input.api_key` with its provider; nothing is stored.
@@ -97,6 +97,16 @@ pub(super) async fn saved_key(
         provider_id,
         api_key,
     })
+}
+
+pub(super) fn computer_model(
+    configuration: &ModelConfiguration,
+    credential_id: Option<&str>,
+    root: &Path,
+) -> Result<ComputerModel, GatewayApplicationError> {
+    configuration
+        .computer_model(root, credential_id)
+        .map_err(credential_error)
 }
 
 pub(super) async fn computer_key(

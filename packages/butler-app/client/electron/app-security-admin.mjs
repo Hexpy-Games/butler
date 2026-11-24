@@ -62,6 +62,19 @@ const SECURITY_ROUTES = Object.freeze({
   updateSignIn: { method: "PATCH", path: "/security/signins", entry: true, payload: true },
   deleteSignIn: { method: "DELETE", path: "/security/signins", entry: true },
   updateSignInSite: { method: "POST", path: "/security/signins/site", payload: true },
+  // Other computers: the SSH registry and its remote sign-in, local admin only.
+  listComputers: { method: "GET", path: "/computers" },
+  checkComputerHostKey: { method: "POST", path: "/computers/host-key", payload: true },
+  addComputer: { method: "POST", path: "/computers", payload: true },
+  deleteComputer: { method: "DELETE", path: "/computers", entry: true },
+  startComputer: { method: "POST", path: "/computers", entry: true, suffix: "/start" },
+  getComputerConnection: { method: "GET", path: "/computers", entry: true, suffix: "/connection" },
+  reconnectComputer: { method: "POST", path: "/computers", entry: true, suffix: "/reconnect" },
+  updateComputerModel: { method: "PATCH", path: "/computers", entry: true, payload: true },
+  editComputer: { method: "PUT", path: "/computers", entry: true, payload: true },
+  startComputerOauth: { method: "POST", path: "/computers", entry: true, suffix: "/oauth/start", payload: true },
+  getComputerOauth: { method: "GET", path: "/computers", entry: true, flow: true },
+  cancelComputerOauth: { method: "POST", path: "/computers", entry: true, flow: true, suffix: "/cancel" },
   listImportSources: { method: "GET", path: "/security/browser-import/sources" },
   previewImport: { method: "POST", path: "/security/browser-import/preview", payload: true },
   runImport: { method: "POST", path: "/security/browser-import/run", payload: true },
@@ -149,6 +162,8 @@ export async function requestSecurityRoute(
   if (route?.hook && (typeof hookId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(hookId))) return failure("invalid_request");
   const entryId = input?.body?.id;
   if (route?.entry && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) return failure("invalid_request");
+  const flow = input?.body?.flow;
+  if (route?.flow && (typeof flow !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(flow))) return failure("invalid_request");
   const credentialId = input?.body?.id;
   if (route?.credential && (typeof credentialId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(credentialId))) return failure("invalid_request");
   const payload = input?.body?.payload;
@@ -160,7 +175,7 @@ export async function requestSecurityRoute(
   if (route?.account && (typeof account !== "string" || !/^acct-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(account))) return failure("invalid_request");
   if (route?.revision && (!Number.isSafeInteger(revision) || revision < 0)) return failure("invalid_request");
   if (route?.rule && (typeof rule !== "string" || !/^rule-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(rule))) return failure("invalid_request");
-  const path = route?.connector ? `${route.path}/${connector}/accounts${route.account ? `/${account}${route.suffix ?? ""}` : ""}${route.revision ? `?revision=${revision}` : ""}` : route?.plugin ? `${route.path}/${plugin}${route.suffix}` : route?.rule ? `${route.path}/${rule}` : route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
+  const path = route?.connector ? `${route.path}/${connector}/accounts${route.account ? `/${account}${route.suffix ?? ""}` : ""}${route.revision ? `?revision=${revision}` : ""}` : route?.plugin ? `${route.path}/${plugin}${route.suffix}` : route?.rule ? `${route.path}/${rule}` : route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.flow ? `/oauth/${flow}` : ""}${route.suffix ?? ""}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook || route?.payload;
   if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {

@@ -9,7 +9,7 @@ pub(crate) fn capture(
     owner: &Connection,
     token: &tokio_util::sync::CancellationToken,
 ) -> io::Result<()> {
-    capture_project(root, owner, token, None)
+    capture_project(root, owner, token, None, None)
 }
 
 pub(crate) fn capture_project(
@@ -17,6 +17,7 @@ pub(crate) fn capture_project(
     owner: &Connection,
     token: &tokio_util::sync::CancellationToken,
     project: Option<&str>,
+    origin: Option<&str>,
 ) -> io::Result<()> {
     owner.execute_batch("CREATE TABLE IF NOT EXISTS memory_reset_admissions(kind TEXT NOT NULL,id TEXT NOT NULL,PRIMARY KEY(kind,id)) WITHOUT ROWID;
         CREATE TABLE IF NOT EXISTS memory_reset_epochs(epoch TEXT PRIMARY KEY);").map_err(io::Error::other)?;
@@ -31,10 +32,10 @@ pub(crate) fn capture_project(
             ("turn", "conversation_turns"),
         ] {
             let mut rows = source
-                .prepare(&format!("SELECT m.id FROM {table} m JOIN conversation_sessions s ON s.id=m.session_id WHERE (?1 IS NULL OR s.project_id=?1)"))
+                .prepare(&format!("SELECT m.id FROM {table} m JOIN conversation_sessions s ON s.id=m.session_id WHERE (?1 IS NULL OR s.project_id=?1) AND (?2 IS NULL OR s.gateway_origin=?2)"))
                 .map_err(io::Error::other)?;
             let ids = rows
-                .query_map([project], |row| row.get::<_, String>(0))
+                .query_map([project, origin], |row| row.get::<_, String>(0))
                 .map_err(io::Error::other)?;
             let mut write = owner
                 .prepare("INSERT OR IGNORE INTO memory_reset_admissions(kind,id) VALUES(?1,?2)")
@@ -45,6 +46,25 @@ pub(crate) fn capture_project(
                 }
                 write
                     .execute(params![kind, id.map_err(io::Error::other)?])
+                    .map_err(io::Error::other)?;
+            }
+        }
+        if let Some(origin) = origin {
+            let mut sessions = source
+                .prepare("SELECT id FROM conversation_sessions WHERE gateway_origin=?1")
+                .map_err(io::Error::other)?;
+            let ids = sessions
+                .query_map([origin], |row| row.get::<_, String>(0))
+                .map_err(io::Error::other)?;
+            let mut write = owner
+                .prepare("INSERT OR IGNORE INTO reset_scope_sessions(id) VALUES(?1)")
+                .map_err(io::Error::other)?;
+            for id in ids {
+                if token.is_cancelled() {
+                    return Err(io::Error::new(io::ErrorKind::Interrupted, "Cancelled"));
+                }
+                write
+                    .execute([id.map_err(io::Error::other)?])
                     .map_err(io::Error::other)?;
             }
         }

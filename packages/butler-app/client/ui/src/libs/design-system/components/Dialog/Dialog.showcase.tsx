@@ -20,6 +20,7 @@ import {
 import { ContainedDialogDemo } from "./Dialog.contained.demo";
 import { TitleOnlyConfirmDemo } from "./Dialog.titleOnly.demo";
 import { FullHeightDialogDemo } from "./Dialog.fullHeight.demo";
+import { ScrollingDialogDemo } from "./Dialog.scrolling.demo";
 import { FooterThatWraps } from "./Dialog.showcaseParts";
 
 export const meta: ShowcaseMeta = {
@@ -155,4 +156,5 @@ export const stories: ShowcaseStory[] = [
   { name: "Anchored in a page card (container)", states: ["open"], render: (context) => <ContainedDialogDemo {...context} /> },
   // height full: a scroll-body dialog with a nearly empty body keeps its full height (an empty task graph).
   { name: "Full height with a nearly empty body (height full)", states: ["open"], render: (context) => <FullHeightDialogDemo {...context} /> },
+  { name: "Scrolling form (focus rings keep their room)", states: ["open"], render: (context) => <ScrollingDialogDemo {...context} /> },
 ];

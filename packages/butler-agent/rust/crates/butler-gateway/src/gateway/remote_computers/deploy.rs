@@ -12,6 +12,15 @@ pub(super) struct RemoteState {
 
 const SCRIPT: &str = r#"set -eu
 umask 077
+F=$4
+case "$F" in
+    '~') F="$HOME" ;;
+    '~/'*) F="$HOME/${F#??}" ;;
+esac
+if [ "$(cd -- "$F" && pwd -P)" = "$(cd -- "$HOME" && pwd -P)" ]; then
+    echo state=home_folder
+    exit 0
+fi
 R="$HOME/.butler-remote"
 mkdir -p "$R/versions"
 if [ "$(uname -s)" = Linux ]; then P=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0); if [ "$P" -lt 1 ] 2>/dev/null || [ -z "$P" ]; then echo state=unprotected; exit 0; fi; fi
@@ -114,10 +123,11 @@ pub(super) async fn ensure_running(
     let home = butler_platform::user_dirs::non_empty_home_dir();
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
     let command = format!(
-        "sh -s -- {} {} {}",
+        "sh -s -- {} {} {} {}",
         quote(version),
         quote(&sha),
-        quote(if loopback { "" } else { &url })
+        quote(if loopback { "" } else { &url }),
+        quote(&computer.folder)
     );
     let args = ssh::arguments(
         &target,
@@ -215,6 +225,13 @@ fn response(output: &HookOutput) -> Result<String, HttpError> {
 }
 
 fn ready(line: &str) -> Result<RemoteState, HttpError> {
+    if line == "state=home_folder" {
+        return Err(HttpError::public(
+            422,
+            "project_folder_unsafe",
+            "Choose a folder inside your home folder.",
+        ));
+    }
     if line == "state=unprotected" {
         return Err(remote_error(
             "unsupported_computer",

@@ -11,6 +11,7 @@ import type { ComposerPlanDecision } from "./useComposerPlanDecision";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
 import { ComposerPlanInstructionContext } from "./ComposerPlanInstructionContext";
 import { ComposerAuthorityDecisionSurface } from "./ComposerAuthorityDecisionSurface";
+import { PendingInstructionCard, usePendingInstructions } from "./PendingInstructionCard";
 import { ComposerDecisionAttachment } from "./ComposerDecisionAttachment";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 
@@ -27,11 +28,16 @@ export function ComposerInputSurface({
 }) {
   useAppLocale();
   const epic = useActiveCanonEpic();
+  const { item, computerName, refresh, remove } = usePendingInstructions();
   if (authorityDecision && !authorityDecision.composingMessage) {
     return <ComposerAuthorityDecisionSurface decision={authorityDecision} />;
   }
   if (!authorityDecision && planDecision && !planDecision.editingInstruction) {
     return <ComposerPlanDecisionSurface decision={planDecision} />;
+  }
+  if (!authorityDecision && !planDecision && item) {
+    return <PendingInstructionCard key={item.id} {...{ item, refresh, remove }}
+      computerName={computerName ?? appCopy.computers.removedComputer} />;
   }
   return (
     <>

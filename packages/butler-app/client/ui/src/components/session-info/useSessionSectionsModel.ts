@@ -1,5 +1,6 @@
 import { isPreviewArtifact, sessionArtifacts } from "../artifacts/sessionArtifacts.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
+import { sessionFromNavigation } from "@/app/utils";
 import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useSessionViewLoad } from "@/app/sessionViewLoad.ts";
@@ -23,6 +24,7 @@ export function useSessionSectionsModel() {
   const epic = stepEpic ?? firstEpic;
   const notDone = order.view?.chains.reduce((count, chain) => count + chain.steps.reduce((sum, step) => sum + step.items.filter(item => item.state !== "done").length, 0), 0) ?? 0;
   const browserTabs = useConversationAgentTabs(sessionId);
+  const computerName = useButlerStore(state => sessionFromNavigation(state.navigation, sessionId)?.computer_name);
   const branch = summary?.branch_info;
   const folder = branch?.workspace_path || branch?.workspace_label;
   const artifacts = summary?.artifacts ?? [];
@@ -42,14 +44,14 @@ export function useSessionSectionsModel() {
     if (subtasks.length > 0) ids.push("subtasks");
     if (notDone > 0) ids.push("order");
     if ((nativeBrowser && browserTabs.length > 0) || previews.length > 0) ids.push("browser");
-    if (folder || branch?.branch_name) ids.push("environment");
+    if (computerName || folder || branch?.branch_name) ids.push("environment");
     if (epic) ids.push("task");
     if (summary?.context_details) ids.push("context");
     if (hasArtifacts) ids.push("artifacts");
     if (attachments.length > 0) ids.push("attachments");
     if (schedules.length > 0) ids.push("schedules");
   }
-  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules };
+  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, computerName, artifacts, attachments, schedules };
 }
 
 export function useSessionInfoHasContent() {

@@ -357,6 +357,7 @@ test("renderer and actual preload carry clear, reset and audited UI routes", asy
     ["POST", "/memory/reset/chat-memory", { operation_id: id, inventory_revision: 7 }],
     ["POST", "/memory/reset/profile", { operation_id: id, inventory_revision: 7 }],
     ["POST", "/memory/reset/projects/project_1", { operation_id: id, inventory_revision: 7 }],
+    ["POST", "/memory/reset/computers/01234567-89ab-cdef-0123-456789abcdef", { operation_id: id, inventory_revision: 7 }],
     ["GET", `/memory/reset/${id}`],
     ["GET", "/memory/instructions"], ["GET", "/memory/projects/project_1"],
     ["GET", "/memory/inventory"],
@@ -440,6 +441,7 @@ test("preload refuses unlisted reset paths and methods without sending a request
       ["DELETE", "/memory/reset/01234567-89ab-cdef-0123-456789abcdef"],
       ["GET", "/memory/reset/profile"], ["POST", "/memory/reset/unknown"],
       ["POST", "/memory/reset/projects/p1/extra"], ["POST", "/memory/reset/projects"],
+      ["POST", "/memory/reset/computers/c1/extra"], ["GET", "/memory/reset/computers/c1"],
       ["PATCH", "/memory/reset/profile"], ["GET", "/memory/reset/not-a-uuid"],
     ]) await expect(api(path!, { method })).rejects.toThrow("Invalid memory path");
     await expect(api("/sessions/general/clear", { method: "GET" })).rejects.toThrow("Unsupported Butler app API route");

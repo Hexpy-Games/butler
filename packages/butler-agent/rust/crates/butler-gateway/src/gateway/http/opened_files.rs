@@ -42,6 +42,7 @@ struct Target {
 #[derive(Deserialize)]
 struct OpenRequest {
     file_id: String,
+    session_id: Option<String>,
 }
 
 pub(super) async fn route(
@@ -67,21 +68,13 @@ pub(super) async fn route(
     let input: OpenRequest = serde_json::from_slice(&bytes).map_err(|_| {
         HttpError::public(400, "open_request_invalid", "Request must be {file_id}.")
     })?;
-    let origin = state
-        .application
-        .message_file_origin(input.file_id.clone())
-        .await?;
-    let original = match origin {
-        Some(origin) => blocking(move || Ok(original(origin))).await?,
+    let target = if let Some(computer) = match input.session_id {
+        Some(session_id) => state.application.session_computer(session_id).await?,
         None => None,
-    };
-    let target = match original {
-        Some((path, Some(handling))) => Target {
-            open: matches!(handling, kind::Handling::Open(_)),
-            path,
-            original: true,
-        },
-        original => stored(&state, root, input.file_id, original.map(|(path, _)| path)).await?,
+    } {
+        remote(&state, root, &computer, &input.file_id).await?
+    } else {
+        local(&state, root, input.file_id).await?
     };
     json(
         StatusCode::CREATED,
@@ -90,6 +83,63 @@ pub(super) async fn route(
             data: json!({ "path": target.path, "open": target.open, "original": target.original }),
         },
     )
+}
+
+async fn local(state: &HttpState, root: PathBuf, file_id: String) -> Result<Target, HttpError> {
+    let origin = state
+        .application
+        .message_file_origin(file_id.clone())
+        .await?;
+    let original = match origin {
+        Some(origin) => blocking(move || Ok(original(origin))).await?,
+        None => None,
+    };
+    match original {
+        Some((path, Some(handling))) => Ok(Target {
+            open: matches!(handling, kind::Handling::Open(_)),
+            path,
+            original: true,
+        }),
+        original => stored(state, root, file_id, original.map(|(path, _)| path)).await,
+    }
+}
+
+async fn remote(
+    state: &HttpState,
+    root: PathBuf,
+    computer: &str,
+    file_id: &str,
+) -> Result<Target, HttpError> {
+    let file_id =
+        super::message_files::decode_file_id(file_id).map_err(|_| original_not_found())?;
+    let stream = crate::gateway::remote_computers::open_stream(
+        &super::remote_sessions::link(state)?,
+        computer,
+        &format!("/message-files/{file_id}"),
+    )
+    .await?;
+    if stream.status != 200 {
+        return Err(original_not_found());
+    }
+    let name = stream
+        .headers
+        .get("content-disposition")
+        .and_then(|header| {
+            let extended = header
+                .rsplit_once("; filename*=UTF-8''")
+                .and_then(|(_, value)| super::message_files::decode_percent_encoded(value).ok());
+            extended.or_else(|| {
+                let (_, value) = header.split_once("; filename=\"")?;
+                let (name, _) = value.split_once('"')?;
+                Some(name.to_owned())
+            })
+        })
+        .ok_or_else(original_not_found)?;
+    let limit = usize::try_from(ORIGINAL_LIMIT).map_err(|_| HttpError::Internal)?;
+    let bytes = axum::body::to_bytes(stream.into_body(), limit)
+        .await
+        .map_err(|_| original_not_found())?;
+    prepare_copy(root, name, bytes, None).await
 }
 
 /// The recorded original while it is a regular file, not a link or a folder.
@@ -129,24 +179,26 @@ async fn stored(
     original: Option<PathBuf>,
 ) -> Result<Target, HttpError> {
     let download = state.application.download_message_file(file_id).await?;
-    let kind::Handling::Open(extension) = kind::verify(&download.file.safe_name, &download.bytes)
-    else {
+    prepare_copy(root, download.file.safe_name, download.bytes, original).await
+}
+
+async fn prepare_copy(
+    root: PathBuf,
+    name: String,
+    bytes: impl AsRef<[u8]> + Send + 'static,
+    original: Option<PathBuf>,
+) -> Result<Target, HttpError> {
+    let kind::Handling::Open(extension) = kind::verify(&name, bytes.as_ref()) else {
         return original
             .map(|path| Target {
                 path,
                 open: false,
                 original: true,
             })
-            .ok_or_else(|| {
-                HttpError::public(
-                    404,
-                    "original_not_found",
-                    "The original file was not found.",
-                )
-            });
+            .ok_or_else(original_not_found);
     };
-    let name = copy_name(&download.file.safe_name, &extension);
-    let path = blocking(move || write_marked(&root, &name, &download.bytes)).await?;
+    let name = copy_name(&name, &extension);
+    let path = blocking(move || write_marked(&root, &name, bytes.as_ref())).await?;
     Ok(Target {
         path,
         open: true,
@@ -212,6 +264,14 @@ fn write_marked(root: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
         download_mark::mark(&path)?;
     }
     Ok(path)
+}
+
+fn original_not_found() -> HttpError {
+    HttpError::public(
+        404,
+        "original_not_found",
+        "The original file was not found.",
+    )
 }
 
 fn failed() -> HttpError {

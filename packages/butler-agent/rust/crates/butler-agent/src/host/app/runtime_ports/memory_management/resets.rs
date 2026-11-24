@@ -11,7 +11,7 @@ impl AppMemoryManagement {
                 operation_id,
                 inventory_revision,
             } => {
-                self.start_reset(operation_id, inventory_revision, false, None, sink)
+                self.start_reset(operation_id, inventory_revision, false, None, None, sink)
                     .await
             }
             AppMemoryCommand::Reextract {
@@ -22,7 +22,7 @@ impl AppMemoryManagement {
                 operation_id,
                 inventory_revision,
             } => {
-                self.start_reset(operation_id, inventory_revision, true, None, sink)
+                self.start_reset(operation_id, inventory_revision, true, None, None, sink)
                     .await
             }
             AppMemoryCommand::ResetProject {
@@ -35,6 +35,22 @@ impl AppMemoryManagement {
                     inventory_revision,
                     false,
                     Some(project_id),
+                    None,
+                    sink,
+                )
+                .await
+            }
+            AppMemoryCommand::ResetComputer {
+                operation_id,
+                inventory_revision,
+                computer_id,
+            } => {
+                self.start_reset(
+                    operation_id,
+                    inventory_revision,
+                    false,
+                    None,
+                    Some(format!("computer:{computer_id}")),
                     sink,
                 )
                 .await
@@ -67,6 +83,7 @@ impl AppMemoryManagement {
         inventory_revision: u64,
         profile_reset: bool,
         project_id: Option<String>,
+        origin: Option<String>,
         sink: MemoryEventSink,
     ) -> Result<Value, GatewayApplicationError> {
         let gate = self.daily.gate.clone();
@@ -84,6 +101,7 @@ impl AppMemoryManagement {
                     operation_id.clone(),
                     inventory_revision,
                     project_id.clone(),
+                    origin,
                 )
                 .await
         }

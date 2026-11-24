@@ -144,7 +144,79 @@ impl CredentialDraft {
     }
 }
 
+/// What a computer's model setting resolves to on this device now.
+pub enum ComputerModel {
+    Key {
+        credential_id: String,
+        model: Option<Box<RegisteredHostedModelConfig>>,
+    },
+    ChatGpt,
+    None,
+}
+
+impl ComputerModel {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Key { .. } => "key",
+            Self::ChatGpt => "chatgpt",
+            Self::None => "none",
+        }
+    }
+}
+
 impl ModelConfiguration {
+    pub fn computer_model(
+        &self,
+        root: &Path,
+        credential_id: Option<&str>,
+    ) -> Result<ComputerModel, CredentialError> {
+        let config = read_object_sync(&root.join("butler.config.json"));
+        let registered = normalized_registered(&config, self, &self.clock.now_iso());
+        let default_ref = crate::models::default_model_at(root)?;
+        let default = registered
+            .iter()
+            .find(|model| model.model_ref == default_ref)
+            .cloned()
+            .or_else(|| {
+                super::defaults::routine_registration(
+                    &default_ref,
+                    &registered,
+                    &self.saved_credentials(root),
+                    &self.registration_catalog,
+                )
+            });
+        if let Some(name) = credential_id {
+            let credentials = self.saved_credentials(root);
+            let record = find(&credentials, name)?;
+            let model = default
+                .filter(|model| {
+                    model.auth_type == ProviderAuthMethod::ApiKey
+                        && model.provider_id == record.provider_id
+                        && model.credential_id.as_deref() == Some(record.id.as_str())
+                })
+                .or_else(|| users(&registered, record).next().cloned());
+            return Ok(ComputerModel::Key {
+                credential_id: record.id.clone(),
+                model: model.map(Box::new),
+            });
+        }
+        Ok(match default {
+            Some(model) if model.auth_type == ProviderAuthMethod::ApiKey => {
+                match model.credential_id.clone() {
+                    Some(credential_id) => ComputerModel::Key {
+                        credential_id,
+                        model: Some(Box::new(model)),
+                    },
+                    None => ComputerModel::None,
+                }
+            }
+            Some(model) if model.auth_type == ProviderAuthMethod::ChatGptOauth => {
+                ComputerModel::ChatGpt
+            }
+            _ => ComputerModel::None,
+        })
+    }
+
     /// The provider and key of the saved credential `name` (id, or a unique label),
     /// read now for an explicit owner action; never kept.
     pub async fn saved_provider_key(

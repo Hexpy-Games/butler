@@ -1,4 +1,5 @@
 import { workFailureLine } from "../work-failure.ts";
+import { COMPUTERS_COPY } from "./computers.ts";
 import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
@@ -474,6 +475,7 @@ export const enUsCopy: AppCopy = {
   canon: CANON_COPY["en-US"],
   publishing: PUBLISHING_COPY["en-US"],
   sessionInfo: SESSION_INFO_COPY["en-US"],
+  computers: COMPUTERS_COPY["en-US"],
   fileViewer: FILE_VIEWER_COPY["en-US"],
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,

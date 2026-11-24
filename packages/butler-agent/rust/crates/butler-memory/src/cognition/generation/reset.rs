@@ -33,6 +33,9 @@ pub struct ResetResult {
     pub kind: String,
     /// Selected project; absent for all conversation memory.
     pub project_id: Option<String>,
+    /// Selected session origin; only for a computer reset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     /// Inventory revision accepted by the reset.
     pub inventory_revision: u64,
     /// Serving generation captured before the reset.
@@ -249,6 +252,7 @@ fn stage(
         root,
         &new.join("graph.sqlite"),
         result.project_id.as_deref(),
+        result.origin.as_deref(),
         &result.operation_id,
         result.kind == "reextract",
         token,

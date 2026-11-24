@@ -1,17 +1,20 @@
 //! Acceptance records the immutable selection under the shared writer lease.
 use super::*;
 pub(crate) fn begin(
-    root: &Path,
-    paths: &CognitionPathEnvironment,
+    (root, paths): (&Path, &CognitionPathEnvironment),
     coordinator: &CognitionWriteCoordinator,
     id: &str,
     revision: u64,
     project: Option<String>,
+    origin: Option<String>,
     kind: &str,
 ) -> io::Result<ResetResult> {
     validate(root, paths, id)?;
     if let Some(saved) = receipt(root, paths, id)? {
-        if saved.inventory_revision != revision || saved.project_id != project || saved.kind != kind
+        if saved.inventory_revision != revision
+            || saved.project_id != project
+            || saved.origin != origin
+            || saved.kind != kind
         {
             return Err(io::Error::other("Operation ID conflicts"));
         }
@@ -55,6 +58,7 @@ pub(crate) fn begin(
         operation_id: id.into(),
         kind: kind.into(),
         project_id: project,
+        origin,
         inventory_revision: revision,
         old_generation,
         phase: "preparing".into(),

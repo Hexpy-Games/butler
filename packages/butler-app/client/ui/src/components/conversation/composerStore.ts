@@ -18,12 +18,14 @@ const noopKeyDown = (_event: ComposerKeyEvent) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
   workspaceMode: "local",
+  computerId: "",
+  setComputerId: (computerId) => set({ computerId }),
   setWorkspaceMode: (workspaceMode) => set({ workspaceMode }),
   draftRevision: 0,
   draftSessionId: "draft:chat",
   activateDraftSession: (draftSessionId, text, contentParts) => {
     const draftRevision = get().draftRevision + 1;
-    set({ draftRevision, draftSessionId, text, contentParts, workspaceMode: "local" });
+    set({ draftRevision, draftSessionId, text, contentParts, workspaceMode: "local", computerId: "" });
     return draftRevision;
   },
   restoreDraftSession: ({ revision, sessionId, text, contentParts }) => {
