@@ -223,14 +223,24 @@ fn retain_rows(
             continue;
         }
         if let Some(row) = object.get("row").filter(|row| row.is_object()) {
-            tx.execute_cached(
-                "INSERT OR REPLACE INTO app_terminal_turn_progress_rows(\
-                    turn_id,source_event_id,row_json) VALUES(?1,?2,?3)",
-                params![turn, id, row.to_string()],
-            )
-            .map_err(AppStorageError::sqlite)?;
+            store_progress_row(tx, turn, *id, row)?;
         }
     }
+    Ok(())
+}
+
+pub(in crate::gateway::application) fn store_progress_row(
+    db: &Connection,
+    turn: &str,
+    source_event_id: i64,
+    row: &Value,
+) -> Result<(), AppStorageError> {
+    db.execute_cached(
+        "INSERT OR REPLACE INTO app_terminal_turn_progress_rows(
+            turn_id,source_event_id,row_json) VALUES(?1,?2,?3)",
+        params![turn, source_event_id, row.to_string()],
+    )
+    .map_err(AppStorageError::sqlite)?;
     Ok(())
 }
 

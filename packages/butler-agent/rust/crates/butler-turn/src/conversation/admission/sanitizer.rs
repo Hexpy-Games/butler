@@ -47,6 +47,7 @@ pub(super) fn safe_tool_content(
         ("inputLabel", "safeInputLabel"),
         ("workBlockLabel", "workBlockLabel"),
         ("status", "status"),
+        ("operationStatus", "status"),
     ] {
         if !out.contains_key(target)
             && let Some(value) = safe_optional(payload.and_then(|v| v.get(source)))
