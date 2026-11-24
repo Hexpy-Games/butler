@@ -35,6 +35,8 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
     )?;
     let s = setup.start().await?;
     default_project_folder(&s).await?;
+    s.patch_settings(json!({"language":"ko"}), "UI language")
+        .await?;
     let app = admin(&s);
     let client = browser();
     let mut devices = Vec::new();
@@ -84,12 +86,15 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         let reply = client
             .put(&push_url)
             .bearer_auth(device)
-            .json(&json!({"token":token}))
+            .json(&if token == b {
+                json!({"token":token,"lang":"en"})
+            } else {
+                json!({"token":token})
+            })
             .send()
             .await?;
         assert_eq!(reply.status(), 204);
     }
-    assert!(!fake.seen().iter().any(|entry| entry.contains("/v1/push")));
 
     let reply = app
         .send(
@@ -142,8 +147,9 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
             let token = message["to"].as_str().unwrap();
             let kind = message["kind"].as_str().unwrap();
             assert!(matches!(kind, "needs_input" | "done"));
+            let lang = if token == b { "en" } else { "ko" };
             assert!(
-                *message == json!({"to":token,"kind":kind,"lang":"en","session_id":chat1}),
+                *message == json!({"to":token,"kind":kind,"lang":lang,"session_id":chat1}),
                 "unexpected push message"
             );
             if kind == first_kind {
@@ -203,7 +209,10 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
         .iter()
         .flat_map(|body| body["messages"].as_array().unwrap())
         .filter(|message| message["session_id"] == chat2)
-        .map(|message| message["to"].as_str().unwrap())
+        .map(|message| {
+            assert_eq!(message["lang"], "ko");
+            message["to"].as_str().unwrap()
+        })
         .collect();
     assert!(
         tokens == BTreeSet::from([c]),

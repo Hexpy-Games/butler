@@ -1,7 +1,7 @@
 use crate::gateway::{
     AppEventEnvelope, AppSettingsFactsProvider, AppSetupPort, ButlerAccountRequest,
     GatewayApplicationError,
-    application::{AppApplication, AppStorage, AppStorageError, settings},
+    application::{AppApplication, AppStorage, AppStorageError, app_error, settings},
 };
 use rusqlite::Connection;
 use serde_json::{Value, json};
@@ -39,19 +39,17 @@ impl AppApplication {
         let settings_facts = self.dependencies.settings_facts.clone();
         let shutdown = self.dependencies.service_shutdown.clone();
         let setup = self.dependencies.setup.clone();
-        let sync = self.push_sync.clone();
         tokio::spawn(async move {
             let _subscription = subscription;
             loop {
                 tokio::select! {
                     biased;
                     () = shutdown.cancelled() => return,
-                    () = sync.notified() => sync_tokens(&storage, setup.as_ref()).await,
                     next = rx.recv() => {
                         let Some(push) = next else { return };
                         tokio::select! {
                             () = shutdown.cancelled() => return,
-                            () = deliver(&storage, settings_facts.as_ref(), setup.as_ref(), push) => {}
+                            () = deliver(&storage, settings_facts.as_ref(), &setup, push) => {}
                         }
                     }
                 }
@@ -106,42 +104,47 @@ fn push_of(event: &AppEventEnvelope) -> Option<Push> {
     })
 }
 
-fn tokens(db: &Connection) -> Result<Vec<String>, AppStorageError> {
+fn tokens(db: &Connection) -> Result<Vec<(String, Option<String>)>, AppStorageError> {
     let mut query = db
         .prepare(
-            "SELECT push_token FROM paired_devices
+            "SELECT push_token, push_lang FROM paired_devices
              WHERE revoked_at IS NULL AND push_token IS NOT NULL ORDER BY created_at,id",
         )
         .map_err(AppStorageError::sqlite)?;
     query
-        .query_map([], |row| row.get(0))
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
 }
 
-async fn sync_tokens(storage: &AppStorage, setup: &dyn AppSetupPort) {
-    match storage.read(tokens).await {
-        Ok(tokens) => {
-            let _ = setup
-                .butler_account(ButlerAccountRequest::PushTokens { tokens })
-                .await;
-        }
-        Err(error) => tracing::debug!(code = error.code(), "push token sync dropped"),
-    }
+pub(super) async fn sync_tokens(storage: AppStorage, setup: Arc<dyn AppSetupPort>) {
+    let Ok(devices) = storage
+        .read(tokens)
+        .await
+        .map_err(app_error)
+        .inspect_err(log_dropped)
+    else {
+        return;
+    };
+    let tokens = devices.into_iter().map(|(token, _)| token).collect();
+    let _ = setup
+        .butler_account(ButlerAccountRequest::PushTokens { tokens })
+        .await
+        .inspect_err(log_dropped);
 }
 
 async fn deliver(
     storage: &AppStorage,
     settings_facts: &dyn AppSettingsFactsProvider,
-    setup: &dyn AppSetupPort,
+    setup: &Arc<dyn AppSetupPort>,
     push: Push,
 ) {
     let Ok(facts) = settings_facts.snapshot() else {
         tracing::warn!(code = "internal", "push dropped");
         return;
     };
-    let Ok((lang, skip, tokens)) = storage
+    let Ok((lang, skip, devices)) = storage
         .read(move |db| {
             let lang = settings::ui_language(db, &facts)?.as_str();
             let skip = if let Some(id) = push.turn_id {
@@ -160,7 +163,7 @@ async fn deliver(
     else {
         return;
     };
-    if skip || tokens.is_empty() {
+    if skip || devices.is_empty() {
         return;
     }
     let kind = match push.status {
@@ -169,37 +172,43 @@ async fn deliver(
         Status::Failed => "failed",
         Status::ScheduleBlocked => "schedule_blocked",
     };
-    let messages = tokens
+    let messages = devices
         .iter()
-        .map(|token| match &push.target {
-            Target::Session(id) => json!({"to":token,"kind":kind,"lang":lang,"session_id":id}),
-            Target::Automation(id) => {
-                json!({"to":token,"kind":kind,"lang":lang,"automation_id":id})
+        .map(|(token, device_lang)| {
+            let lang = device_lang.as_deref().unwrap_or(lang);
+            match &push.target {
+                Target::Session(id) => json!({"to":token,"kind":kind,"lang":lang,"session_id":id}),
+                Target::Automation(id) => {
+                    json!({"to":token,"kind":kind,"lang":lang,"automation_id":id})
+                }
             }
         })
         .collect();
+    let tokens = devices.into_iter().map(|(token, _)| token).collect();
     let Ok(value) = setup
         .butler_account(ButlerAccountRequest::Push { messages, tokens })
         .await
-        .inspect_err(|error| {
-            let code = match error {
-                GatewayApplicationError::Public { code, .. } => code.as_str(),
-                GatewayApplicationError::Internal { .. } => "internal",
-            };
-            match code {
-                "butler_account_disabled" | "butler_account_signed_out" => {
-                    tracing::debug!(code, "push dropped");
-                }
-                _ => tracing::warn!(code, "push dropped"),
-            }
-        })
+        .inspect_err(log_dropped)
     else {
         return;
     };
     clear_gone(storage, setup, &value).await;
 }
 
-async fn clear_gone(storage: &AppStorage, setup: &dyn AppSetupPort, value: &Value) {
+fn log_dropped(error: &GatewayApplicationError) {
+    let code = match error {
+        GatewayApplicationError::Public { code, .. } => code.as_str(),
+        GatewayApplicationError::Internal { .. } => "internal",
+    };
+    match code {
+        "butler_account_disabled" | "butler_account_signed_out" => {
+            tracing::debug!(code, "push dropped");
+        }
+        _ => tracing::warn!(code, "push dropped"),
+    }
+}
+
+async fn clear_gone(storage: &AppStorage, setup: &Arc<dyn AppSetupPort>, value: &Value) {
     let gone: Vec<_> = value["gone"]
         .as_array()
         .into_iter()
@@ -211,7 +220,7 @@ async fn clear_gone(storage: &AppStorage, setup: &dyn AppSetupPort, value: &Valu
             .execute(move |db| {
                 gone.into_iter().try_fold(0, |cleared, token| {
                     db.execute(
-                        "UPDATE paired_devices SET push_token=NULL WHERE push_token=?1",
+                        "UPDATE paired_devices SET push_token=NULL, push_lang=NULL WHERE push_token=?1",
                         [token],
                     )
                     .map(|rows| cleared + rows)
@@ -220,7 +229,7 @@ async fn clear_gone(storage: &AppStorage, setup: &dyn AppSetupPort, value: &Valu
             })
             .await
         {
-            Ok(cleared) if cleared > 0 => sync_tokens(storage, setup).await,
+            Ok(cleared) if cleared > 0 => sync_tokens(storage.clone(), setup.clone()).await,
             Ok(_) => {}
             Err(error) => tracing::warn!(code = error.code(), "push dropped"),
         }

@@ -27,6 +27,7 @@ mod event_outbox;
 mod events;
 mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
+
 use errors::{app_error, public};
 mod browser_stills;
 mod devices;
@@ -109,6 +110,9 @@ mod updates;
 mod user_work;
 mod wallpapers;
 
+use serde_json::Value;
+use std::{path::PathBuf, sync::Arc};
+
 use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
     GatewayApplicationError, MessageContent, MessageSendResult, PublishedEvent,
@@ -167,7 +171,6 @@ pub use relocation_port::{
     AppRelocationHost, AppRelocationSnapshot, AppRelocationTransportBinding,
     AppRelocationWorkspaceMarker, AppRelocationWorkspacePlan, AppRelocationWorkspaceRequest,
 };
-use serde_json::Value;
 pub use session_branches::AppBranchSourceLocation;
 pub(crate) use session_branches::{AppSessionBranchDestination, AppSessionBranchRequest};
 pub use session_branches::{AppSessionBranchResult, AppStartTopicConversationRequest};
@@ -190,7 +193,6 @@ pub use setup::{
     SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub use space::{AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin};
-use std::{path::PathBuf, sync::Arc};
 use storage::{AppStorage, AppStorageError, CachedSql};
 type SkillImportResult = butler_runtime::skills::SkillImportResult;
 type SkillSettingsView = butler_runtime::skills::SkillSettingsView;
@@ -221,7 +223,6 @@ pub struct AppApplication {
     queue_wake: queue_dispatcher::QueueWake,
     automation_scheduler: Option<automations::AutomationScheduler>,
     automation_wake: Arc<tokio::sync::Notify>,
-    push_sync: Arc<tokio::sync::Notify>,
     automation_queued: Arc<std::sync::atomic::AtomicBool>,
     automation_runs: automations::AutomationRunOwner,
     composing: initiated::Composing,
@@ -308,7 +309,6 @@ impl AppApplication {
             composing: Default::default(),
             initiated_decisions: Default::default(),
             automation_wake: automation_wake.clone(),
-            push_sync: Arc::default(),
             automation_queued,
             automation_runs,
             queue_mutations: SessionQueueMutationOwner::new(),

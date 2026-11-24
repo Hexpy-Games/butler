@@ -1,7 +1,9 @@
 import Constants from "expo-constants";
+import { getLocales } from "expo-localization";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { AppState } from "react-native";
+import { appLocaleFromLanguage } from "../../../butler-i18n/src/index.ts";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { stringField } from "@/connection/pairings";
 import { pairingStore } from "@/connection/store";
@@ -29,7 +31,8 @@ export async function enablePush(client: GatewayClient, butlerId: string): Promi
     if (!(await Notifications.requestPermissionsAsync()).granted) return false;
     const token = await expoToken();
     if (token === null) return false;
-    await client.request<void>("/devices/self/push", { method: "PUT", body: { token } });
+    const lang = appLocaleFromLanguage(getLocales()[0]?.languageCode) === "ko-KR" ? "ko" : "en";
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang } });
     await pairingStore.setPushEnabled(butlerId, true);
     return true;
   } catch {
@@ -39,7 +42,8 @@ export async function enablePush(client: GatewayClient, butlerId: string): Promi
 
 export async function disablePush(client: GatewayClient, butlerId: string): Promise<boolean> {
   try {
-    await client.request<void>("/devices/self/push", { method: "PUT", body: { token: null } });
+    const lang = appLocaleFromLanguage(getLocales()[0]?.languageCode) === "ko-KR" ? "ko" : "en";
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token: null, lang } });
     await pairingStore.setPushEnabled(butlerId, false);
     return true;
   } catch {
@@ -53,7 +57,9 @@ export async function syncPush(client: GatewayClient, butlerId: string): Promise
     if (pairing?.butlerId !== butlerId || !pairing.pushEnabled) return;
     if (!(await Notifications.getPermissionsAsync()).granted) return;
     const token = await expoToken();
-    if (token !== null) await client.request<void>("/devices/self/push", { method: "PUT", body: { token } });
+    if (token === null) return;
+    const lang = appLocaleFromLanguage(getLocales()[0]?.languageCode) === "ko-KR" ? "ko" : "en";
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang } });
   } catch {
     // Registration is best-effort on startup.
   }

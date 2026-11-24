@@ -17,7 +17,6 @@ impl AppApplication {
             composing: self.composing.clone(),
             initiated_decisions: self.initiated_decisions.clone(),
             automation_wake: self.automation_wake.clone(),
-            push_sync: self.push_sync.clone(),
             automation_queued: self.automation_queued.clone(),
             automation_runs: self.automation_runs.clone(),
             queue_mutations: self.queue_mutations.clone(),
