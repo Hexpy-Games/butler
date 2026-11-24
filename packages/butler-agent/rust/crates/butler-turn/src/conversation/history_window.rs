@@ -3,6 +3,7 @@ use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult, summaries};
 use rusqlite::Connection;
 mod budget;
+pub(super) use budget::register as register_sql_functions;
 mod continuity;
 mod load;
 mod visible;
@@ -28,7 +29,6 @@ impl AgentConversationStore {
     ) -> ConversationResult<PromptMaterial> {
         let session = session.to_owned();
         self.execute(move |db| {
-            budget::register(db)?;
             let summaries = valid_summaries(db, &session)?;
             load::budget_material(db, &session, cap, &summaries)
         })
@@ -66,7 +66,6 @@ pub(super) fn read(
     session: &str,
     cap: usize,
 ) -> ConversationResult<HistoryWindow> {
-    budget::register(db)?;
     let summaries = valid_summaries(db, session)?;
     let epoch = summaries
         .iter()

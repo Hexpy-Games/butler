@@ -13,6 +13,17 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
         .await
         .unwrap();
     assert_eq!(busy_timeout, 5000);
+    // The fold can be the first operation after open; budget functions exist from creation.
+    let shaped = store
+        .execute(|db| {
+            db.query_row("SELECT history_budget_text('ab')", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(ConversationError::sqlite)
+        })
+        .await
+        .unwrap();
+    assert_eq!(shaped, "xx");
     plain_open_under_writer(&path).await;
     migration_errors_are_atomic();
     store.begin_turn(begin_input()).await.unwrap();
