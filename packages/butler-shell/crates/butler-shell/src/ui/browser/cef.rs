@@ -194,10 +194,6 @@ impl CefEngine {
         .detach();
     }
 }
-/// Windows CEF differs in its staged layout, key codes and wheel units (macOS otherwise).
-fn windows() -> bool {
-    butler_platform::launcher::node_platform() == "win32"
-}
 impl PageEngine for CefEngine {
     fn shutdown(&mut self) {
         self.runtime.shutdown();

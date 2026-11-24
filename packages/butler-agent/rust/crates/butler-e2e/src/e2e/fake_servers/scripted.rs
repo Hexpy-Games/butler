@@ -1,12 +1,19 @@
 //! Ordered assistant messages for local tool-call scenarios.
-use super::{Body, Response, State, Value, json, json_response, lock};
+use super::{Body, ChatBehavior, Response, State, Value, json, json_response, lock};
 
-pub(super) fn response(state: &State, body: &str) -> Option<Response<Body>> {
+impl super::FakeServer {
+    /// Change the answer later chat completions give.
+    pub fn set_answer(&self, answer: impl Into<String>) {
+        lock(&self.state.chat).answer = answer.into();
+    }
+}
+
+pub(super) fn response(state: &State, chat: &ChatBehavior, body: &str) -> Option<Response<Body>> {
     let request: Value = serde_json::from_str(body).ok()?;
-    if state.chat.script.is_empty() || !request["tools"].is_array() {
+    if chat.script.is_empty() || !request["tools"].is_array() {
         return None;
     }
-    if state.chat.refuse_stream && request["stream"] == true {
+    if chat.refuse_stream && request["stream"] == true {
         return Some(json_response(
             400,
             &json!({"error": {
@@ -23,12 +30,11 @@ pub(super) fn response(state: &State, body: &str) -> Option<Response<Body>> {
         })
         .count()
         .saturating_sub(1);
-    let message = state
-        .chat
+    let message = chat
         .script
         .get(next)
         .cloned()
-        .unwrap_or_else(|| json!({"role":"assistant","content":state.chat.answer}));
+        .unwrap_or_else(|| json!({"role":"assistant","content":chat.answer}));
     Some(json_response(
         200,
         &json!({

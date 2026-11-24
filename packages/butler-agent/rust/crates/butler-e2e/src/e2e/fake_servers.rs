@@ -138,7 +138,7 @@ pub struct Seen {
 
 struct State {
     kind: Kind,
-    chat: ChatBehavior,
+    chat: Mutex<ChatBehavior>,
     local_capabilities: Mutex<LocalCapabilities>,
     seen: Mutex<Vec<Seen>>,
 }
@@ -177,7 +177,7 @@ impl FakeServer {
         let state = Arc::new(State {
             kind,
             local_capabilities: Mutex::new(chat.local_capabilities.clone()),
-            chat,
+            chat: Mutex::new(chat),
             seen: Mutex::new(Vec::new()),
         });
         let shared = state.clone();
@@ -262,14 +262,15 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         (Kind::LocalModels, &Method::GET, "/api/tags") => json_response(200, &ollama_tags()),
         (Kind::LocalModels, &Method::GET, "/v1/models") => json_response(200, &lm_studio_models()),
         (Kind::LocalModels, &Method::POST, "/v1/chat/completions") => {
+            let chat = lock(&state.chat).clone();
             if streams_before > 0 && is_stream_request(&seen) {
-                tokio::time::sleep(state.chat.hold_later_streams).await;
+                tokio::time::sleep(chat.hold_later_streams).await;
             }
-            if let Some(paced) = paced::response(&state.chat, &seen, streams_before == 0).await {
+            if let Some(paced) = paced::response(&chat, &seen, streams_before == 0).await {
                 return paced;
             }
-            scripted::response(&state, &seen.body)
-                .unwrap_or_else(|| chat_completion(&state.chat, &seen.body, streams_before == 0))
+            scripted::response(&state, &chat, &seen.body)
+                .unwrap_or_else(|| chat_completion(&chat, &seen.body, streams_before == 0))
         }
         (Kind::ProviderModels, &Method::GET, "/v1/models") => provider_models(&seen.headers),
         _ => json_response(404, &json!({"error": {"message": "not found"}})),
