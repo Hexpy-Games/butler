@@ -41,6 +41,20 @@ impl OnboardingState {
     pub(super) fn shows(&self) -> bool {
         self.gate != Gate::Pending && (self.gate != Gate::Workspace || self.rerun)
     }
+
+    /// An onboarding opened before `/model-catalog` answered takes the first catalog that lands.
+    pub(super) fn catalog_loaded(&self, catalog: &Rc<serde_json::Value>, cx: &mut gpui::App) {
+        let Some(view) = &self.view else { return };
+        if !view.read(cx).catalog.is_null() {
+            return;
+        }
+        let providers = view.read(cx).providers.clone();
+        providers.update(cx, |p, cx| p.set_catalog(catalog, cx));
+        view.update(cx, |view, cx| {
+            view.catalog = catalog.clone();
+            cx.notify();
+        });
+    }
 }
 
 impl Shell {
@@ -69,7 +83,9 @@ impl Shell {
         }
         let settings = self.settings_raw.clone().unwrap_or_default();
         let catalog = self.catalog_raw.clone().unwrap_or_default();
-        let view = cx.new(|cx| Onboarding::new(mode, settings, catalog, window, cx));
+        let view = cx.new(|cx| Onboarding::new(mode, settings, catalog.clone(), window, cx));
+        let providers = view.read(cx).providers.clone();
+        providers.update(cx, |p, cx| p.set_catalog(&catalog, cx));
         cx.subscribe_in(&view, window, Self::on_onboarding).detach();
         let lang = view.read(cx).lang;
         self.set_locale(locale(lang), cx);

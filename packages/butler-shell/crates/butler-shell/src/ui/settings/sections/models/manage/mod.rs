@@ -18,6 +18,7 @@ use butler_ds::ui::toast::{self, Toast, ToastId};
 use gpui::App;
 
 pub(crate) use add_edit::AddEditPage;
+pub(crate) use catalog::Catalog;
 pub(crate) use image::ImageModels;
 pub(crate) use image_add::ImageAddPage;
 pub(crate) use management::{Kind as ManagementKind, ManagementPage};

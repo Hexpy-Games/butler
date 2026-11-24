@@ -18,8 +18,6 @@ pub(super) struct Words {
     pub(super) plan_notice: &'static str,
     /// chatgptPlan.manageUsage
     pub(super) manage_usage: &'static str,
-    /// firstRun.providerNames, in `CardId` order
-    pub(super) providers: [&'static str; 11],
 }
 
 fn agent_counts_ko(instructions: u64, servers: u64) -> String {
@@ -48,19 +46,6 @@ const KO: Words = Words {
     agent_counts: agent_counts_ko,
     plan_notice: "버틀러의 AI 요청에 ChatGPT 플랜이 쓰입니다.",
     manage_usage: "사용량 관리",
-    providers: [
-        "ChatGPT",
-        "Claude",
-        "Gemini",
-        "OpenAI API",
-        "Grok",
-        "Qwen",
-        "Kimi",
-        "Z.AI 코딩 플랜",
-        "Z.AI API",
-        "OpenCode Go",
-        "기타 (OpenAI 호환)",
-    ],
 };
 
 const EN: Words = Words {
@@ -72,19 +57,6 @@ const EN: Words = Words {
     agent_counts: agent_counts_en,
     plan_notice: "Butler's AI requests use your ChatGPT plan.",
     manage_usage: "Manage usage",
-    providers: [
-        "ChatGPT",
-        "Claude",
-        "Gemini",
-        "OpenAI API",
-        "Grok",
-        "Qwen",
-        "Kimi",
-        "Z.AI Coding Plan",
-        "Z.AI API",
-        "OpenCode Go",
-        "Other (OpenAI-compatible)",
-    ],
 };
 
 pub(super) fn words(lang: Lang) -> &'static Words {

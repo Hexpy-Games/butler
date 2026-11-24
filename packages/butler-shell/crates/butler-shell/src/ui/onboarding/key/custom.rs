@@ -171,7 +171,7 @@ pub(crate) fn custom_screen(
     }
 }
 
-/// `connected`, and whether a choice is pending (it stays so after a failure, until Retry).
+/// `connected`, and whether a choice is in progress (not after a failure).
 fn connection(view: &Onboarding, cx: &App) -> (bool, bool) {
     let commit = view.commit.read(cx);
     (commit.connected().is_some(), commit.pending())

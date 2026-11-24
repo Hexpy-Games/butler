@@ -28,7 +28,7 @@ use crate::ui::settings::state::fetch;
 pub(crate) enum PendingConnection {
     Hosted {
         card: CardId,
-        provider_id: &'static str,
+        provider_id: SharedString,
         auth_type: &'static str,
         credential_id: Option<SharedString>,
         /// The AI already in use keeps its model and effort.
@@ -44,7 +44,7 @@ pub(crate) enum PendingConnection {
 impl PendingConnection {
     fn card(&self) -> CardId {
         match self {
-            Self::Hosted { card, .. } | Self::Local { card, .. } => *card,
+            Self::Hosted { card, .. } | Self::Local { card, .. } => card.clone(),
         }
     }
 }
@@ -157,16 +157,16 @@ impl Commit {
 
     /// A saved connection (resume on the first run).
     pub(crate) fn saved_card(&self) -> Option<CardId> {
-        self.saved.as_ref().map(|(card, _)| *card)
+        self.saved.as_ref().map(|(card, _)| card.clone())
     }
 
     pub(crate) fn failed(&self) -> bool {
         self.failed
     }
 
-    /// `pending`: a choice is submitted and not yet connected.
+    /// `pending`: a choice is submitted and neither connected nor failed (a failed choice is kept for Retry).
     pub(crate) fn pending(&self) -> bool {
-        self.pending.is_some()
+        self.pending.is_some() && !self.failed
     }
 
     /// `committing`: a commit is running.

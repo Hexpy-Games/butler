@@ -12,7 +12,7 @@ mod hooks;
 mod logs;
 mod mcp;
 mod memory;
-mod models;
+pub(crate) mod models;
 mod personalization;
 mod security;
 mod server;

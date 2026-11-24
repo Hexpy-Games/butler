@@ -172,10 +172,6 @@ pub(super) fn classify(
         // Only OpenAI's documented quota code: other 429s are rate limits.
         429 if mentions(body, &["insufficient_quota"]) => Err(ProviderKeyCheckError::NoAccess),
         429 => Err(ProviderKeyCheckError::RateLimited),
-        404 | 405 => Ok(ProviderKeyCheck {
-            models: Vec::new(),
-            verified: false,
-        }),
         _ => Err(ProviderKeyCheckError::ProviderUnavailable { status }),
     }
 }
@@ -258,7 +254,7 @@ mod tests {
                 json!({"error":{"message":"Tokens per minute quota reached"}}),
                 Err("rate_limited"),
             ),
-            (404, json!({}), Ok(false)),
+            (404, json!({}), Err("provider_unavailable")),
             (503, json!({}), Err("provider_unavailable")),
         ];
         for (status, body, expected) in cases {

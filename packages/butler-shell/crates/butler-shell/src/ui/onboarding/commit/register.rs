@@ -13,7 +13,7 @@ const DEFAULT_LOCAL_CONTEXT_TOKENS: u64 = 16_384;
 const EVERYDAY_EFFORTS: [&str; 4] = ["medium", "low", "high", "none"];
 
 pub(super) struct Hosted {
-    provider_id: &'static str,
+    provider_id: String,
     auth_type: &'static str,
     credential_id: Option<String>,
     keep_defaults: bool,
@@ -29,13 +29,13 @@ impl Registration {
     pub(super) fn new(connection: &PendingConnection) -> Self {
         match connection {
             &PendingConnection::Hosted {
-                provider_id,
+                ref provider_id,
                 auth_type,
                 ref credential_id,
                 keep_defaults,
                 ..
             } => Self::Hosted(Hosted {
-                provider_id,
+                provider_id: provider_id.to_string(),
                 auth_type,
                 credential_id: credential_id.as_ref().map(ToString::to_string),
                 keep_defaults,
@@ -196,7 +196,7 @@ async fn register_hosted(
     settings: &Value,
 ) -> Result<Registered, Error> {
     let catalog = client.get_model_catalog().await?;
-    let provider = find_provider(&catalog, hosted.provider_id);
+    let provider = find_provider(&catalog, &hosted.provider_id);
     let in_use = provider.filter(|_| hosted.keep_defaults).and_then(|p| {
         models(p)
             .iter()
@@ -207,7 +207,7 @@ async fn register_hosted(
             model: model.clone(),
             effort: text(settings, "reasoning_effort").to_owned(),
         }),
-        None => routine_preset(&catalog, hosted.provider_id),
+        None => routine_preset(&catalog, &hosted.provider_id),
     };
     if let Some(plan) = plan_preset(provider, hosted.auth_type, preset.as_ref()) {
         preset = Some(plan);
@@ -215,7 +215,7 @@ async fn register_hosted(
     // `no_usable_model`
     let preset = preset.ok_or(Error::Protocol)?;
     let mut body = json!({
-        "provider_id": hosted.provider_id,
+        "provider_id": &hosted.provider_id,
         "model_id": text(&preset.model, "model_id"),
         "auth_type": hosted.auth_type,
     });

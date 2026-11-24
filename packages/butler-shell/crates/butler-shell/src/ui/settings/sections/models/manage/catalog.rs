@@ -57,9 +57,9 @@ impl CatalogModel {
 
 #[derive(Default, Deserialize)]
 #[serde(default)]
-pub(super) struct CatalogProvider {
-    pub(super) provider_id: String,
-    pub(super) provider_label: String,
+pub(crate) struct CatalogProvider {
+    pub(crate) provider_id: String,
+    pub(crate) provider_label: String,
     #[serde(deserialize_with = "nullable")]
     auth_methods: Vec<String>,
     default_api_base_url: Option<String>,
@@ -81,7 +81,7 @@ pub(super) struct Credential {
 /// `ModelCatalogView`
 #[derive(Default, Deserialize)]
 #[serde(default)]
-pub(super) struct Catalog {
+pub(crate) struct Catalog {
     #[serde(deserialize_with = "nullable")]
     providers: Vec<CatalogProvider>,
     #[serde(deserialize_with = "nullable")]
@@ -95,7 +95,12 @@ pub(super) struct Catalog {
 impl Catalog {
     /// The catalog the settings hold; `None` until `/model-catalog` lands.
     pub(super) fn read(state: &SettingsState) -> Option<Self> {
-        Self::deserialize(state.catalog()?).ok()
+        Self::parse(state.catalog()?)
+    }
+
+    /// A `/model-catalog` reply; `None` when it is not one (not loaded yet).
+    pub(crate) fn parse(raw: &serde_json::Value) -> Option<Self> {
+        Self::deserialize(raw).ok()
     }
 
     /// `HostedImageModelForm` in `ImageModelAddPage.tsx` uses only saved API keys.
@@ -119,7 +124,7 @@ impl Catalog {
     }
 
     /// `hostedModelProviders`
-    pub(super) fn hosted_providers(&self) -> impl Iterator<Item = &CatalogProvider> {
+    pub(crate) fn hosted_providers(&self) -> impl Iterator<Item = &CatalogProvider> {
         self.providers
             .iter()
             .filter(|provider| provider.provider_id != LOCAL_PROVIDER_ID)

@@ -36,9 +36,8 @@ pub(crate) fn key_screen(
     let copy = words(view.lang);
     let (card_id, value, typed) = {
         let form = form.read(cx);
-        (form.card, form.value.clone(), form.status)
+        (form.card.clone(), form.value.clone(), form.status)
     };
-    let spec = providers::card(card_id);
     let (connected, pending) = {
         let commit = view.commit.read(cx);
         (commit.connected().is_some(), commit.pending())
@@ -54,14 +53,14 @@ pub(crate) fn key_screen(
     };
     let field = key_field(view.lang, &form, value, focus, status, connected, cx);
     let mut links = Inline::new().gap(Space::Md);
-    if let Some(url) = spec.key_url {
+    if let Some(url) = providers::key_url(card_id.provider_id()) {
         links =
             links.child(InlineReference::external("first-run-key-url", url).label(copy.get_key));
     }
     let links = links
         .child(Typo::caption(copy.key_stored).tone(Tone::Tertiary))
         .into_any_element();
-    let name = copy.names[card_id as usize];
+    let name = providers::card_name(&card_id, view.lang, &view.providers.read(cx).hosted());
     let label = if connecting {
         copy.connecting
     } else {
@@ -77,8 +76,8 @@ pub(crate) fn key_screen(
     }
     step_card(
         view,
-        format!("key:{card_id:?}"),
-        (copy.key_title)(name),
+        format!("key:{}", card_id.provider_id()),
+        (copy.key_title)(&name),
         [field, links],
         cx,
     )
@@ -114,7 +113,10 @@ fn status_line(
     };
     let mut row = Stack::row().cross(Cross::Center).gap(Space::Xs);
     if status == Status::Checking {
-        row = row.child(Spinner::new("first-run-key-spinner").size(14.));
+        row = row.child(crate::ui::widgets::anchored(
+            Spinner::new("first-run-key-spinner").size(14.),
+            "first-run-key-spinner",
+        ));
     } else if done {
         row = row.child(icon(Icon::CheckIcon, IconSize::Sm, Ds::get(cx)));
     }
@@ -125,7 +127,10 @@ fn status_line(
 fn failure_line(copy: &Words, lang: Lang, failure: Failure, form: &Entity<KeyForm>) -> AnyElement {
     let mut lines = Stack::new()
         .gap(Space::Xs)
-        .child(FieldError::new().child(copy.key_errors[failure as usize]));
+        .child(crate::ui::widgets::anchored(
+            FieldError::new().child(copy.key_errors[failure as usize]),
+            "first-run-key-error",
+        ));
     if failure.retryable() {
         let form = form.clone();
         lines = lines.child(

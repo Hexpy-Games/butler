@@ -7,7 +7,7 @@ use gpui::{App, AppContext as _, Context, SharedString, Window};
 
 use super::commit::{Commit, PendingConnection};
 use super::key::{CustomEvent, CustomServer, KeyEvent, KeyForm};
-use super::providers::{self, CardId, CardKind, LocalModelOption};
+use super::providers::{CardId, CardKind, LocalModelOption};
 use super::sign_in::SignIn;
 use super::welcome::Consent;
 use super::{Mode, Onboarding, OnboardingEvent};
@@ -97,7 +97,7 @@ pub(crate) struct Stages {
 
 /// `connectionView`.
 fn connection_view(card: CardId) -> ConnectView {
-    match providers::card(card).kind {
+    match card.kind() {
         CardKind::SignIn => ConnectView::SignIn,
         CardKind::Key => ConnectView::Key(card),
         CardKind::Custom => ConnectView::Custom,
@@ -168,7 +168,7 @@ impl Onboarding {
             .read(cx)
             .connected()
             .map(|(card, _)| card)
-            .or(self.current_card)
+            .or_else(|| self.current_card.clone())
     }
 }
 
@@ -272,11 +272,11 @@ impl Onboarding {
         cx: &mut Context<Self>,
     ) {
         let connection = PendingConnection::Hosted {
+            provider_id: card.provider_id().to_owned().into(),
+            keep_defaults: self.current_card.as_ref() == Some(&card),
             card,
-            provider_id: providers::card(card).provider_id.unwrap_or_default(),
             auth_type: "api_key",
             credential_id: Some(credential_id),
-            keep_defaults: self.current_card == Some(card),
         };
         self.submit(connection, cx);
     }
@@ -285,7 +285,7 @@ impl Onboarding {
         self.stages.advance_on_connect = true;
         let connection = PendingConnection::Hosted {
             card: CardId::Chatgpt,
-            provider_id: "openai",
+            provider_id: "openai".into(),
             auth_type: "chatgpt_oauth",
             credential_id: None,
             keep_defaults: self.current_card == Some(CardId::Chatgpt),
@@ -317,15 +317,16 @@ impl Onboarding {
 
     /// Opens ② for a card; a key form or Other is built anew, as React remounts it.
     fn show(&mut self, view: ConnectView, window: &mut Window, cx: &mut Context<Self>) {
-        self.key = match view {
+        self.key = match &view {
             ConnectView::Key(card) => {
+                let card = card.clone();
                 let form = cx.new(|cx| KeyForm::new(card, window, cx));
                 cx.subscribe(&form, |this, _, event: &KeyEvent, cx| {
                     let KeyEvent::Saved {
                         card,
                         credential_id,
                     } = event;
-                    this.connect_key(*card, credential_id.clone(), cx);
+                    this.connect_key(card.clone(), credential_id.clone(), cx);
                 })
                 .detach();
                 Some(form)

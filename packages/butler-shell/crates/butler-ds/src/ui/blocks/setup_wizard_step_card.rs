@@ -209,6 +209,7 @@ impl SetupWizardStepCard {
                 .on_click(move |event, window, cx| handler(event, window, cx));
             row = row.child(
                 div()
+                    .debug_selector(|| "setup-wizard-step-back".to_owned())
                     .flex()
                     .flex_none()
                     .items_center()

@@ -15,7 +15,7 @@ use gpui::{Context, EventEmitter, SharedString, Task, Window};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::providers::{self, CardId};
+use super::providers::CardId;
 use crate::ui::settings::state::fetch;
 
 pub(crate) use custom::{CustomEvent, CustomServer, custom_screen};
@@ -144,10 +144,6 @@ impl KeyForm {
         self.check(self.sequence, &key, cx);
     }
 
-    fn provider_id(&self) -> &'static str {
-        providers::card(self.card).provider_id.unwrap_or_default()
-    }
-
     fn fail(&mut self, failure: Failure) {
         self.status = Status::Failed(failure);
         self.focus = true;
@@ -157,7 +153,7 @@ impl KeyForm {
     fn check(&mut self, id: u64, key: &str, cx: &mut Context<Self>) {
         self.status = Status::Checking;
         cx.notify();
-        let body = json!({ "provider_id": self.provider_id(), "api_key": key });
+        let body = json!({ "provider_id": self.card.provider_id(), "api_key": key });
         fetch(
             cx,
             move |client| async move { client.verify_setup_credential(&body).await },
@@ -178,7 +174,7 @@ impl KeyForm {
 
     /// `check`, second half: save the key (the same key again answers the existing credential).
     fn save(&mut self, id: u64, verified: bool, cx: &mut Context<Self>) {
-        let body = json!({ "provider_id": self.provider_id(), "api_key": self.value.trim() });
+        let body = json!({ "provider_id": self.card.provider_id(), "api_key": self.value.trim() });
         fetch(
             cx,
             move |client| async move { client.save_credential(&body).await },
@@ -194,7 +190,7 @@ impl KeyForm {
                             Status::Saved
                         };
                         cx.emit(KeyEvent::Saved {
-                            card: this.card,
+                            card: this.card.clone(),
                             credential_id: saved.credential.id.into(),
                         });
                     }
