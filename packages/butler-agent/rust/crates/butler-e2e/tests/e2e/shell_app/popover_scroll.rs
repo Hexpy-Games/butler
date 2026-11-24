@@ -55,8 +55,8 @@ fn visible_message(layout: &Value) -> String {
 /// conversation under it.
 /// One mouse-wheel notch (in lines) moves the conversation Electron's distance: 40 px on macOS,
 /// 100 on Windows, 120 on Linux.
-/// A vertical wheel notch over a markdown table that is wider than its frame moves the
-/// conversation by the notch and never scrolls the table sideways: Electron turns no vertical
+/// At the conversation's end, a vertical wheel notch over a markdown table that is wider than
+/// its frame moves neither the table sideways nor the conversation: Electron turns no vertical
 /// wheel sideways outside the tab strip.
 #[tokio::test]
 async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), HarnessError> {
@@ -131,7 +131,7 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     let (list_dy, chat_dy) = popover_scroll(&mut shell).await?;
     let (peek_control, card_right, transcript_left, peek_dy) = peek_scroll(&mut shell).await?;
     let measured = format!(
-        "table: content w {content_w}, frame w {frame_w}; chat moved {table_chat_dy} (Electron {notch}); table offset moved {offset_dy}; \
+        "table: content w {content_w}, frame w {frame_w}; chat moved {table_chat_dy} (Electron 0); table offset moved {offset_dy} (Electron 0); \
          control (wheel over the chat) moved it {control}; one notch moved it {notch_dy} (Electron {notch}); \
          capped list: chat moved {chat_dy}, \
          list moved {list_dy}; peek control {peek_control}; peek card right {card_right}, \
@@ -142,8 +142,8 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     if content_w <= frame_w + 1. {
         failed.push("(table control) the table does not overflow");
     }
-    if (table_chat_dy - notch).abs() > 1. {
-        failed.push("a wheel notch over a wide table did not move the chat Electron's distance");
+    if table_chat_dy.abs() > 0.5 {
+        failed.push("a wheel over a wide table at the chat's end moved the chat");
     }
     if offset_dy.abs() > 0.5 {
         failed.push("a vertical wheel scrolled the table sideways");
@@ -181,7 +181,7 @@ async fn table_scroll(shell: &mut Shell, lines: f64) -> Result<(f64, f64, f64, f
     let before = layout(shell, "table-before", anchors).await?;
     shell
         .run(&[
-            &format!("wheel markdown-table-content {lines} 0.02 0.5 lines"),
+            &format!("wheel markdown-table-content -{lines} 0.02 0.5 lines"),
             "wait 500",
         ])
         .await?;
