@@ -49,8 +49,12 @@ function DownloadRow({ item }: { item: BrowserDownloadEntry }) {
   const meta = state === "failed" ? copy.downloadFailed : state === "cancelled" ? copy.downloadCancelled
     : progress && total ? `${size} / ${formatFileSize(total)}` : size;
   const open = () => void browserCall("download.open", { id });
+  const action = progress
+    ? <IconButton label={copy.cancel} onClick={() => void browserCall("download.cancel", { id })}><X size="sm" /></IconButton>
+    : done ? <IconButton label={copy.showInFolder} onClick={() => void browserCall("download.show", { id })}><Folder size="sm" /></IconButton>
+    : null;
   return (
-    <Stack align="row" cross="center">
+    <Stack align="row" cross="start">
       <Clickable stretch disabled={!done} onClick={open}>
         <Box padding="sm" grow minWidth="0">
           <Stack align="row" cross="start" gap="sm">
@@ -63,8 +67,7 @@ function DownloadRow({ item }: { item: BrowserDownloadEntry }) {
           </Stack>
         </Box>
       </Clickable>
-      {progress && <IconButton label={copy.cancel} onClick={() => void browserCall("download.cancel", { id })}><X size="sm" /></IconButton>}
-      {done && <IconButton label={copy.showInFolder} onClick={() => void browserCall("download.show", { id })}><Folder size="sm" /></IconButton>}
+      {action && <Box paddingY="xs">{action}</Box>}
     </Stack>
   );
 }
