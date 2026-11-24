@@ -11,9 +11,11 @@ use butler_e2e::e2e::{
     fake_servers::{ChatBehavior, FakeServer, LocalCapabilities},
     fixtures,
     gateway::{tool_rows, turn_state},
+    harness_error, listening_tcp_ports,
     scenario::{Fixture, Scenario, Setup},
     security::AdminClient,
     sshd::{TestSshd, user_ssh_config},
+    stop_intent::instance_record,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -188,7 +190,45 @@ async fn chat_add_applies_the_answered_values() -> Result<(), HarnessError> {
     let computers = listed(&api).await?;
     assert_eq!(computers[0]["name"], "My Studio");
     assert_eq!(computers[0]["address"], ALIAS);
-    s.finish().await
+    s.finish().await?;
+
+    const PROMPT: &str = "Wait for the remote gate.";
+    let (deployed, script, _server, _authority, chat) =
+        super::remote_sessions::remote_chat("COMPUTER-CHAT-TCP", "full_access").await?;
+    let work = deployed.remote.0.home.join("work");
+    script.rounds.lock().unwrap().insert(
+        PROMPT.into(),
+        vec![json!([super::access_tiers::stub::call(
+            "gate",
+            "run_command",
+            &json!({
+                "command":"touch waiting-for-gate; while [ ! -f gate ]; do sleep 0.1; done",
+                "summary":"Wait for the gate"
+            })
+        )])],
+    );
+    let turn = deployed.s.gw.say_turn(&chat, PROMPT).await?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !work.join("waiting-for-gate").is_file() {
+        assert!(
+            Instant::now() < deadline,
+            "remote turn did not reach the gate"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let record = instance_record(&deployed.remote.0.data)
+        .ok_or_else(|| harness_error("no remote service record"))?;
+    let pid = u32::try_from(record["pid"].as_u64().unwrap())
+        .map_err(|_| harness_error("invalid remote pid"))?;
+    assert_eq!(listening_tcp_ports(pid).await?, Default::default());
+    fs::write(work.join("gate"), b"")?;
+    let done = deployed
+        .s
+        .gw
+        .wait_terminal(&chat, &turn, Duration::from_secs(60))
+        .await?;
+    assert_eq!(turn_state(&done), "delivered");
+    deployed.s.finish().await
 }
 
 #[tokio::test]

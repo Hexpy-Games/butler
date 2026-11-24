@@ -2,10 +2,7 @@
 
 use std::time::Duration;
 
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Longest callback request head the listener reads.
 const MAX_REQUEST_HEAD: usize = 8192;
@@ -92,7 +89,7 @@ pub(crate) enum Callback {
 /// Reads one request within [`READ_TIMEOUT`] and answers it unless it
 /// carries this sign-in's code (the caller answers that one).
 pub(crate) async fn read_callback(
-    stream: &mut TcpStream,
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
     redirect_uri: &str,
     spec: CallbackSpec,
     state: &str,
@@ -141,7 +138,9 @@ fn classify(params: &std::collections::BTreeMap<String, String>, state: &str) ->
 
 /// The path and query of a `GET` request, or `None` (answered) for any
 /// other request.
-async fn read_request_target(stream: &mut TcpStream) -> std::io::Result<Option<String>> {
+async fn read_request_target(
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
+) -> std::io::Result<Option<String>> {
     let mut request = vec![0_u8; MAX_REQUEST_HEAD];
     let mut length = 0;
     loop {
@@ -176,7 +175,11 @@ async fn read_request_target(stream: &mut TcpStream) -> std::io::Result<Option<S
 }
 
 /// Answers the browser with a short plain-text page and closes.
-pub(crate) async fn respond(stream: &mut TcpStream, status: u16, body: &str) {
+pub(crate) async fn respond(
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
+    status: u16,
+    body: &str,
+) {
     let status_text = reqwest::StatusCode::from_u16(status)
         .ok()
         .and_then(|status| status.canonical_reason())

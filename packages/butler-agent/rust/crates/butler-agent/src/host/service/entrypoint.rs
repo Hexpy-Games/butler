@@ -325,6 +325,10 @@ async fn start_control(
         config.installation.clone(),
         instance.nonce().to_owned(),
         control_owners(gateway, runtime, stop),
+        config
+            .app
+            .remote_socket()
+            .map(|socket| socket.path.as_path()),
     )
     .await
     {

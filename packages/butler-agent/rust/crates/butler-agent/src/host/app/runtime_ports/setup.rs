@@ -363,7 +363,16 @@ impl AppSetupPort for AppSetup {
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
         Box::pin(async move {
-            if input.redirect_port.is_some() && !butler_models::models::sealed::is_enabled() {
+            let remote = butler_models::models::sealed::is_enabled();
+            if input.callback_socket && (!remote || input.redirect_port.is_none()) {
+                return Err(GatewayApplicationError::Public {
+                    status: 400,
+                    code: "invalid_request".into(),
+                    message: "callback_socket requires redirect_port on a remote computer.".into(),
+                    source: None,
+                });
+            }
+            if input.redirect_port.is_some() && !remote {
                 return Err(GatewayApplicationError::Public {
                     status: 400,
                     code: "invalid_request".into(),
@@ -371,9 +380,17 @@ impl AppSetupPort for AppSetup {
                     source: None,
                 });
             }
+            let callback_socket = input
+                .callback_socket
+                .then(|| this.data_root.join("remote/oauth.sock"));
             Ok(this
                 .oauth
-                .start(input.force, input.kind, input.redirect_port)
+                .start(
+                    input.force,
+                    input.kind,
+                    input.redirect_port,
+                    callback_socket,
+                )
                 .await)
         })
     }
