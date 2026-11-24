@@ -98,7 +98,6 @@ impl TabRegistry {
                 let session = tab["owner"].as_str()?.strip_prefix("conversation:")?;
                 let url = tab["url"].as_str().unwrap_or("");
                 let user_visit = tab["holder"] == "user"
-                    && previous["url"] != url
                     && site_of(url) != previous["url"].as_str().and_then(site_of);
                 (previous["owner"] == "mine" || user_visit)
                     .then(|| (session.to_owned(), url.to_owned()))
