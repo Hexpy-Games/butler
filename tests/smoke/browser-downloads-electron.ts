@@ -75,7 +75,7 @@ try {
     await download("mine.txt", "conversation download");
     await waitBrowser(() => app.main("globalThis.browserAgentSubject.downloads.list()[0]?.state === 'done'"), "conversation user download finished");
     const mine = await app.call<string>("create", { url: app.url });
-    await waitBrowser(() => app.main(`${subject(mine)}.status === 'idle'`), "my tab fixture");
+    await waitBrowser(() => app.main(`${subject(mine)}.status === 'idle' && ${subject(mine)}.view?.webContents.getTitle() === 'Browser fixture'`), "my tab fixture");
     tab = mine;
     await download("mine.txt", "my download");
     await waitBrowser(() => app.main("globalThis.browserAgentSubject.downloads.list()[0]?.name === 'mine (1).txt' && globalThis.browserAgentSubject.downloads.list()[0].state === 'done'"), "my tab download finished");
@@ -100,7 +100,8 @@ try {
     assert.equal(receipt.output_id, undefined);
     const artifacts = await app.gateway.api<{ artifacts: Array<{ title: string }> }>("/artifacts?session_id=general");
     assert.ok(artifacts.artifacts.every(a => a.title !== "invoice.pdf"));
-    assert.equal(readFileSync(join(app.gateway.butlerData, receipt.path!), "utf8"), invoice);
+    const workspace = await app.main<string>(`globalThis.browserAgentSubject.downloadRequest({ op: "prepare", session: "general", tab: ${JSON.stringify(tab)} }).then(c => c.workspace_path)`);
+    assert.equal(readFileSync(join(workspace, receipt.path!), "utf8"), invoice);
     const canonical = await app.gateway.api<any>("/session-view?session_id=general");
     const stream = await app.gateway.api<any>("/events?limit=10");
     writeFileSync(join(evidence, "download-projection.json"), JSON.stringify({
