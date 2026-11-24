@@ -29,6 +29,9 @@ export async function browserOutputEntry(app:App,evidence:string,sessionId:strin
 export async function browserUiChecks(app:App,agentTab:string,evidence:string,sessionId:string) {
   const url=await app.main<string>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(agentTab)}).url`);
   const anchor=await app.call<string>("create",{owner:`conversation:${sessionId}`,url,profile:"signed_out"});
+  const holders=(await app.call<{tabs:Array<{id:string;holder:string}>}>("state")).tabs;
+  assert.equal(holders.find(tab=>tab.id===anchor)?.holder,"user","a tab the user opens starts user-held");
+  assert.equal(holders.find(tab=>tab.id===agentTab)?.holder,"agent","a tab Butler opened stays Butler's");
   const opened={id:anchor};
   const webgl=await app.main(`(async()=>{const tabs=globalThis.browserAgentSubject.tabs;const test=async id=>tabs.get(id).view.webContents.executeJavaScript("(()=>{const gl=document.createElement('canvas').getContext('webgl');const enabled=Boolean(gl);gl?.getExtension('WEBGL_lose_context')?.loseContext();return enabled})()");return {user:await test(${JSON.stringify(opened.id)}),agent:await test(${JSON.stringify(agentTab)})}})()`);
   assert.deepEqual(webgl,{user:true,agent:true},"WebGL is enabled for both user and agent tabs");

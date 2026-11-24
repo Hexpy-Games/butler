@@ -223,9 +223,10 @@ class UserBrowser {
     if(input.agent===true && !agentTabFits(this)) throw new Error("tab_budget_exhausted");
     const partitionOwner = input.preview_id ? `${owner}:preview:${input.preview_id}` : owner;
     if (profile === "signed_out" && !this.conversationPartitions.has(partitionOwner)) this.conversationPartitions.set(partitionOwner, `butler-conv-${randomUUID()}`);
+    // Who opens a tab holds it: a tab the user opens stays theirs (a sticky hold) until they hand it over; one Butler opens is Butler's.
     const tab = { id: shortId("t", id => this.tabs.has(id)), owner, profile, popup: Boolean(popupSource), opener: popupSource?.id, popupParentUrl: popupSource?.url, stills: this.stillPreferences.get(owner) !== false, partition: input.partition ?? (profile === "signed_in" ? "persist:butler-web" : this.conversationPartitions.get(partitionOwner)),
       preview: input.preview_id ?? (url && new URL(url).pathname.startsWith("/__p/") ? new URL(url).pathname.slice(5) : undefined),
-      agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: owner === "mine" ? "user" : "agent", sticky: false, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
+      agent: input.agent === true, muted: input.agent === true, placeholder: input.placeholder === true && !url && !popupSource, policy: input.policy ?? {}, epoch: 1, holder: input.agent === true ? "agent" : "user", sticky: input.agent !== true, waiting: false, busy: false, observation: null, url, title: "", favicon: "", status: "idle", canBack: false, canForward: false,
       still: "", view: null, attached: null, slot: null, bounds: null, covered: false, capture: null };
     tab.onStillChanged = () => this.publish();
     this.tabs.set(tab.id, tab);
