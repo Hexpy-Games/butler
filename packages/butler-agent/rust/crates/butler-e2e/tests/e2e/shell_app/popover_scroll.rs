@@ -28,7 +28,7 @@ pub(super) async fn layout(
     shell.report(&format!("{name}.layout"))
 }
 
-/// A message row inside the transcript's viewport, to follow while the list may scroll.
+/// A message row that intersects the transcript's viewport, to follow while the list may scroll.
 fn visible_message(layout: &Value) -> String {
     let top = anchor_field(layout, "chat-transcript", "y").expect("transcript");
     let height = anchor_field(layout, "chat-transcript", "h").expect("transcript");
@@ -39,7 +39,10 @@ fn visible_message(layout: &Value) -> String {
         .filter_map(|item| item["anchor"].as_str())
         .find(|anchor| {
             anchor.starts_with("message-")
-                && anchor_y(layout, anchor).is_some_and(|y| y > top + 10. && y < top + height)
+                && anchor_y(layout, anchor).is_some_and(|y| {
+                    y < top + height
+                        && anchor_field(layout, anchor, "h").is_some_and(|h| y + h > top)
+                })
         })
         .expect("a message in view")
         .to_owned()
@@ -52,13 +55,16 @@ fn visible_message(layout: &Value) -> String {
 /// conversation under it.
 /// One mouse-wheel notch (in lines) moves the conversation Electron's distance: 40 px on macOS,
 /// 100 on Windows, 120 on Linux.
+/// A vertical wheel notch over a markdown table that is wider than its frame moves the
+/// conversation by the notch and never scrolls the table sideways: Electron turns no vertical
+/// wheel sideways outside the tab strip.
 #[tokio::test]
 async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     let _serial = SERIAL.lock().await;
     let mut sandbox = Sandbox::new("SHELL-APP-20")?;
-    let _model = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let model = ready_workspace(&sandbox, ChatBehavior::default()).await?;
     let mut shell = Shell::start(&sandbox, &[]).await?;
     shell
         .run(&["agent running", "wait-anchor composer"])
@@ -72,9 +78,35 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
         gw.wait_terminal("general", &turn, Duration::from_secs(30))
             .await?;
     }
+    let head = format!(
+        "| {} |",
+        (0..10)
+            .map(|k| format!("wheel_parity_column_{k}"))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    );
+    let rule = format!("| {} |", ["---"; 10].join(" | "));
+    let row = format!(
+        "| {} |",
+        (0..10)
+            .map(|k| format!("value_{k}_0123456789"))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    );
+    model.set_answer(format!("Here is the table:\n\n{head}\n{rule}\n{row}\n"));
+    let turn = gw.say_turn("general", "Show the wide table.").await?;
+    gw.wait_terminal("general", &turn, Duration::from_secs(30))
+        .await?;
+    // One wheel notch in lines moves Chromium's distance for this OS.
+    let (lines, notch) = match butler_platform::launcher::node_platform() {
+        "darwin" => (1., 40.),
+        "win32" => (3., 100.),
+        _ => (3., 120.),
+    };
     shell
         .run(&["open general", "wait-anchor composer", "size 1200 800"])
         .await?;
+    let (content_w, frame_w, table_chat_dy, offset_dy) = table_scroll(&mut shell, lines).await?;
     // Away from the end, with room to scroll either way.
     shell
         .run(&["wheel chat-transcript 300", "wait 500"])
@@ -86,12 +118,6 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     shell.run(&["wheel chat-transcript 60", "wait 500"]).await?;
     let moved = layout(&mut shell, "moved", &message).await?;
     let control = anchor_y(&moved, &message).expect("message y") - y0;
-    // One wheel notch in lines moves Chromium's distance for this OS.
-    let (lines, notch) = match butler_platform::launcher::node_platform() {
-        "darwin" => (1., 40.),
-        "win32" => (3., 100.),
-        _ => (3., 120.),
-    };
     shell
         .run(&[
             &format!("wheel chat-transcript {lines} 0.5 0.5 lines"),
@@ -105,13 +131,23 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     let (list_dy, chat_dy) = popover_scroll(&mut shell).await?;
     let (peek_control, card_right, transcript_left, peek_dy) = peek_scroll(&mut shell).await?;
     let measured = format!(
-        "control (wheel over the chat) moved it {control}; one notch moved it {notch_dy} (Electron {notch}); \
+        "table: content w {content_w}, frame w {frame_w}; chat moved {table_chat_dy} (Electron {notch}); table offset moved {offset_dy}; \
+         control (wheel over the chat) moved it {control}; one notch moved it {notch_dy} (Electron {notch}); \
          capped list: chat moved {chat_dy}, \
          list moved {list_dy}; peek control {peek_control}; peek card right {card_right}, \
          transcript left {transcript_left}; peek chat moved {peek_dy}"
     );
     println!("SHELL-APP-20 {measured}");
     let mut failed = Vec::new();
+    if content_w <= frame_w + 1. {
+        failed.push("(table control) the table does not overflow");
+    }
+    if (table_chat_dy - notch).abs() > 1. {
+        failed.push("a wheel notch over a wide table did not move the chat Electron's distance");
+    }
+    if offset_dy.abs() > 0.5 {
+        failed.push("a vertical wheel scrolled the table sideways");
+    }
     if control.abs() < 20. {
         failed.push("(control) the wheel over the chat did not move it");
     }
@@ -138,6 +174,27 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())
+}
+
+async fn table_scroll(shell: &mut Shell, lines: f64) -> Result<(f64, f64, f64, f64), HarnessError> {
+    let anchors = "markdown-table-frame markdown-table-content";
+    let before = layout(shell, "table-before", anchors).await?;
+    shell
+        .run(&[
+            &format!("wheel markdown-table-content {lines} 0.02 0.5 lines"),
+            "wait 500",
+        ])
+        .await?;
+    let after = layout(shell, "table-after", anchors).await?;
+    let content_w = anchor_field(&before, "markdown-table-content", "w").expect("content width");
+    let frame_w = anchor_field(&before, "markdown-table-frame", "w").expect("frame width");
+    let chat_dy = anchor_y(&after, "markdown-table-frame").expect("frame y")
+        - anchor_y(&before, "markdown-table-frame").expect("frame y");
+    let offset_dy = (anchor_field(&after, "markdown-table-content", "x").expect("content x")
+        - anchor_field(&after, "markdown-table-frame", "x").expect("frame x"))
+        - (anchor_field(&before, "markdown-table-content", "x").expect("content x")
+            - anchor_field(&before, "markdown-table-frame", "x").expect("frame x"));
+    Ok((content_w, frame_w, chat_dy, offset_dy))
 }
 
 async fn popover_scroll(shell: &mut Shell) -> Result<(f64, f64), HarnessError> {

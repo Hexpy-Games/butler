@@ -2,8 +2,8 @@
 //! row, edge-faded while clipped (`useScrollEdges("x")`). It reaches up by the room a lifted,
 //! focused card's ring needs and the grid pads it back, so the clip never cuts the ring.
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    SharedString, Styled as _, Window, div, px, relative,
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div, px, relative,
 };
 
 use super::card::{self, Card};
@@ -33,9 +33,6 @@ pub(super) fn render(
     let ds = Ds::get(cx);
     // `--prompt-ring-room: focus-ring-room + card-lift`.
     let ring = ds.len(Length::FocusRingRoom) + px(LIFT);
-    // Live-harness anchors: `debug_selector` is a no-op unless gpui's test-support is on
-    // (the shots build).
-    let anchor = format!("{}-rail", list.id);
     let grid = div()
         .flex()
         .flex_row()
@@ -45,11 +42,7 @@ pub(super) fn render(
         .pt(ring)
         .pb(ds.len(Length::Space2))
         .px(px(m.content_inset))
-        .children(cards)
-        .debug_selector({
-            let anchor = anchor.clone();
-            move || format!("{anchor}-content")
-        });
+        .children(cards);
     let config = Config {
         id: SharedString::from(format!("{}-rail", list.id)).into(),
         axis: Axis::X,
@@ -64,7 +57,6 @@ pub(super) fn render(
         .min_w_0()
         .mt(-ring)
         .overflow_hidden()
-        .debug_selector(move || anchor)
         .child(built.element)
         .children(recording.map(|recording| recording.record(Slot::Rail)))
         .into_any_element()

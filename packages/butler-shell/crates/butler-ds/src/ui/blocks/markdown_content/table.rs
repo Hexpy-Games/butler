@@ -4,8 +4,8 @@
 //! columns are sized the way CSS's automatic table layout does: from each cell's max-content and
 //! min-content widths and the width the column offers (measured on the last frame).
 use gpui::{
-    AnyElement, App, ElementId, Font, FontWeight, IntoElement as _, ParentElement as _,
-    SharedString, Styled as _, TextRun, Window, div, font, px, relative,
+    AnyElement, App, ElementId, Font, FontWeight, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, Styled as _, TextRun, Window, div, font, px, relative,
 };
 
 use super::{Env, Face, inline};
@@ -197,10 +197,13 @@ pub(super) fn render(
     let sized = widths(&extents, room);
     let ds = Ds::get(cx);
     let (line, edge) = (ds.color(Color::Line), ds.len(Length::BorderHairline));
+    // Live-harness anchors: `debug_selector` is a no-op unless gpui's test-support is on
+    // (the shots build).
     let mut grid = div()
         .flex()
         .flex_col()
         .flex_none()
+        .debug_selector(|| "markdown-table-content".into())
         .border_l(edge)
         .border_t(edge)
         .border_color(line);
@@ -243,6 +246,7 @@ pub(super) fn render(
         .relative()
         .w_full()
         .min_w_0()
+        .debug_selector(|| "markdown-table-frame".into())
         .child(recorder)
         .child(scroller.element)
         .into_any_element()
