@@ -100,6 +100,8 @@ impl SetupWizardStage {
         self
     }
 
+    /// The stage's morph handle and whether this step's card is solid; see
+    /// [`super::SetupWizardShell::morph`].
     pub fn morph(mut self, morph: Option<(SetupWizardMorph, bool)>) -> Self {
         self.morph = morph;
         self

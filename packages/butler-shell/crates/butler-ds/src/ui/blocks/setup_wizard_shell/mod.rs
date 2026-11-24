@@ -20,8 +20,8 @@ mod wizard;
 
 use crate::ui::cover::cover;
 use gpui::{
-    AnyElement, App, Bounds, ElementId, Global, IntoElement, ParentElement, Pixels, RenderOnce,
-    SharedString, Styled as _, Window, div,
+    AnyElement, App, Bounds, ElementId, Global, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, RenderOnce, SharedString, Styled as _, Window, div,
 };
 
 pub use content::{ContentWidth, SetupWizardContent, SetupWizardList};
@@ -313,6 +313,7 @@ impl RenderOnce for SetupWizardShell {
         });
         let viewport = ds.len(Length::AdaptiveViewportBlockSize);
         let mut screen = div()
+            .id(self.id.clone())
             .relative()
             .overflow_hidden()
             .w_full()
