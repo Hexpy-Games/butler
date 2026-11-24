@@ -163,7 +163,7 @@ export async function requestSecurityRoute(
   const entryId = input?.body?.id;
   if (route?.entry && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) return failure("invalid_request");
   const flow = input?.body?.flow;
-  if (route?.flow && (typeof flow !== "string" || !/^[A-Za-z0-9_]{1,128}$/u.test(flow))) return failure("invalid_request");
+  if (route?.flow && (typeof flow !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(flow))) return failure("invalid_request");
   const credentialId = input?.body?.id;
   if (route?.credential && (typeof credentialId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(credentialId))) return failure("invalid_request");
   const payload = input?.body?.payload;

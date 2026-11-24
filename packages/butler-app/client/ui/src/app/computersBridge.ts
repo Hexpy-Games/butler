@@ -20,7 +20,7 @@ export function computerBridgeCall(method: string, path: string, body: unknown):
   }
   if (method === "PATCH" && !suffix) return { action: "updateComputerModel", input: { id, payload: payload() } };
   if (method === "PUT" && !suffix) return { action: "editComputer", input: { id, payload: payload() } };
-  const oauth = suffix?.match(/^\/oauth\/([A-Za-z0-9_]+)(\/cancel)?$/u);
+  const oauth = suffix?.match(/^\/oauth\/([A-Za-z0-9_-]{1,128})(\/cancel)?$/u);
   if (oauth) {
     const [, flow, cancel] = oauth;
     if (method === "GET" && !cancel) return { action: "getComputerOauth", input: { id, flow } };
