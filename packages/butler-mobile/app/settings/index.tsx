@@ -1,14 +1,16 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
 import { useConversation } from "@/conversation/live";
-import { Button, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
+import { Button, icons, ListGroup, ListRow, Sheet, showToast, Surface, Switch, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { SETTINGS_GROUPS } from "@/settings/sections";
 import { useAppLocale, useMobileCopy } from "@/i18n";
+import { pairingStore } from "@/connection/store";
+import { disablePush, enablePush } from "@/notifications/push";
 
 const SECTION_ICONS = {
   general: icons.SlidersHorizontal, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
@@ -22,10 +24,21 @@ export default function Settings() {
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
-  const { pairing, disconnect } = useConversation();
+  const { client, pairing, disconnect } = useConversation();
   const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
+  const [push, setPush] = useState(false);
   const leaving = useRef(false);
+  useEffect(() => {
+    void pairingStore.loadActive().then(active => setPush(active?.pushEnabled === true));
+  }, [pairing]);
+
+  async function toggle(on: boolean) {
+    if (!client || !pairing) return;
+    const ok = on ? await enablePush(client, pairing.butlerId) : await disablePush(client, pairing.butlerId);
+    if (ok) setPush(on);
+    else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
+  }
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
     ? copy.settings.version(Constants.expoConfig?.version ?? "")
     : copy.settings.version(Application.nativeApplicationVersion, Application.nativeBuildVersion);
@@ -36,6 +49,11 @@ export default function Settings() {
       contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
       {pairing ? <ListGroup label={copy.settings.computer}>
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
+      </ListGroup> : null}
+      {pairing ? <ListGroup>
+        <ListRow icon={icons.AlertCircle} title={copy.settings.notifications}
+          trailing={<Switch value={push} label={copy.settings.notifications} disabled={!client}
+            onValueChange={on => void toggle(on)} />} />
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}

@@ -1,4 +1,6 @@
 //! All credential writes use the App's single SQLite lane.
+mod push;
+
 use super::settings::persistence;
 use super::{AppApplication, AppStorageError, app_error};
 use crate::gateway::{ApplicationFuture, DeviceKind, GatewayDevices, PairedDevice};
@@ -33,11 +35,25 @@ impl GatewayDevices for AppApplication {
             }).await.map_err(app_error)
         })
     }
+    fn set_device_push_token(&self, id: String, token: Option<String>) -> ApplicationFuture<()> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage.execute(move |db| {
+                if let Some(token) = &token {
+                    db.execute("UPDATE paired_devices SET push_token=NULL WHERE push_token=?1 AND id<>?2",
+                        rusqlite::params![token,id]).map_err(AppStorageError::sqlite)?;
+                }
+                db.execute("UPDATE paired_devices SET push_token=?1 WHERE id=?2 AND revoked_at IS NULL",
+                    rusqlite::params![token,id]).map_err(AppStorageError::sqlite)?;
+                Ok(())
+            }).await.map_err(app_error)
+        })
+    }
     fn revoke_devices(&self, id: Option<String>, now: u64) -> ApplicationFuture<()> {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage.execute(move |db| {
-                db.execute("UPDATE paired_devices SET revoked_at=?1 WHERE revoked_at IS NULL AND (?2 IS NULL OR id=?2)",
+                db.execute("UPDATE paired_devices SET revoked_at=?1, push_token=NULL WHERE revoked_at IS NULL AND (?2 IS NULL OR id=?2)",
                     rusqlite::params![now,id]).map_err(AppStorageError::sqlite)?;
                 Ok(())
             }).await.map_err(app_error)

@@ -1,4 +1,4 @@
-export type Pairing = { origin: string; butlerId: string; deviceId: string; deviceToken: string; computerName?: string };
+export type Pairing = { origin: string; butlerId: string; deviceId: string; deviceToken: string; computerName?: string; pushEnabled?: boolean };
 export interface KeyValueStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -24,7 +24,12 @@ function readPairing(raw: string | null): Pairing | null {
     const deviceId = stringField(value, "deviceId");
     const deviceToken = stringField(value, "deviceToken");
     const computerName = stringField(value, "computerName");
-    return origin && butlerId && deviceId && deviceToken ? { origin, butlerId, deviceId, deviceToken, ...(computerName ? { computerName } : {}) } : null;
+    const pushEnabled: unknown = Reflect.get(value, "pushEnabled");
+    return origin && butlerId && deviceId && deviceToken ? {
+      origin, butlerId, deviceId, deviceToken,
+      ...(computerName ? { computerName } : {}),
+      ...(typeof pushEnabled === "boolean" ? { pushEnabled } : {}),
+    } : null;
   } catch {
     return null;
   }
@@ -44,6 +49,11 @@ export function createPairingStore(kv: KeyValueStore) {
       if (!id || !isStorableId(id)) return null;
       const pairing = readPairing(await kv.get(pairingKey(id)));
       return pairing?.butlerId === id ? pairing : null;
+    },
+    async setPushEnabled(butlerId: string, enabled: boolean): Promise<void> {
+      const key = pairingKey(butlerId);
+      const pairing = readPairing(await kv.get(key));
+      if (pairing) await kv.set(key, JSON.stringify({ ...pairing, pushEnabled: enabled }));
     },
     async clear(butlerId: string): Promise<void> {
       await kv.remove(pairingKey(butlerId));

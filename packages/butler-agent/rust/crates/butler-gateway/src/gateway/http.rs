@@ -279,6 +279,9 @@ async fn authorized_route(
     if request.method() == Method::DELETE && request.uri().path() == security::DEVICE_SELF_PATH {
         return security::revoke_self_request(&state, grant.access, request.headers()).await;
     }
+    if request.method() == Method::PUT && request.uri().path() == security::DEVICE_PUSH_PATH {
+        return security::set_push_request(&state, grant.access, request).await;
+    }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

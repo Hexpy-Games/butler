@@ -13,7 +13,8 @@ mod device_pair;
 mod devices;
 pub(super) use connect::connect_request;
 pub(super) use device_pair::{
-    DEVICE_PAIR_PATH, DEVICE_SELF_PATH, pair_device_request, revoke_self_request,
+    DEVICE_PAIR_PATH, DEVICE_PUSH_PATH, DEVICE_SELF_PATH, pair_device_request, revoke_self_request,
+    set_push_request,
 };
 pub(super) use devices::{DeviceAuth, DeviceRegistry};
 mod client_place;

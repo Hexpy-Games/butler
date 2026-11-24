@@ -613,6 +613,8 @@ export const enUsCopy: AppCopy = {
     settings: {
       title: "Settings",
       computer: "Computer",
+      notifications: "Notifications",
+      notificationsFailed: "Couldn't change notifications.",
       disconnect: "Disconnect",
       disconnectTitle: "Disconnect from this computer?",
       disconnectBody: "You'll need to pair again to use Butler.",

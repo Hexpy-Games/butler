@@ -46,6 +46,8 @@ pub struct PairedDevice {
 pub trait GatewayDevices: Send + Sync {
     fn load_devices(&self) -> ApplicationFuture<Vec<PairedDevice>>;
     fn save_device(&self, device: PairedDevice) -> ApplicationFuture<()>;
+    /// Stores (Some) or clears (None) a live device's push token. A token is held by at most one device.
+    fn set_device_push_token(&self, id: String, token: Option<String>) -> ApplicationFuture<()>;
     fn revoke_devices(&self, id: Option<String>, now: u64) -> ApplicationFuture<()>;
     fn touch_device(&self, id: String, now: u64) -> ApplicationFuture<()>;
     /// This Butler's stable random id, created on first call.

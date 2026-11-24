@@ -518,6 +518,8 @@ export interface MobileCopy {
   settings: {
     title: string;
     computer: string;
+    notifications: string;
+    notificationsFailed: string;
     disconnect: string;
     disconnectTitle: string;
     disconnectBody: string;

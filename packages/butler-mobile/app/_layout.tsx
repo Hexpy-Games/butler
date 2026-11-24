@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { ImageViewerHost } from "@/conversation/ImageViewerHost";
 import { ConversationProvider } from "@/conversation/live";
 import { ToastHost } from "@/ds";
+import { PushRouting } from "@/notifications/PushRouting";
 
 export default function RootLayout() {
   return (
@@ -11,6 +12,7 @@ export default function RootLayout() {
       <ConversationProvider>
         <Stack screenOptions={{ headerShown: false }} />
         <ImageViewerHost />
+        <PushRouting />
       </ConversationProvider>
       <ToastHost />
     </>
