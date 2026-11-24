@@ -2,9 +2,11 @@
 //! while this owner keeps only occurrence counters and provider-call mapping.
 
 mod access;
+mod admin_client;
 mod answer_blocks;
 mod answer_blocks_stream;
 mod canon;
+mod computers;
 mod permission_mode;
 pub(super) mod permission_surface;
 pub(in crate::host::guided) use answer_blocks_stream::AnswerBlocksStream;
@@ -73,6 +75,7 @@ use resume::ResumePool;
 use tokio::sync::OnceCell;
 
 pub(crate) struct GuidedToolBinding {
+    pub response_language: String,
     pub permission_config: permission_surface::Config,
     pub turn_id: String,
     pub(super) open_asks: Arc<Mutex<super::prompt::open_asks::Reminders>>,

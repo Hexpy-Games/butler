@@ -105,6 +105,12 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     ) -> AuthorityResult<()> {
         write::record_question_followup(self.db, request_ref, response, now)
     }
+    fn claim_question_apply(&mut self, request_ref: &str) -> AuthorityResult<bool> {
+        write::claim_question_apply(self.db, request_ref)
+    }
+    fn finish_question_apply(&mut self, request_ref: &str) -> AuthorityResult<()> {
+        write::finish_question_apply(self.db, request_ref)
+    }
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()> {
         write::record_outcome(self.db, &write)
     }

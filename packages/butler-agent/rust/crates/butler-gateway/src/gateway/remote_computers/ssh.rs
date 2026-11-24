@@ -39,6 +39,7 @@ pub(super) fn arguments(
     home: Option<&Path>,
 ) -> Result<Vec<String>, HttpError> {
     let mut args = vec![remote_ssh::PROGRAM.into()];
+    args.extend(remote_ssh::settings_config_args());
     for option in [
         "BatchMode=yes",
         "ConnectTimeout=10",
@@ -125,7 +126,7 @@ pub(super) async fn host_key(
     let before = host_lines(records);
     let known_hosts = KnownHosts::write(before.clone()).await?;
     let home = butler_platform::user_dirs::non_empty_home_dir();
-    let mut args = arguments(
+    let args = arguments(
         target,
         &known_hosts.0,
         "accept-new",
@@ -133,7 +134,6 @@ pub(super) async fn host_key(
         "true",
         home.as_deref(),
     )?;
-    args.splice(1..1, remote_ssh::settings_config_args());
     let output = run(
         args,
         Stdin::Bytes(Vec::new()),

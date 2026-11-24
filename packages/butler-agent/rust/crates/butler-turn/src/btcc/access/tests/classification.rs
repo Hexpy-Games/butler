@@ -29,6 +29,9 @@ pub(super) fn boundaries() {
         ("call_mcp_tool", Connector),
         ("deliver_files", DeliverFiles),
         ("output_publish", ButlerOutput),
+        ("computer_add", CapabilityKind::ComputerSetup),
+        ("computer_edit", CapabilityKind::ComputerSetup),
+        ("computer_remove", CapabilityKind::ComputerSetup),
         (
             "document_create",
             Exempt(ApprovalExemptAction::DocumentWrite),

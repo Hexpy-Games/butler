@@ -26,10 +26,21 @@ pub(super) async fn execute(
     if owner.unattended() {
         return encode(&super::turn_guard::unattended_question());
     }
+    admit(owner, call_id, questions, wait, None).await
+}
+
+pub(super) async fn admit(
+    owner: &GuidedTools,
+    call_id: &str,
+    questions: UserQuestions,
+    wait: bool,
+    executable: Option<String>,
+) -> Result<JsonDocument, ToolExecutionError> {
     let admitted = owner
         .authority
         .ask_user_with_wait(
             QuestionBinding {
+                executable,
                 owner_session_id: owner.binding.owner_session_id.clone(),
                 source_session_id: owner.binding.source_session_id.clone(),
                 turn_id: owner.binding.turn_id.clone(),
@@ -87,6 +98,13 @@ fn parse(call: &ModelRoundToolCall) -> Result<(UserQuestions, bool), String> {
     };
     let questions =
         serde_json::from_value::<UserQuestions>(json!(arguments)).map_err(|_| SHAPE.to_owned())?;
+    if questions
+        .questions
+        .iter()
+        .any(|q| q.id.starts_with("computer_"))
+    {
+        return Err("question ids starting with computer_ are reserved".into());
+    }
     questions
         .validate()
         .map_err(|reason| format!("{SHAPE} {reason}"))?;
@@ -137,6 +155,9 @@ pub(super) fn route<'a>(
         }
         if call.name == ToolName::AskUser {
             return execute(owner, call, call_id).await;
+        }
+        if super::computers::supports(&call.name) {
+            return super::computers::execute(owner, invocation, call, call_id).await;
         }
         super::dispatch::execute(owner, invocation, call, call_id).await
     })

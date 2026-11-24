@@ -59,6 +59,10 @@ pub(super) struct Computer {
 }
 
 impl Computer {
+    pub(super) fn model_source(&self) -> &ModelSource {
+        &self.model_source
+    }
+
     pub(super) fn id(&self) -> &str {
         &self.id
     }
@@ -124,6 +128,8 @@ impl HostInput {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct AddInput {
+    #[serde(default)]
+    pub(super) open_sign_in: bool,
     name: String,
     address: String,
     port: Option<i64>,

@@ -26,6 +26,7 @@ const EVENT_TYPES: &[(&str, Scope)] = &[
     ("canon.read", Scope::Local),
     ("canon.trust_changed", Scope::Local),
     ("canon.trust_requested", Scope::Local),
+    ("computers.changed", Scope::Local),
     ("connector.rule_announced", Scope::Local),
     ("connectors.changed", Scope::Local),
     ("data.reset_started", Scope::Local),

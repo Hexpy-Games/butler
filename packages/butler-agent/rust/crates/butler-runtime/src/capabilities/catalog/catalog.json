@@ -5899,6 +5899,129 @@
       "durable": false
     },
     {
+      "name": "computer_list",
+      "definition": {
+        "type": "function",
+        "name": "computer_list",
+        "description": "List configured computers and their model choices. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "handlerValidatesArguments": true,
+        "concurrencySafe": false
+      },
+      "category": "control",
+      "tags": [
+        "computer"
+      ],
+      "effectBoundary": "none",
+      "durable": false,
+      "concurrencySafe": false
+    },
+    {
+      "name": "computer_add",
+      "definition": {
+        "type": "function",
+        "name": "computer_add",
+        "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string",
+              "description": "follow, chatgpt, none, or key:<saved key label>."
+            }
+          }
+        },
+        "handlerValidatesArguments": true,
+        "concurrencySafe": false
+      },
+      "category": "control",
+      "tags": [
+        "computer"
+      ],
+      "effectBoundary": "none",
+      "durable": false,
+      "concurrencySafe": false
+    },
+    {
+      "name": "computer_edit",
+      "definition": {
+        "type": "function",
+        "name": "computer_edit",
+        "description": "Change only the supplied fields on the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "computer": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string",
+              "description": "follow, chatgpt, none, or key:<saved key label>."
+            }
+          }
+        },
+        "handlerValidatesArguments": true,
+        "concurrencySafe": false
+      },
+      "category": "control",
+      "tags": [
+        "computer"
+      ],
+      "effectBoundary": "none",
+      "durable": false,
+      "concurrencySafe": false
+    },
+    {
+      "name": "computer_remove",
+      "definition": {
+        "type": "function",
+        "name": "computer_remove",
+        "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "computer": {
+              "type": "string"
+            }
+          }
+        },
+        "handlerValidatesArguments": true,
+        "concurrencySafe": false
+      },
+      "category": "control",
+      "tags": [
+        "computer"
+      ],
+      "effectBoundary": "none",
+      "durable": false,
+      "concurrencySafe": false
+    },
+    {
       "name": "ask_user",
       "definition": {
         "type": "function",
@@ -11611,6 +11734,93 @@
       "concurrencySafe": true,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
+    },
+    "computer_list": {
+      "type": "function",
+      "name": "computer_list",
+      "description": "List configured computers and their model choices. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "strict": false,
+      "handlerValidatesArguments": true,
+      "concurrencySafe": false
+    },
+    "computer_add": {
+      "type": "function",
+      "name": "computer_add",
+      "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "follow, chatgpt, none, or key:<saved key label>."
+          }
+        }
+      },
+      "strict": false,
+      "handlerValidatesArguments": true,
+      "concurrencySafe": false
+    },
+    "computer_edit": {
+      "type": "function",
+      "name": "computer_edit",
+      "description": "Change only the supplied fields on the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "computer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "description": "follow, chatgpt, none, or key:<saved key label>."
+          }
+        }
+      },
+      "strict": false,
+      "handlerValidatesArguments": true,
+      "concurrencySafe": false
+    },
+    "computer_remove": {
+      "type": "function",
+      "name": "computer_remove",
+      "description": "Remove the specified computer. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "computer": {
+            "type": "string"
+          }
+        }
+      },
+      "strict": false,
+      "handlerValidatesArguments": true,
+      "concurrencySafe": false
     },
     "ask_user": {
       "type": "function",

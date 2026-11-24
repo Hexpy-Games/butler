@@ -5,6 +5,10 @@ use butler_turn::btcc::ModelRoundToolCall;
 use serde_json::{Map, Value, json};
 
 const UNAVAILABLE: &[&str] = &[
+    "computer_list",
+    "computer_add",
+    "computer_edit",
+    "computer_remove",
     "browse",
     "browser_open",
     "browser_observe",
