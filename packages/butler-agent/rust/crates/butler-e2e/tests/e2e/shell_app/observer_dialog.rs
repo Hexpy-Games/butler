@@ -33,21 +33,7 @@ pub(super) async fn finished_child(id: &str) -> Result<(Sandbox, String, Child),
         .expect("session id")
         .to_owned();
     s.turn(&chat, stub::OWNER).await?;
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let session = loop {
-        let view =
-            s.gw.get(&format!("/session-view?session_id={chat}"))
-                .await?;
-        let child = &view.data()["steward_children"][0];
-        if child["result"].is_object() {
-            break child["session_id"]
-                .as_str()
-                .expect("child session")
-                .to_owned();
-        }
-        assert!(Instant::now() < deadline, "{view:?}\n{}", s.agent.logs());
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    };
+    let session = settled_child(&s, &chat).await?;
     let view =
         s.gw.get(&format!("/session-view?session_id={session}"))
             .await?;
@@ -79,6 +65,63 @@ pub(super) async fn finished_child(id: &str) -> Result<(Sandbox, String, Child),
     server.abort();
     let butler_e2e::e2e::scenario::Scenario { sandbox, .. } = s;
     Ok((sandbox, chat, child))
+}
+
+/// The session of `chat`'s steward child once nothing the chat started still runs: the child has
+/// its result, every child result reached the App (no pending outbox row), the App has posted it
+/// and nothing in the chat is queued or dispatching, and the parent has no active turn. A stop
+/// before that interrupts the parent's reply. The reads go in this order on purpose (see the spec).
+async fn settled_child(
+    s: &butler_e2e::e2e::scenario::Scenario,
+    chat: &str,
+) -> Result<String, HarnessError> {
+    let btcc = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let app = rusqlite::Connection::open(s.sandbox.data.join("app-server/butler-client.sqlite"))?;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let first =
+            s.gw.get(&format!("/session-view?session_id={chat}"))
+                .await?;
+        let child = &first.data()["steward_children"][0];
+        let (mut pending, mut unposted, mut active) = (-1_i64, -1_i64, Value::Null);
+        if child["result"].is_object() {
+            pending = btcc.query_row(
+                "SELECT count(*) FROM btcc_subsession_outbox WHERE status='pending'",
+                [],
+                |row| row.get(0),
+            )?;
+        }
+        if pending == 0 {
+            unposted = app.query_row(
+                "SELECT (SELECT count(*) FROM app_initiated_messages \
+                   WHERE chat_id=?1 AND kind='work_result' AND state='held') \
+                 + (SELECT count(*) FROM session_queued_messages \
+                   WHERE chat_id=?1 AND state IN ('queued','dispatching'))",
+                [chat],
+                |row| row.get(0),
+            )?;
+        }
+        if unposted == 0 {
+            let last =
+                s.gw.get(&format!("/session-view?session_id={chat}"))
+                    .await?;
+            active = last.data()["active_turn"].clone();
+            if active.is_null() {
+                return Ok(child["session_id"]
+                    .as_str()
+                    .expect("child session")
+                    .to_owned());
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "chat {chat} did not settle within 60 s: result={} pending_results={pending} \
+             unposted_or_queued={unposted} active_turn={active}\n{}",
+            child["result"],
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 /// SHELL-APP-09 — The eye on a steward card opens the activity dialog, and the dialog shows the
