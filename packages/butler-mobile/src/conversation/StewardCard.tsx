@@ -65,8 +65,8 @@ export function StewardDetails({ view }: { view: SessionView | null }) {
   return <View style={{ gap: t.length("--space-md") }}>
     {view?.plan ? <StepTimeline view={view} plan={view.plan} /> : view ? <ActivityTimeline activities={observerActivities(view, locale)}
       expandAll live={!!view.active_turn} pulseLatest={!!view.active_turn} goal={view.relation?.safe_title} /> : null}
-    {view?.waiting_for_children && !view.active_turn ? <StatusLine label={copy.conversation.work.pendingStateLabels.waiting_for_children} active /> : null}
-    {view?.active_turn ? <StatusLine label={turnStatusLabel(view.active_turn, locale)} active /> : null}
+    {view?.waiting_for_children && !view.active_turn ? <StatusLine label={copy.conversation.work.pendingStateLabels.waiting_for_children} active morphKey={view.session_id} /> : null}
+    {view?.active_turn ? <StatusLine label={turnStatusLabel(view.active_turn, locale)} active morphKey={view.session_id} /> : null}
     {!view?.messages.length && !view?.active_turn && !view?.waiting_for_children ? <Text variant="caption">{emptyObserverLabel(view?.status, copy)}</Text> : null}
   </View>;
 }

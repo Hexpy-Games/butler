@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Animated } from "react-native";
 import Svg, { Circle, ClipPath, Defs, G, Path, Polygon } from "react-native-svg";
+import { holdMorph } from "../../../butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/morphContinuity";
 import { CENTER, DESIGN_SIZE, FRAME_INTERVAL_MS, HALFTONE_PRESETS, MAX_STEP_S, RHO, RING_R, RING_W, TAU, type SizeClass } from "../../../butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/constants";
 import { MorphSim, progressOf } from "../../../butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/motion";
 import { createFrameParams, dotRadius, latticeFor, setFrameParams, type FrameParams } from "../../../butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/halftone-model";
@@ -60,11 +61,11 @@ function renderHalftone(M: number, T: number, cls: SizeClass, params: FrameParam
   return { M, paths, outline: points };
 }
 
-export function ThinkingMark({ working, size }: { working: boolean; size: number }) {
+export function ThinkingMark({ working, size, morphKey }: { working: boolean; size: number; morphKey?: string }) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const clipId = useId();
-  const sim = useRef(new MorphSim());
+  const sim = useRef<MorphSim | null>(null);
   const params = useRef(createFrameParams());
   const outline = useRef(new Float32Array(OUTLINE_RAYS));
   const workingRef = useRef(working);
@@ -75,26 +76,33 @@ export function ThinkingMark({ working, size }: { working: boolean; size: number
   const ribbonD = useMemo(ribbonPath, []);
   const cls = useRef(sizeClass(size));
   cls.current = sizeClass(size);
+  useEffect(() => holdMorph(morphKey, sim), [morphKey]);
   useEffect(() => {
+    const current = sim.current;
+    if (!current) return;
     if (reduced) {
       if (raf.current !== null) cancelAnimationFrame(raf.current);
       raf.current = null;
-      sim.current.park(); setFrame(null); return;
+      current.park(); setFrame(null); return;
     }
-    if (raf.current !== null || (!workingRef.current && sim.current.idle)) return;
+    if (raf.current !== null || (!workingRef.current && current.idle)) return;
+    if (!current.idle) setFrame(renderHalftone(progressOf(current.M.x), current.T, cls.current, params.current, outline.current));
     let last = 0;
     const tick = (now: number) => {
       if (now - last < FRAME_INTERVAL_MS) { raf.current = requestAnimationFrame(tick); return; }
-      const dt = last ? Math.min((now - last) / 1000, MAX_STEP_S) : 1 / 60;
       last = now;
-      sim.current.update(dt, workingRef.current);
-      if (sim.current.idle && !workingRef.current) { setFrame(null); raf.current = null; return; }
-      setFrame(renderHalftone(progressOf(sim.current.M.x), sim.current.T, cls.current, params.current, outline.current));
+      if (current.clock !== now) {
+        const dt = current.clock ? Math.min((now - current.clock) / 1000, MAX_STEP_S) : 1 / 60;
+        current.clock = now;
+        current.update(dt, workingRef.current);
+      }
+      if (current.idle && !workingRef.current) { setFrame(null); raf.current = null; return; }
+      setFrame(renderHalftone(progressOf(current.M.x), current.T, cls.current, params.current, outline.current));
       raf.current = requestAnimationFrame(tick);
     };
     raf.current = requestAnimationFrame(tick);
-  }, [working, reduced]);
-  useEffect(() => () => { if (raf.current !== null) cancelAnimationFrame(raf.current); raf.current = null; }, []);
+  }, [working, reduced, morphKey]);
+  useEffect(() => () => { if (raf.current !== null) cancelAnimationFrame(raf.current); raf.current = null; }, [morphKey]);
   useEffect(() => {
     if (!reduced) { opacity.setValue(1); return; }
     const leg = (toValue: number) => Animated.timing(opacity, { toValue, duration: t.duration("--pulse-duration") * 2,

@@ -25,7 +25,7 @@ import { createSelectableRows } from "./selectableRows";
 import { SelectableRowsContext } from "@/ds/internal/textSelection";
 import { ImageSessionContext } from "./imageViewer";
 import { useElapsed } from "./useElapsed";
-import { ActivityTimeline } from "./ActivityHistory";
+import { ActivityTimeline, LiveTurnWork } from "./ActivityHistory";
 import { projectActivities } from "./activityProjection";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -192,20 +192,23 @@ function TurnStatus({ view, hasDecision, anchors }: {
   const elapsed = useElapsed(turn?.progress?.started_at ?? turn?.created_at);
   if (!turn) {
     const child = [...anchors.values()].at(-1)?.child;
-    return child && (child.active_turn || child.waiting_for_children) ? <DelegatedTurnStatus child={child} /> : null;
+    return child && (child.active_turn || child.waiting_for_children) ? <DelegatedTurnStatus child={child} sessionId={view.session_id} /> : null;
   }
-  if (turn.state === "waiting_for_form") return hasDecision ? null : <StatusLine label={copy.chat.waitingForYou} active={false} />;
-  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)) return null;
+  const waiting = turn.state === "waiting_for_form";
+  if (waiting ? hasDecision : !["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)) return null;
   const attached = view.messages.some(m => m.role === "assistant" && m.turn_id === turn.id);
-  const work = view.session_id !== "general" && !attached ? projectActivities(turn.progress?.safe_progress_rows ?? [], turn.id, locale) : null;
+  const rows = turn.progress?.safe_progress_rows ?? [];
+  const work = !waiting && view.session_id !== "general" && !attached ? projectActivities(rows, turn.id, locale) : null;
   return <>
-    {work?.activities.length ? <ActivityTimeline activities={work.activities} currentState={work.semanticState} live /> : null}
-    <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />
+    {work ? work.activities.length ? <ActivityTimeline activities={work.activities} currentState={work.semanticState} live />
+      : <LiveTurnWork rows={rows} turnId={turn.id} storeKey={turn.id} /> : null}
+    <StatusLine label={waiting ? copy.chat.waitingForYou : turnStatusLabel(turn, locale)}
+      elapsed={waiting ? undefined : elapsed} active={!waiting} morphKey={view.session_id} />
   </>;
 }
 
-function DelegatedTurnStatus({ child }: { child: StewardChild }) {
+function DelegatedTurnStatus({ child, sessionId }: { child: StewardChild; sessionId: string }) {
   const locale = useAppLocale();
   const elapsed = useElapsed(child.relation.created_at);
-  return <StatusLine label={latestStatus(child.active_turn?.progress?.safe_progress_rows ?? [], child.active_turn?.id, true, child.status, locale) ?? child.title} elapsed={elapsed} active />;
+  return <StatusLine label={latestStatus(child.active_turn?.progress?.safe_progress_rows ?? [], child.active_turn?.id, true, child.status, locale) ?? child.title} elapsed={elapsed} active morphKey={sessionId} />;
 }
