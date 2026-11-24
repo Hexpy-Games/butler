@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use crate::host::runtime::MemoryReads;
-use butler_gateway::gateway::GatewayApplicationError;
+use butler_gateway::gateway::{
+    GatewayApplicationError, RemovedComputerMessage, RemovedComputerTurn,
+};
 use butler_memory::cognition::RememberedRuleOwner;
 use butler_memory::profile::ProfileService;
 use butler_turn::context_ports::{ProfilePromptPort, PromptProjectionInput};
@@ -66,8 +68,8 @@ pub(super) async fn session_turns(
     root: std::path::PathBuf,
     computer_id: String,
     runtime_session_id: String,
-) -> Result<Vec<TransferTurn>, GatewayApplicationError> {
-    use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
+) -> Result<Vec<RemovedComputerTurn>, GatewayApplicationError> {
+    use butler_turn::conversation::conversation_store_path;
     tokio::task::spawn_blocking(move || {
         let path = conversation_store_path(&root);
         if !path
@@ -76,14 +78,72 @@ pub(super) async fn session_turns(
         {
             return Ok(Vec::new());
         }
-        ConversationSourceReader::open(&path)
-            .and_then(|reader| {
-                reader.session_transfer(&format!("computer:{computer_id}"), &runtime_session_id)
-            })
-            .map_err(GatewayApplicationError::internal_from)
+        read_session_turns(
+            &path,
+            &format!("computer:{computer_id}"),
+            &runtime_session_id,
+        )
+        .map_err(GatewayApplicationError::internal_from)
     })
     .await
     .map_err(GatewayApplicationError::internal_from)?
+}
+
+fn read_session_turns(
+    path: &std::path::Path,
+    gateway: &str,
+    runtime_session_id: &str,
+) -> rusqlite::Result<Vec<RemovedComputerTurn>> {
+    let mut db =
+        butler_platform::sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let tx = db.transaction()?;
+    let mut turns = tx.prepare(
+        "SELECT t.id, t.status, t.started_at, t.completed_at
+         FROM conversation_bindings b
+         JOIN conversation_turns t ON t.session_id = b.conversation_session_id
+         JOIN conversation_turn_outcomes o ON o.turn_id = t.id
+         WHERE b.gateway = ?1 AND b.external_session_id = ?2
+           AND t.status IN ('complete', 'failed', 'aborted')
+         ORDER BY t.seq",
+    )?;
+    // The outcome identifies public messages among model-visible messages.
+    let mut messages = tx.prepare(
+        "SELECT m.id, m.role, group_concat(p.content_json ->> 'text', char(10) ORDER BY p.part_index),
+                m.created_at
+         FROM conversation_messages m
+         JOIN conversation_parts p ON p.message_id = m.id
+         JOIN conversation_turn_outcomes o ON o.turn_id = m.turn_id
+         WHERE m.turn_id = ?1 AND m.role IN ('user', 'assistant')
+           AND (m.visibility = 'user' OR (m.visibility = 'model' AND (
+               (m.role = 'user' AND m.id = o.request_message_id)
+               OR (m.role = 'assistant' AND m.id = o.public_assistant_message_id)
+           )))
+           AND p.kind = 'text' AND json_type(p.content_json, '$.text') = 'text'
+         GROUP BY m.id
+         ORDER BY m.seq",
+    )?;
+    turns
+        .query_map([gateway, runtime_session_id], |row| {
+            let id: String = row.get(0)?;
+            let messages = messages
+                .query_map([&id], |message| {
+                    Ok(RemovedComputerMessage {
+                        id: message.get(0)?,
+                        role: message.get(1)?,
+                        text: message.get(2)?,
+                        created_at: message.get(3)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            Ok(RemovedComputerTurn {
+                id,
+                status: row.get(1)?,
+                started_at: row.get(2)?,
+                completed_at: row.get(3)?,
+                messages,
+            })
+        })?
+        .collect()
 }
 
 #[derive(Deserialize)]

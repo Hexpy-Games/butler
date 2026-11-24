@@ -16,7 +16,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use indexmap::{IndexMap, IndexSet};
-use rusqlite::params;
 use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 
@@ -126,35 +125,6 @@ struct AdmissionState {
     public_assistant_message_id: Option<String>,
 }
 
-impl AdmissionState {
-    async fn load(store: &AgentConversationStore, turn_id: String) -> ConversationResult<Self> {
-        store
-            .execute(move |db| {
-                let mut statement = db
-                    .prepare_cached(
-                        "SELECT m.id,p.tool_call_id FROM conversation_messages m
-                 JOIN conversation_parts p ON p.message_id=m.id
-                 WHERE m.turn_id=?1 AND p.kind='tool_call' AND p.tool_call_id IS NOT NULL
-                 ORDER BY m.seq,p.part_index",
-                    )
-                    .map_err(ConversationError::sqlite)?;
-                let rows = statement
-                    .query_map(params![turn_id], |row| {
-                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                    })
-                    .map_err(ConversationError::sqlite)?;
-                let mut state = Self::default();
-                for row in rows {
-                    let (message, call) = row.map_err(ConversationError::sqlite)?;
-                    state.tool_message_id.get_or_insert(message);
-                    state.known_tool_call_ids.insert(call);
-                }
-                Ok(state)
-            })
-            .await
-    }
-}
-
 /// Admits one turn's inbound message, runtime events and final answer into the canonical conversation.
 pub struct ConversationAdmissionTurn {
     input: ConversationAdmissionTurnInput,
@@ -199,11 +169,10 @@ impl ConversationAdmissionTurn {
                 now: Some(input.timestamp.clone()),
             })
             .await?;
-        let state = AdmissionState::load(&input.store, turn.id.clone()).await?;
         Ok(Self {
             input,
             turn,
-            state: Mutex::new(state),
+            state: Mutex::new(AdmissionState::default()),
         })
     }
 
@@ -253,29 +222,16 @@ impl ConversationAdmissionTurn {
                 }
             }
         }
-        let operation = event.payload.is_some_and(|payload| {
-            payload.get("bridgePhase").and_then(Value::as_str) == Some("btcc_operation")
-        });
-        let canonical_kind = match (operation, event.kind) {
-            (true, "tool.started") => Some("tool_call.finalized"),
-            (true, "tool.completed") => Some("tool_result.finalized"),
-            (true, "tool.failed" | "tool.cancelled") => Some("tool_result.failed"),
-            _ => None,
-        };
-        let kind = canonical_kind.unwrap_or(event.kind);
-        let visibility = canonical_kind
-            .map(|_| AdmissionEventVisibility::Internal)
-            .or(event.visibility);
         let known = self.state.lock().await.known_tool_call_ids.clone();
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::RuntimeTurnEvent,
-            kind: kind.into(),
+            kind: event.kind.into(),
             role: None,
             text: None,
             source_gateway: Some(self.input.envelope.transport.clone()),
-            source_ref: Some(format!("{}:{}", self.input.turn_id, kind)),
+            source_ref: Some(format!("{}:{}", self.input.turn_id, event.kind)),
             payload: event.payload.cloned(),
-            visibility,
+            visibility: event.visibility,
             known_tool_call_ids: known,
         })
         .await

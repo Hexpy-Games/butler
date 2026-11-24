@@ -1,5 +1,5 @@
 mod removed_conversation;
-use removed_conversation::{assert_removed_conversation, tool_progress, wait_imported_turn};
+use removed_conversation::{assert_removed_conversation, wait_imported_turn};
 
 use super::*;
 
@@ -340,30 +340,16 @@ async fn deleted_computer_conversation_opens_read_only() -> Result<(), HarnessEr
         "Requires a local sshd"
     );
     const ASK: &str = "Read this after removing the computer.";
-    let (d, script, server, authority, chat) =
+    let (d, _, server, authority, chat) =
         remote_chat_on("REMOTE-READ-REMOVED", "full_access", true).await?;
-    script.rounds.lock().unwrap().insert(
-        ASK.into(),
-        vec![call(
-            "removed-tool",
-            "run_command",
-            &json!({
-                "command": "printf 'saved step'",
-                "summary": "Print a transcript marker"
-            }),
-        )],
-    );
     let turn = d.s.gw.say_turn(&chat, ASK).await?;
     wait_imported_turn(&d, &turn).await?;
-    let before = tool_progress(&d, &chat, &turn).await?;
-    assert_eq!(before.1, "delivered");
     let removed = d
         .api
         .send(Method::DELETE, &format!("/computers/{}", d.id), None, &[])
         .await?;
     assert_eq!(removed.status, 200, "{removed:?}");
     assert_removed_conversation(&d, &chat, ASK).await?;
-    assert_eq!(tool_progress(&d, &chat, &turn).await?, before);
     drop((d.remote, d.sshd, d.files, server, authority));
     d.s.finish().await
 }

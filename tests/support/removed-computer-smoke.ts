@@ -10,7 +10,6 @@ import { createNativeAppServer, type NativeAppServerHandle } from "./native-app-
 const title = "지난 대화";
 const question = "작업 폴더를 확인해 주세요.";
 const answer = "작업 폴더를 확인했습니다.";
-const command = "pwd";
 const output = "/tmp/removed-computer-screens";
 
 // The browser and main gateway are real. Replay the other machine at the SSH
@@ -134,8 +133,7 @@ async function captureConversation(page: Page, copy: ReturnType<typeof getAppCop
   assert(response.ok(), `Removed session view returned ${response.status()}`);
   const { data } = await response.json();
   assert.deepEqual(data.messages.map((message: { text: string }) => message.text), [question, answer]);
-  const steps = data.latest_turn.progress.safe_progress_rows;
-  assert(steps.some((step: { safe_tool_name: string; state: string }) => step.safe_tool_name === "run_command" && step.state === "delivered"));
+  assert.equal(data.latest_turn.state, "delivered");
   await page.getByText(question, { exact: true }).waitFor();
   await page.getByText(answer, { exact: true }).waitFor();
   const send = button(copy.composer.send);
@@ -146,13 +144,5 @@ async function captureConversation(page: Page, copy: ReturnType<typeof getAppCop
   await page.mouse.move(0, 0);
   await page.getByRole("tooltip").waitFor({ state: "hidden" });
 
-  const history = page.locator('[data-test-class="toggle-turn-activity-disclosure"]');
-  await history.waitFor();
-  if (await history.getAttribute("aria-expanded") === "false") await history.click();
-  const tool = page.locator('[data-test-class~="turn-work-tool-row"]').getByRole("button");
-  await tool.waitFor();
   await shot("R2-removed-conversation");
-  await tool.click();
-  await page.getByText(`${copy.interfaceStatus.execution}: ${command}`, { exact: true }).waitFor();
-  await shot("R3-removed-conversation-steps-open");
 }

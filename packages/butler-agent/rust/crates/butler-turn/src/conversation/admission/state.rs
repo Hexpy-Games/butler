@@ -339,12 +339,9 @@ impl ConversationAdmissionTurn {
             status,
             event_kind,
         } = input;
-        let mut state = self.state.lock().await;
-        if state.known_tool_call_ids.contains(&tool_call_id) {
-            return Ok(());
-        }
+        let existing = self.state.lock().await.tool_message_id.clone();
         let origin = connector_origin(&self.input.origin).then_some(&self.input.origin);
-        let message_id = if let Some(message) = state.tool_message_id.clone() {
+        let message_id = if let Some(message) = existing {
             self.input
                 .store
                 .append_tool_call(AppendToolPartInput {
@@ -393,6 +390,7 @@ impl ConversationAdmissionTurn {
                 .await?;
             message.message.id
         };
+        let mut state = self.state.lock().await;
         state.tool_message_id.get_or_insert(message_id);
         state.known_tool_call_ids.insert(tool_call_id);
         Ok(())

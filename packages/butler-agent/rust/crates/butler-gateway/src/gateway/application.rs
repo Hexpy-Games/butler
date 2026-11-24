@@ -44,7 +44,7 @@ mod hooks;
 mod internal_continuation;
 mod keyed_locks;
 mod library;
-mod removed_computer_sessions;
+pub(super) mod removed_computer_sessions;
 pub use documents::AppDocumentCommand;
 mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};

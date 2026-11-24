@@ -38,9 +38,11 @@ pub(super) async fn assert_removed_conversation(
     assert_eq!(view.status, 200, "{view:?}");
     assert_eq!(view.data()["latest_turn"]["state"], "delivered", "{view:?}");
     let messages = &view.data()["messages"];
-    assert_eq!(messages.as_array().map(Vec::len), Some(2));
-    assert_eq!(messages[0]["text"], text);
-    assert_eq!(messages[1]["text"], "Checked.");
+    assert_eq!(messages.as_array().map(Vec::len), Some(2), "{view:?}");
+    assert_eq!(messages[0]["role"], "user", "{view:?}");
+    assert_eq!(messages[0]["text"], text, "{view:?}");
+    assert_eq!(messages[1]["role"], "assistant", "{view:?}");
+    assert_eq!(messages[1]["text"], "Checked.", "{view:?}");
     let listed = d.s.gw.get(&format!("/messages?chat_id={chat}")).await?;
     assert_eq!(listed.status, 200, "{listed:?}");
     assert_eq!(&listed.data()["messages"], messages);
@@ -70,28 +72,4 @@ pub(super) async fn assert_removed_conversation(
     assert_eq!(again.status, 200, "{again:?}");
     assert_eq!(counts()?, (1, 2));
     Ok(())
-}
-
-pub(super) async fn tool_progress(
-    d: &Deployed,
-    chat: &str,
-    turn: &str,
-) -> Result<(serde_json::Value, serde_json::Value), HarnessError> {
-    let view =
-        d.s.gw
-            .get(&format!("/session-view?session_id={chat}"))
-            .await?;
-    assert_eq!(view.status, 200, "{view:?}");
-    let latest = &view.data()["latest_turn"];
-    assert_eq!(latest["id"], turn);
-    let rows = &latest["progress"]["safe_progress_rows"];
-    let row = rows
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|row| row["safe_tool_name"] == "run_command")
-        .cloned()
-        .unwrap_or_default();
-    assert!(row.is_object(), "missing command row: {rows:?}");
-    Ok((row["safe_tool_name"].clone(), row["state"].clone()))
 }

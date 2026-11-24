@@ -23,7 +23,6 @@ mod compaction;
 mod drain;
 mod sweep;
 
-pub(super) use compaction::store_progress_row;
 use compaction::{CompactResult, compact};
 
 const COMMAND_CAPACITY: usize = 64;

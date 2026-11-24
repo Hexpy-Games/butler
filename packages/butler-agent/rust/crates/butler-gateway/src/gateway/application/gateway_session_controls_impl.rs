@@ -9,7 +9,7 @@ impl crate::gateway::GatewaySessionControls for AppApplication {
     fn project_transferred(
         &self,
         chat_id: String,
-        turns: Vec<butler_turn::conversation::TransferTurn>,
+        turns: Vec<crate::gateway::RemovedComputerTurn>,
     ) -> ApplicationFuture<()> {
         let this = self.clone_handle();
         Box::pin(async move { this.project_transferred(chat_id, turns).await })

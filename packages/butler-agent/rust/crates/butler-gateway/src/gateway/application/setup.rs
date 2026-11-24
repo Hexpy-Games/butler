@@ -290,7 +290,7 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         _computer_id: String,
         _runtime_session_id: String,
-    ) -> ApplicationFuture<Vec<butler_turn::conversation::TransferTurn>> {
+    ) -> ApplicationFuture<Vec<crate::gateway::RemovedComputerTurn>> {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
     /// The read-only memory copy the main hands a registered computer on connect.

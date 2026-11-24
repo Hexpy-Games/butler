@@ -10,7 +10,7 @@ pub trait GatewaySessionControls: Send + Sync {
     fn project_transferred(
         &self,
         _chat_id: String,
-        _turns: Vec<butler_turn::conversation::TransferTurn>,
+        _turns: Vec<crate::gateway::RemovedComputerTurn>,
     ) -> ApplicationFuture<()> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
