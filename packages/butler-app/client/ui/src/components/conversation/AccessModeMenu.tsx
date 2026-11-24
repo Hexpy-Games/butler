@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import {
+  Box,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -63,7 +64,12 @@ export function AccessModeMenu() {
             setAccessMenuOpen(false);
           }}
         />
-        <Typo.Caption tone="secondary">{sandboxStatus}</Typo.Caption>
+        <Box as="footer" paddingX="sm" paddingY="xs">
+          {/* Match the option icon column and its gap using the menu spacing. */}
+          <Box paddingStart="2xl">
+            <Typo.Caption tone="secondary">{sandboxStatus}</Typo.Caption>
+          </Box>
+        </Box>
       </PopoverContent>
     </Popover>
   );

@@ -964,6 +964,7 @@ export const enUsCopy: AppCopy = {
     composeLater: "Decide later and compose a message",
     deny: "Deny",
     allowOnce: "Allow once",
+    addRule: "Add rule",
     allowInChat: "Allow in this chat",
     allowSite: "Always allow this site",
     allowPaymentSite: "Always allow payments here",
@@ -1867,7 +1868,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     pageSectionDescriptions: {
       allowedFolders: "Butler data and secret folders are always excluded.",
       noticedPatterns: "Habits Butler noticed in your chats. Delete one and Butler won't suggest it again.",
-      grants: "Actions Butler runs without asking.",
+      grants: "Actions you chose to run or block without asking.",
       instructions: "Add or change these in chat.",
       chatMemory: "What Butler has picked up from your chats, including project chats.",
       memoryCleanup: "Merges and tidies what Butler remembers from chats, so it recalls better next time.",

@@ -939,6 +939,7 @@ export interface AppCopy {
     composeLater: string;
     deny: string;
     allowOnce: string;
+    addRule: string;
     allowInChat: string;
     allowSite: string;
     allowPaymentSite: string;

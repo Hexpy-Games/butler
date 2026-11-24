@@ -68,7 +68,7 @@ export function ComposerAuthorityDecisionSurface({ decision, placement }: { plac
         }]} />
       : <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={() => complete(decision.onDeny)}>{appCopy.interfaceDetails.deny}</Button>}
       {decision.proposal ? <Button type="button" size="sm" disabled={decision.pending} onClick={() => complete(decision.onAllow)}>
-        {appCopy.interfaceDetails.allowOnce}
+        {appCopy.interfaceDetails.addRule}
       </Button> : <SplitButton size="sm" text={decision.allowSite ? appCopy.interfaceDetails.allowInChat : appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={() => complete(decision.onAllow)}
         menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
         items={decision.allowSite ? [{

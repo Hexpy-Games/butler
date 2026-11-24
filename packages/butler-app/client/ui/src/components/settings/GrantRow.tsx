@@ -38,8 +38,9 @@ export function GrantRow({ row, dateFormatter, busy, onRevoke }: {
             </Clickable>
           </Tooltip>
           <Stack as="span" align="row" cross="center" gap="xs" wrap>
-            <Tag size="sm" tone={row.scope === "always" ? "warning" : "neutral"}>{copy.scope[row.scope]}</Tag>
-            {row.effect === "deny" ? <Tag size="sm" tone="danger">{copy.denied}</Tag> : null}
+            {row.effect === "deny"
+              ? <Tag size="sm" tone="danger">{copy.denied}</Tag>
+              : <Tag size="sm" tone={row.scope === "always" ? "warning" : "neutral"}>{copy.scope[row.scope]}</Tag>}
             <Typo.Caption tone="secondary" truncate>
               {[where(row), row.cwd ? copy.cwd(row.cwd) : ""].filter(Boolean).join(" · ")}
             </Typo.Caption>

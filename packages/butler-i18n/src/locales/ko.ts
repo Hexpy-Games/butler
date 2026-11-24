@@ -961,6 +961,7 @@ export const koKrCopy: AppCopy = {
     composeLater: "나중에 결정하고 메시지 작성",
     deny: "거절",
     allowOnce: "이번만 허용",
+    addRule: "규칙 추가",
     allowInChat: "이 대화에서 허용",
     allowSite: "이 사이트는 항상 허용",
     allowPaymentSite: "이 사이트 결제는 항상 허용",
@@ -1872,7 +1873,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     pageSectionDescriptions: {
       allowedFolders: "버틀러 데이터와 비밀 정보 폴더는 항상 제외됩니다.",
       noticedPatterns: "대화에서 버틀러가 알아챈 습관입니다. 지우면 다시 제안하지 않습니다.",
-      grants: "묻지 않고 실행하도록 허용한 작업입니다.",
+      grants: "묻지 않고 실행하거나 막도록 정한 작업입니다.",
       instructions: "채팅에서 추가하고 고칩니다.",
       chatMemory: "대화에서 버틀러가 스스로 기억한 내용입니다. 프로젝트 채팅도 포함합니다.",
       memoryCleanup: "대화에서 쌓인 기억을 합치고 다듬어, 다음 대화에서 더 잘 떠올립니다.",
