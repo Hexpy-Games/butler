@@ -1,6 +1,6 @@
 //! Conversation downloads on the headless browser, with the App's semantics
 //! (#745, `downloads.mjs`): a file lands in the conversation's workspace
-//! under `downloads/`, becomes a session output, and is never opened.
+//! under `downloads/`, and is never opened (only `deliver_files` makes outputs).
 //! Limits: 100 MB per file, 500 MB per conversation (persisted), checked
 //! while the transfer runs; a breach cancels it and says so.
 use super::{browser::Browser, state::State};
@@ -19,19 +19,10 @@ pub const SESSION_LIMIT: u64 = 500_000_000;
 
 pub type PortFuture = Pin<Box<dyn Future<Output = Result<Value, String>> + Send>>;
 
-/// The gateway side: the conversation's download workspace and publication.
+/// The gateway side: the conversation's download workspace.
 pub trait DownloadPort: Send + Sync {
-    /// `{workspace_path, turn_id, message_id}` for the conversation.
+    /// `{workspace_path}` for the conversation.
     fn prepare(&self, session: String) -> PortFuture;
-    /// Publishes `downloads/<filename>` as a session output: `{output_id, view}`,
-    /// or `{skipped_files}` when the file is refused as a credential.
-    fn publish(
-        &self,
-        session: String,
-        filename: String,
-        turn_id: String,
-        message_id: String,
-    ) -> PortFuture;
 }
 
 #[derive(Clone)]
@@ -306,7 +297,7 @@ impl Downloads {
         let _ = std::fs::remove_file(staged);
     }
 
-    /// Copies into `<workspace>/downloads/`, accounts it, then publishes it.
+    /// Copies into `<workspace>/downloads/`, and accounts it.
     async fn land(&self, transfer: &Transfer, staged: &Path) -> Result<Value, String> {
         let port = lock(&self.port)
             .clone()
@@ -316,7 +307,7 @@ impl Downloads {
             .strip_prefix("conversation:")
             .unwrap_or("")
             .to_owned();
-        let context = port.prepare(session.clone()).await?;
+        let context = port.prepare(session).await?;
         let root = butler_platform::secure_fs::canonicalize(
             context["workspace_path"].as_str().unwrap_or(""),
         )
@@ -334,19 +325,7 @@ impl Downloads {
             copy_new(staged, &directory.join(&name)).map_err(|e| e.to_string())?;
         }
         self.account(&transfer.owner, transfer.received)?;
-        let output = port
-            .publish(
-                session,
-                name.clone(),
-                context["turn_id"].as_str().unwrap_or("").to_owned(),
-                context["message_id"].as_str().unwrap_or("").to_owned(),
-            )
-            .await?;
-        let mut data = json!({"path":format!("downloads/{name}"),"size_bytes":transfer.received});
-        if let (Some(target), Some(output)) = (data.as_object_mut(), output.as_object()) {
-            target.extend(output.clone());
-        }
-        Ok(data)
+        Ok(json!({"path": format!("downloads/{name}"), "size_bytes": transfer.received}))
     }
 
     fn account(&self, owner: &str, bytes: u64) -> Result<(), String> {

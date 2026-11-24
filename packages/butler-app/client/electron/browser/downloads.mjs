@@ -1,25 +1,91 @@
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, mkdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { chmod, copyFile, mkdir, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import { constants, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { browserEvent } from "./events.mjs";
 
 export const FILE_LIMIT = 100_000_000;
 export const SESSION_LIMIT = 500_000_000;
+const HISTORY_LIMIT = 100;
+
+function readJson(path, fallback) {
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch (error) { if (error.code !== "ENOENT") console.warn("Unable to read downloads store", basename(path)); }
+  return fallback;
+}
+
+function cleanName(source) {
+  // Strip path components, control characters and platform-reserved characters.
+  const clean = [...source].map(char => char.codePointAt(0) < 32 ? "_" : char).join("");
+  let name = clean.split(/[\\/]/u).at(-1)
+    .replace(/[<>:"|?*]/gu, "_").replace(/[. ]+$/u, "") || "download";
+  while (Buffer.byteLength(name, "utf8") > 180) name = [...name].slice(0, -1).join("");
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(name)) name = `_${name}`;
+  return name;
+}
+
+function freePath(directory, name, taken) {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const extension = dot > 0 ? name.slice(dot) : "";
+  let path = join(directory, name);
+  for (let n = 1; taken.has(path) || existsSync(path); n++) path = join(directory, `${stem} (${n})${extension}`);
+  return path;
+}
 
 /** Change-driven accounting includes all tabs and concurrent transfers of a session. */
 export class BrowserDownloads {
   constructor(browser, directory) {
     this.browser = browser; this.directory = directory;
-    this.active = new Set(); this.totals = {}; this.persistence = Promise.resolve();
+    this.active = new Set(); this.persistence = Promise.resolve();
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    this.totals = readJson(join(directory, "budget.json"), {});
+    this.history = readJson(join(directory, "history.json"), []).map(entry => entry.state === "progress" ? { ...entry, state: "failed" } : entry);
+    this.live = new Map();
   }
-  initialize() {
-    this.ready ??= mkdir(this.directory, { recursive: true, mode: 0o700 }).then(async () => {
-      try { this.totals = JSON.parse(await readFile(join(this.directory, "budget.json"), "utf8")); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
+  record(item, fields) {
+    const entry = { id: randomUUID(), url: item.getURL(), bytes: 0, total: Math.max(0, item.getTotalBytes()),
+      state: "progress", time: new Date().toISOString(), ...fields };
+    this.history.unshift(entry);
+    this.history = this.history.slice(0, HISTORY_LIMIT);
+    this.changed(true);
+    return entry;
+  }
+  update(entry, fields, persist) {
+    Object.assign(entry, fields);
+    this.changed(persist);
+  }
+  changed(persist) {
+    const win = this.browser.getWindow?.();
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send("butler-browser:downloads", this.history);
+    }
+    if (persist) this.writeJson("history.json", () => this.history);
+  }
+  writeJson(name, value) {
+    const write = async () => {
+      const path = join(this.directory, name), temporary = `${path}.tmp`;
+      await writeFile(temporary, JSON.stringify(value()), { mode: 0o600 });
+      await rename(temporary, path);
+    };
+    this.persistence = this.persistence.then(write, write);
+    void this.persistence.catch(() => {});
+  }
+  list() { return this.history; }
+  entry(id) { return this.history.find(entry => entry.id === id); }
+  startUser(item, directory) {
+    mkdirSync(directory, { recursive: true });
+    const taken = new Set(this.history.filter(entry => entry.state === "progress").map(entry => entry.path));
+    const path = freePath(directory, cleanName(item.getFilename()), taken);
+    item.setSavePath(path);
+    const entry = this.record(item, { name: basename(path), path });
+    this.live.set(entry.id, () => item.cancel());
+    item.on("updated", () => this.update(entry, { bytes: item.getReceivedBytes(), total: Math.max(0, item.getTotalBytes()) }, false));
+    item.once("done", (_event, state) => {
+      this.live.delete(entry.id);
+      this.update(entry, { bytes: item.getReceivedBytes(), state: state === "completed" ? "done" : state === "cancelled" ? "cancelled" : "failed" }, true);
     });
-    return this.ready;
   }
   start(item, tab) {
     const owner = tab.owner;
@@ -27,10 +93,13 @@ export class BrowserDownloads {
       stage: join(tmpdir(), `butler-download-${randomUUID()}`), owner, reason: null };
     // Set synchronously during will-download, so conversation pages never show a dialog.
     item.setSavePath(transfer.stage); item.pause(); this.active.add(transfer);
+    transfer.entry = this.record(item, { name: transfer.sourceFilename, path: "" });
+    this.live.set(transfer.entry.id, () => this.cancel(transfer, "download_cancelled"));
     item.on("updated", (_event, state) => {
       if (state === "interrupted") return;
       transfer.bytes = item.getReceivedBytes();
       transfer.total = Math.max(0, item.getTotalBytes());
+      this.update(transfer.entry, { bytes: transfer.bytes, total: transfer.total }, false);
       const reason = this.limit(transfer, Math.max(transfer.total, transfer.bytes));
       if (reason) this.cancel(transfer, reason);
     });
@@ -49,22 +118,15 @@ export class BrowserDownloads {
     return used + pending + bytes > SESSION_LIMIT ? "download_session_limit" : null;
   }
   async prepare(transfer) {
-    await this.initialize();
     const reason = this.limit(transfer, transfer.total);
     if (reason) { this.cancel(transfer, reason); return; }
     const session = transfer.owner.slice(13);
-    transfer.context = await this.browser.downloadRequest({ op: "prepare", session, tab: transfer.tab.id });
-    const root = await realpath(transfer.context.workspace_path);
+    const context = await this.browser.downloadRequest({ op: "prepare", session, tab: transfer.tab.id });
+    const root = await realpath(context.workspace_path);
     const directory = join(root, "downloads");
     await mkdir(directory, { recursive: true });
     if (await realpath(directory) !== directory) throw new Error("download_symlink_refused");
-    // Strip path components, control characters and platform-reserved characters.
-    const clean = [...transfer.sourceFilename].map(char => char.codePointAt(0) < 32 ? "_" : char).join("");
-    let name = clean.split(/[\\/]/u).at(-1)
-      .replace(/[<>:"|?*]/gu, "_").replace(/[. ]+$/u, "") || "download";
-    while (Buffer.byteLength(name, "utf8") > 180) name = [...name].slice(0, -1).join("");
-    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(name)) name = `_${name}`;
-    transfer.filename = name;
+    transfer.filename = cleanName(transfer.sourceFilename);
     transfer.directory = directory;
     transfer.destination = join(directory, transfer.filename);
     if (!transfer.done && !transfer.reason && this.active.has(transfer)) transfer.item.resume();
@@ -91,7 +153,7 @@ export class BrowserDownloads {
       }
       const reason = this.limit(transfer, transfer.bytes);
       if (reason) { this.cancel(transfer, reason); return; }
-      // Exclusive copy never replaces an existing path, including across volumes. Neither this path nor the output opens files.
+      // Exclusive copy never replaces an existing path, including across volumes.
       await chmod(transfer.stage, 0o600);
       await copyFile(transfer.stage, transfer.destination, constants.COPYFILE_EXCL).catch(async error => {
         if (error.code !== "EEXIST") throw error;
@@ -99,21 +161,26 @@ export class BrowserDownloads {
         transfer.destination = join(transfer.directory, transfer.filename);
         await copyFile(transfer.stage, transfer.destination, constants.COPYFILE_EXCL);
       });
+      transfer.landed = true;
       transfer.accounted = true;
       this.totals[transfer.owner] = Number(this.totals[transfer.owner] ?? 0) + transfer.bytes;
-      this.persistence = this.persistence.then(async () => {
-        const path = join(this.directory, "budget.json"), temporary = `${path}.tmp`;
-        await writeFile(temporary, JSON.stringify(this.totals), { mode: 0o600 }); await rename(temporary, path);
-      });
+      this.writeJson("budget.json", () => this.totals);
       await this.persistence;
-      const output = await this.browser.downloadRequest({ op: "publish", session: transfer.owner.slice(13),
-        tab: transfer.tab.id, filename: transfer.filename, turn_id: transfer.context.turn_id, message_id: transfer.context.message_id });
-      this.event(transfer, "download_completed", { path: `downloads/${transfer.filename}`, size_bytes: transfer.bytes, ...output });
+      this.event(transfer, "download_completed", { path: `downloads/${transfer.filename}`, size_bytes: transfer.bytes });
     } finally {
       try { await unlink(transfer.stage).catch(error => { if (error.code !== "ENOENT") throw error; }); }
-      finally { this.active.delete(transfer); }
+      finally {
+        this.active.delete(transfer);
+        const entry = transfer.entry;
+        this.live.delete(entry.id);
+        this.update(entry, {
+          state: transfer.landed ? "done" : transfer.reason === "download_cancelled" ? "cancelled" : "failed",
+          name: transfer.filename ?? entry.name, path: transfer.landed ? transfer.destination : "", bytes: transfer.bytes,
+        }, true);
+      }
     }
   }
+  cancelEntry(id) { this.live.get(id)?.(); }
   cancelTab(id) { for (const transfer of this.active) if (transfer.tab.id === id) this.cancel(transfer, "download_cancelled"); }
   stop() { for (const transfer of this.active) this.cancel(transfer, "download_cancelled"); }
 }

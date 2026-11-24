@@ -1809,6 +1809,11 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     ipcRenderer.on("butler-browser:download", listener);
     return () => ipcRenderer.removeListener("butler-browser:download", listener);
   },
+  onDownloads(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:downloads", listener);
+    return () => ipcRenderer.removeListener("butler-browser:downloads", listener);
+  },
   onElementDrag(handler) {
     const listener = (_event, value) => handler(value);
     ipcRenderer.on("butler-browser:element-drag", listener);

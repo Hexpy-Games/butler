@@ -1,4 +1,4 @@
-import { session } from "electron";
+import { app, session } from "electron";
 import { menuPoint, popupMenu } from "../butler-platform/menu-placement.mjs";
 import { webUrl } from "./policy.mjs";
 import { nativeContextMenuCopy } from "../i18n/native-context-menu.mjs";
@@ -15,11 +15,8 @@ export function protectPartition(partition, browser) {
   profile.setDisplayMediaRequestHandler((_request, callback) => callback({}));
   profile.on("will-download", (_event, item, contents) => {
     const tab = [...browser.tabs.values()].find(tab => tab.view?.webContents === contents);
-    if (tab && tab.owner !== "mine") { browser.downloads.start(item, tab); return; }
-    const release = browser.nativeCover();
-    item.setSaveDialogOptions({ defaultPath: item.getFilename() });
-    item.on("updated", () => { if (item.getSavePath()) release(); });
-    item.once("done", release);
+    if (tab?.holder === "agent") browser.downloads.start(item, tab);
+    else browser.downloads.startUser(item, app.getPath("downloads"));
   });
 }
 
