@@ -130,7 +130,7 @@ async fn approved(
             "{cards:?}"
         );
         assert_ne!(cards[0]["reason"], REASON, "{cards:?}");
-        approve(s, chat, "allow").await?;
+        approve(s, chat, "allow", None).await?;
     }
     delivered(s, chat, &turn).await?;
     Ok(outputs(s, chat, &turn, script, &prompt).await?.join("\n"))

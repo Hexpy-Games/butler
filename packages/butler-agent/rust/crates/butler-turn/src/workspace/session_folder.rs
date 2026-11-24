@@ -91,6 +91,33 @@ pub struct FolderRoots<'a> {
     pub installation_root: Option<&'a Path>,
 }
 
+pub fn allowed_folder(requested: &str, roots: &FolderRoots<'_>) -> Result<PathBuf, FolderRefusal> {
+    let requested = requested.trim();
+    if requested.is_empty() {
+        return Err(FolderRefusal::Missing);
+    }
+    let expanded = butler_platform::tool_paths::expand_home(
+        requested,
+        butler_platform::user_dirs::home_dir().as_deref(),
+    )
+    .map_err(|_| FolderRefusal::Missing)?;
+    let (_, path, _) = resolve(Path::new(&expanded), Path::new(&expanded))?;
+    let data = realpath_or_nearest(roots.butler_data);
+    let inventory = butler_platform::secure_fs::SecretInventory::cached(roots.butler_data);
+    if protected(&path, path_is_within(&path, &data), roots)
+        || path_is_within(&data, &path)
+        || inventory.protects_path(&path)
+        || inventory
+            .paths()
+            .iter()
+            .any(|root| path_is_within(&realpath_or_nearest(root), &path))
+        || path.parent().is_none()
+    {
+        return Err(FolderRefusal::Protected);
+    }
+    Ok(path)
+}
+
 /// The stored marker of a moved working folder.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionFolderMarker {

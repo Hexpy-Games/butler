@@ -2,9 +2,22 @@
 use super::application::AppFileOrigin;
 use super::*;
 
+pub trait GatewayAllowedFolders {
+    fn allowed_folders(&self) -> ApplicationFuture<Vec<AppAllowedFolder>> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn add_allowed_folder(&self, _path: String) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    fn remove_allowed_folder(&self, _rule_id: String) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+}
+
 pub trait GatewayApplication:
     GatewayMutationCommands
     + project_folder::GatewayProjectFolders
+    + GatewayAllowedFolders
     + GatewayPendingAsks
     + GatewayProjectDashboard
     + GatewaySessionControls

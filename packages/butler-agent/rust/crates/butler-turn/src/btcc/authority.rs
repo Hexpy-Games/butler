@@ -10,6 +10,7 @@ mod identity;
 pub(super) mod pending_asks;
 mod permission;
 mod permission_management;
+mod permission_rules;
 mod projection;
 pub(super) mod questions;
 mod receipt;

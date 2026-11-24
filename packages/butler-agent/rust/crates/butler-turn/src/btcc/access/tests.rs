@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, reason = "security boundary assertions")]
 mod classification;
+mod command_scope;
 mod web;
 use super::*;
 use crate::btcc::ApprovalRisk;
@@ -10,7 +11,7 @@ use CapabilityKind::{
     Exempt, FileEdit, FileRead, FolderSwitch, FullOnly, InternalRead, Network, OtherEffect,
     ProjectRecord, Schedule, SettingsWrite, WebRequest,
 };
-use TargetScope::{Attachment, NoTarget, Outside, ProjectFolder, Protected};
+use TargetScope::{AllowedFolder, Attachment, NoTarget, Outside, ProjectFolder, Protected};
 use butler_core::tool_protocol::ToolName;
 
 // Independent owner cells; None is a wildcard, not an implementation branch.
@@ -67,9 +68,41 @@ const ALLOW: &[(
     (
         AskExceptReads,
         CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
             sandbox: CommandSandbox::ProjectWrite,
         },
         Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(ProjectFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        AskExceptReads,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(AllowedFolder),
         Some(ApprovalRisk::Low),
     ),
     // A folder switch within the consented folder or its repository.
@@ -106,9 +139,41 @@ const ALLOW: &[(
     (
         Auto,
         CommandMutation {
+            sandbox: CommandSandbox::None,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
             sandbox: CommandSandbox::ProjectWrite,
         },
         Some(ProjectFolder),
+        None,
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectWrite,
+        },
+        Some(AllowedFolder),
+        Some(ApprovalRisk::Low),
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(ProjectFolder),
+        None,
+    ),
+    (
+        Auto,
+        CommandMutation {
+            sandbox: CommandSandbox::ProjectAndFolders,
+        },
+        Some(AllowedFolder),
         None,
     ),
     (Auto, FileEdit, Some(ProjectFolder), None),
@@ -133,6 +198,9 @@ const KINDS: &[CapabilityKind] = &[
     },
     CommandMutation {
         sandbox: CommandSandbox::ProjectWrite,
+    },
+    CommandMutation {
+        sandbox: CommandSandbox::ProjectAndFolders,
     },
     Network,
     Connector,
@@ -175,7 +243,12 @@ fn expected(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
     if ALLOW.iter().any(|(m, k, s, r)| {
         m == mode
             && *k == request.kind
-            && s.is_none_or(|s| s == request.scope)
+            && s.is_none_or(|s| {
+                s == request.scope
+                    || s == ProjectFolder
+                        && request.scope == AllowedFolder
+                        && !matches!(k, FolderSwitch | CommandMutation { .. })
+            })
             && r.is_none_or(|r| r == request.risk)
     }) {
         return Allow;
@@ -201,6 +274,9 @@ fn order(decision: AccessDecision) -> u8 {
 #[test]
 fn access_boundary_matches_the_owner_table() {
     classification::contained_read_rechecks_swapped_secret();
+    rules::tests::rule_verdict_table();
+    rules::tests::proposal_shape_table();
+    rules::tests::allow_preserves_stronger_decisions();
     web::boundaries();
     assert_eq!(
         AccessMode::ALL.map(|mode| mode.as_str()),
@@ -208,7 +284,14 @@ fn access_boundary_matches_the_owner_table() {
     );
     for mode in AccessMode::ALL {
         for &kind in KINDS {
-            for scope in [NoTarget, ProjectFolder, Attachment, Outside, Protected] {
+            for scope in [
+                NoTarget,
+                ProjectFolder,
+                AllowedFolder,
+                Attachment,
+                Outside,
+                Protected,
+            ] {
                 for risk in [ApprovalRisk::Low, ApprovalRisk::Medium, ApprovalRisk::High] {
                     for taint in [TurnTaint::Clean, TurnTaint::External] {
                         let request = AccessRequest {
@@ -257,7 +340,9 @@ fn access_boundary_matches_the_owner_table() {
         (
             serde_json::json!({"state_effect":"mutation"}),
             CommandMutation {
-                sandbox: if butler_platform::command_sandbox::project_write_available() {
+                sandbox: if butler_platform::command_sandbox::folder_write_available() {
+                    CommandSandbox::ProjectAndFolders
+                } else if butler_platform::command_sandbox::project_write_available() {
                     CommandSandbox::ProjectWrite
                 } else {
                     CommandSandbox::None
@@ -276,102 +361,7 @@ fn access_boundary_matches_the_owner_table() {
             kind
         );
     }
-    for command in [
-        "cat $HOME/x",
-        "ls ~",
-        "ls %USERPROFILE%",
-        "ls !USERPROFILE!",
-        "cat `pwd`",
-        "ls /tmp/*",
-        "cat {..,a}/outside.txt",
-        "cd && cat .zsh_history",
-        "cd -- && cat .zsh_history",
-        "cd '' && cat .zsh_history",
-        "pushd",
-        "popd",
-        "cat .en?",
-        "cat [.]env",
-        "ls *.rs",
-        "cd /var && cat file",
-        "chdir /var",
-        "(cd /var && cat file)",
-        "if true; then command cd /var; fi",
-        "builtin cd /var",
-        "command -p cd /var",
-        "A=b cd /var",
-        "cd /var | true; cat file",
-        "cd /absent; cat file",
-        "pushd /var",
-        "Set-Location C:\\Users",
-        "sl C:/Users",
-        "Push-Location C:/Users",
-        "Pop-Location",
-        "CD..",
-        "cd\\",
-        "cd/",
-        "cat \"/var\"/file",
-        "cat \"/var\"\"/file\"",
-        "cat /v'a'r/file",
-        "cat a/../b",
-        "cat ..",
-        "cat C:\\a\\..\\b",
-        "cat \"a b/../c\"",
-        "cat --opt=\"/var\"/auth/x",
-        "cat --opt=\"a\"\"b\"",
-        "cat \"a\"\"b\"",
-        "bash -c \"cd /var && cat auth/probe.txt\"",
-        "sh -c 'cd /var && cat auth/probe.txt'",
-        "eval \"cd /var; cat auth/probe.txt\"",
-        "cmd /c \"cd /var && cat auth/probe.txt\"",
-        "pwsh -Command \"Set-Location /var\"",
-        "iex \"cd /var; cat auth/probe.txt\"",
-        "echo 'cd /var'",
-        "echo 'cat a/../b'",
-        "bash -c \"sh -c 'cd /var'\"",
-        "eval cd /var",
-        "time cd /var",
-        "exec cd /var",
-        "coproc cd /var",
-        "noglob cd /var",
-        "nocorrect cd /var",
-        "call cd /var",
-    ] {
-        assert!(command_scope_unresolved(command), "{command}");
-    }
-    for command in [
-        "cat notes.txt",
-        "ls",
-        "git status",
-        "echo hi > out.txt",
-        "cat 'ordinary file'",
-        "cat \"ordinary file\"",
-        "echo cd /var",
-        "if true; then cat ordinary; fi",
-        "command cat ordinary",
-        "cat a/.../b",
-        r"cat 'a\b'",
-        "cat --opt=\"ordinary file\"",
-        "KEY=\"ordinary value\" cat notes.txt",
-        "cat --opt='ordinary file'",
-        "KEY='ordinary value' cat notes.txt",
-    ] {
-        assert!(!command_scope_unresolved(command), "{command}");
-    }
-    if butler_platform::command_sandbox::POSIX_SHELL {
-        for command in [r"cat /d/au\th/x", r"cat My\ Dir/x"] {
-            assert!(command_scope_unresolved(command), "{command}");
-        }
-    }
-    if !butler_platform::command_sandbox::POSIX_SHELL {
-        for command in [
-            "cmd /c cd",
-            "cmd /c cd C:/Users",
-            "powershell -Command \"pushd C:/Users\"",
-            "powershell.exe -Command \"ls ~\"",
-        ] {
-            assert!(command_scope_unresolved(command), "{command}");
-        }
-    }
+    command_scope::boundaries();
     for name in [
         "run_command",
         "write_file",

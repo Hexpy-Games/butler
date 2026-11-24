@@ -82,6 +82,10 @@ use linux as sandbox;
 
 /// Whether contained observations can run without exact-action approval.
 pub fn approval_free_reads() -> bool {
+    #[cfg(feature = "test-support")]
+    if std::env::var("BUTLER_TEST_READ_SANDBOX").as_deref() == Ok("unavailable") {
+        return false;
+    }
     capabilities().approval_free_reads()
 }
 
@@ -89,6 +93,11 @@ pub fn approval_free_reads() -> bool {
 /// project (writes inside the project only, no network).
 pub fn project_write_available() -> bool {
     capabilities().project_write_available()
+}
+
+/// Whether the write sandbox can contain several approved folder roots.
+pub fn folder_write_available() -> bool {
+    cfg!(target_os = "macos") && project_write_available()
 }
 
 /// Whether the kernel can keep Butler's secrets and the user's credential
@@ -146,7 +155,7 @@ pub const fn project_write_mechanism() -> &'static str {
 pub fn project_write_limits() -> &'static str {
     #[cfg(target_os = "linux")]
     if linux::metadata_tier_available() {
-        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+        return "This command ran contained to the project and allowed folders: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
     }
     #[cfg(target_os = "linux")]
     if linux::mount_tier_available() {
@@ -168,6 +177,8 @@ pub fn trampoline() -> Result<(), Box<dyn std::error::Error>> {
 /// Whether [`login_shell`] runs commands in a POSIX shell (`sh -c`); Windows
 /// runs them in Windows PowerShell 5.1, whose syntax differs.
 pub const POSIX_SHELL: bool = shell::POSIX;
+/// Whether commands use the Windows shell grammar and native executable names.
+pub const WINDOWS_SHELL: bool = cfg!(windows);
 
 /// A program and its arguments.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -308,6 +319,7 @@ pub fn project_write_shell(
     command: &str,
     environment: &HashMap<String, String>,
     root: &Path,
+    extra_roots: &[&Path],
     writable: &[&Path],
     denied: &[&Path],
     toolchain_roots: Option<&ToolchainRoots>,
@@ -316,6 +328,7 @@ pub fn project_write_shell(
         shell::login_shell(command, environment),
         environment,
         root,
+        extra_roots,
         writable,
         denied,
         toolchain_roots,

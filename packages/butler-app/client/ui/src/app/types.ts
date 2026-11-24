@@ -574,6 +574,7 @@ export interface SettingsView {
   schedule_access_mode?: AccessMode;
   command_sandbox_enabled?: boolean;
   command_sandbox_available?: boolean;
+  command_sandbox_reads?: boolean;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
   multiline_send_behavior:
@@ -1979,7 +1980,7 @@ export interface ImageApprovalOperation {
 
 export interface ApprovalSummary {
   /** Exact local decision facts; do not apply workspace-label normalization. */
-  operation?: { image?: ImageApprovalOperation; tool: string; access: "read_only" | "change"; targets: string[]; command?: string; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
+  operation?: { image?: ImageApprovalOperation; tool: string; access: "read_only" | "change"; targets: string[]; command?: string; rule_prefixes?: string[]; permission_rule?: { effect: "allow" | "deny"; kind: "command_prefix" | "folder"; scope: "conversation" | "always"; reason: string }; allow_conversation?: boolean; allow_site?: "signed_in" | "payment"; browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string; browser_steps?: Array<{ action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }> };
   commandAccess?: "read_only_unisolated";
   /** What a reviewed schedule create sets up: its name, timing and run mode; never its id. */
   schedule?: { title: string; scheduleType: "once" | "interval" | "daily" | "weekdays" | "update"; browserSignin?: boolean; browserPayment?: boolean; time?: string; runAt?: string; startAt?: string; intervalSeconds?: number; accessMode?: AccessMode };

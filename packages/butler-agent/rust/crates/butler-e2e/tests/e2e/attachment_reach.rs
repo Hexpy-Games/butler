@@ -157,7 +157,7 @@ async fn attachment_reads_skip_approval_only_for_this_turn() -> Result<(), Harne
             .await?;
         assert_eq!(turn_state(&turn), "waiting_for_form", "{turn}");
         assert_counts(&s, &id, count, count)?;
-        approve(&s, "general", "deny").await?;
+        approve(&s, "general", "deny", None).await?;
         delivered(&s, "general", &id).await?;
         assert_counts(&s, &id, count, 0)?;
         assert!(
@@ -256,7 +256,7 @@ async fn attachment_reads_in_project_respect_access_modes() -> Result<(), Harnes
         let asks = linked || matches!(mode, Access::AskAlways);
         if asks {
             pending(&s, &chat, &id).await?;
-            approve(&s, &chat, if linked { "deny" } else { "allow" }).await?;
+            approve(&s, &chat, if linked { "deny" } else { "allow" }, None).await?;
         }
         delivered(&s, &chat, &id).await?;
         assert_counts(&s, &id, u64::from(asks), 0)?;
@@ -300,7 +300,7 @@ async fn attachment_reads_in_project_respect_access_modes() -> Result<(), Harnes
         ])]);
         let id = send_to(&s, chat, prompt, &files, Access::AskExceptReads).await?;
         pending(&s, chat, &id).await?;
-        approve(&s, chat, "deny").await?;
+        approve(&s, chat, "deny", None).await?;
         delivered(&s, chat, &id).await?;
         assert_counts(&s, &id, 1, 0)?;
         let output = outputs(&s, chat, &id, &script, prompt).await?.join("\n");

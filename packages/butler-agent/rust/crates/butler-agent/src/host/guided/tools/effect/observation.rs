@@ -31,6 +31,9 @@ pub(super) async fn execute(
     let access = super::super::access::decision(owner, call, &input)
         .await
         .map_err(ToolExecutionError::Integrity)?;
+    if access.decision == AccessDecision::Deny(butler_turn::btcc::DenyReason::UserRule) {
+        return super::denied_by_rule().map(Some);
+    }
     let needs_approval = matches!(access.decision, AccessDecision::Ask(_))
         || super::super::access::resumes(owner, occurrence);
     let approval = if needs_approval {
@@ -47,6 +50,7 @@ pub(super) async fn execute(
     };
     timing.mark("authority_done");
     let mut approved_scope = scope.clone();
+    approved_scope.allowed_folders = access.allowed_folders;
     if needs_approval && !butler_platform::command_sandbox::approval_free_reads() {
         approved_scope.execution = crate::host::guided::command::CommandExecution::Registered;
     }

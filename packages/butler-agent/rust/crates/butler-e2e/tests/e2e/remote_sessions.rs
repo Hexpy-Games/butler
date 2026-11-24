@@ -272,7 +272,7 @@ async fn remote_approval_reaches_the_main_after_the_computer_restarts() -> Resul
     let cards = d.s.gw.approval_requests(&chat).await?;
     assert_eq!(cards.len(), 1, "{cards:?}");
     assert!(cards[0].to_string().contains("approved-marker.txt"));
-    access_tiers::approve(&d.s, &chat, "allow").await?;
+    access_tiers::approve(&d.s, &chat, "allow", None).await?;
     access_tiers::delivered(&d.s, &chat, &turn).await?;
     assert!(d.remote.0.home.join("work/approved-marker.txt").is_file());
     let Deployed {

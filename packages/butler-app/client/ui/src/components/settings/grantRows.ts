@@ -2,12 +2,14 @@ export type GrantScope = "conversation" | "project" | "always";
 export type GrantKind = "command" | "fileWrite" | "network" | "tool" | "other";
 export interface GrantRef { grant_ref: string; session_id: string }
 export interface GrantRecord extends GrantRef {
+  effect?: "allow" | "deny";
   capability: string; target: string; cwd: string | null; scope: GrantScope;
   session_title: string | null; project_id: string | null; project_name: string | null;
   workspace_path: string; created_at: string;
 }
 export interface GrantedRow {
   key: string; kind: GrantKind; target: string; cwd: string | null; scope: GrantScope;
+  effect: "allow" | "deny";
   places: Map<string, string | null>; project: string | null; createdAt: string; refs: GrantRef[];
 }
 
@@ -24,9 +26,10 @@ export function groupGrants(records: readonly GrantRecord[]): GrantedRow[] {
   const rows = new Map<string, GrantedRow>();
   for (const record of records) {
     const kind = grantKind(record.capability);
-    const key = JSON.stringify([kind, record.target, record.cwd, record.scope, record.project_id]);
+    const effect = record.effect ?? "allow";
+    const key = JSON.stringify([kind, effect, record.target, record.cwd, record.scope, record.project_id]);
     const row: GrantedRow = rows.get(key) ?? {
-      key, kind, target: record.target, cwd: record.cwd, scope: record.scope,
+      key, kind, effect, target: record.target, cwd: record.cwd, scope: record.scope,
       places: new Map(), project: record.project_name, createdAt: record.created_at, refs: [],
     };
     row.places.set(record.session_id, record.session_title);

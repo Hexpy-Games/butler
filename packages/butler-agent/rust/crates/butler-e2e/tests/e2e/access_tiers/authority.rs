@@ -29,13 +29,14 @@ pub(in super::super) async fn approve(
     s: &Scenario,
     chat: &str,
     action: &str,
+    scope: Option<&str>,
 ) -> Result<(), HarnessError> {
     for card in s.gw.approval_requests(chat).await? {
         let reference = card["request_ref"].as_str().unwrap();
         let reply =
             s.gw.post(
                 &format!("/authority-requests/{reference}/{action}?session_id={chat}"),
-                json!({"scope":"once"}),
+                scope.map_or_else(|| json!({}), |scope| json!({"scope":scope})),
             )
             .await?;
         assert_eq!(reply.status, 202, "{reply:?}");

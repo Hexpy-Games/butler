@@ -17,7 +17,7 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
   const view = approvalRequestView(card, copy, copy.guided.tools, locale);
   const site = card.approval?.operation?.allow_site;
   const scope = site ? "site" : card.scope && card.approval?.operation?.allow_conversation !== false ? "conversation" : undefined;
-  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" = "once") => {
+  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" | "always" = "once") => {
     if (!client || inFlight.current) return;
     inFlight.current = true; setPending(action === "deny" ? "deny" : scope); setFailed(false);
     try {
@@ -37,11 +37,14 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
   return <DecisionCard eyebrow={<>{copy.composer.permission}{count > 1 ? <Text variant="caption">{` +${count - 1}`}</Text> : null}</>}
     tag={{ label: copy.interfaceTemplates.approvalRequest.risk[view.risk], tone: { low: "neutral", medium: "warning", high: "danger" }[view.risk] as "neutral" | "warning" | "danger" }}
     title={view.title} footnote={failed ? labels.decisionFailed : undefined}
-    actions={scope ? <ButtonGroup>{allow}
-      <Button label={site ? site === "payment" ? labels.allowPaymentSite : labels.allowSite : labels.allowConversation}
-        variant="secondary" onPress={() => void decide("allow", scope)} disabled={!!pending} loading={pending === scope} />
+    actions={scope || view.ruleText ? <ButtonGroup>{allow}
+      {scope ? <Button label={site ? site === "payment" ? labels.allowPaymentSite : labels.allowSite : labels.allowConversation}
+        variant="secondary" onPress={() => void decide("allow", scope)} disabled={!!pending} loading={pending === scope} /> : null}
+      {view.ruleText ? <Button label={labels.allowAlways} variant="secondary"
+        onPress={() => void decide("allow", "always")} disabled={!!pending} loading={pending === "always"} /> : null}
       {deny}
     </ButtonGroup> : <ButtonGroup layout="pair">{deny}{allow}</ButtonGroup>}>
+    {view.ruleText ? <Text variant="caption" tone="secondary" literal>{view.ruleText}</Text> : null}
     {view.details.map((line, index) => typeof line === "string"
       ? <Text key={index} variant={view.pathDetails?.includes(line) ? "caption" : "body"}
         tone={view.pathDetails?.includes(line) ? "secondary" : "primary"} literal>{line}</Text>

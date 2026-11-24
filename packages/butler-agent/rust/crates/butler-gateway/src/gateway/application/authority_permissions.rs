@@ -5,6 +5,24 @@ use crate::gateway::{GatewayApplication, GatewayApplicationError};
 use std::collections::HashMap;
 
 impl AppApplication {
+    pub(super) fn mutate_allowed_folders(
+        &self,
+        path: String,
+        remove: bool,
+    ) -> ApplicationFuture<()> {
+        let this = self.clone_handle();
+        Box::pin(async move {
+            let authority = &this.dependencies.authority_handoff;
+            if remove {
+                authority.remove_allowed_folder(path).await?;
+            } else {
+                authority.add_allowed_folder(path).await?;
+            }
+            this.publish_gateway_event("authority.permissions_revoked", serde_json::Map::new())
+                .await
+        })
+    }
+
     pub(super) fn revoke_authority_permissions(
         &self,
         grants: Vec<AppGrantRef>,
@@ -35,6 +53,7 @@ impl AppApplication {
         let owners: Vec<_> = grants
             .iter()
             .map(|g| g.session_id.as_str())
+            .filter(|id| !id.is_empty())
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .map(str::to_owned)
@@ -93,5 +112,17 @@ impl AppApplication {
             );
         }
         Ok(grants)
+    }
+}
+
+impl crate::gateway::GatewayAllowedFolders for AppApplication {
+    fn allowed_folders(&self) -> ApplicationFuture<Vec<crate::gateway::AppAllowedFolder>> {
+        self.dependencies.authority_handoff.allowed_folders()
+    }
+    fn add_allowed_folder(&self, path: String) -> ApplicationFuture<()> {
+        self.mutate_allowed_folders(path, false)
+    }
+    fn remove_allowed_folder(&self, rule_id: String) -> ApplicationFuture<()> {
+        self.mutate_allowed_folders(rule_id, true)
     }
 }

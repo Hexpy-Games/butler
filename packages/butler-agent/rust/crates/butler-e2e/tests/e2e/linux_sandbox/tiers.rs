@@ -7,6 +7,7 @@ fn invoke(command: &str, root: &Path, setup: &Setup) -> Invocation {
         command,
         &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
         root,
+        &[],
         &[&setup.sandbox.data.join("tmp/project-write")],
         &[&setup.sandbox.data],
         None,
@@ -278,6 +279,7 @@ fn measure_secret_project(setup: &Setup, root: &Path, layout: &str) -> Result<()
             "cat node_modules/*.pem node_modules/*/key.pem 2>/dev/null; echo complete",
             &HashMap::from([("HOME".into(), setup.sandbox.home.display().to_string())]),
             root,
+            &[],
             &[&setup.sandbox.data.join("tmp/project-write")],
             &denied,
             None,
@@ -336,6 +338,10 @@ async fn project_lease_shutdown_cleans_active_and_waiting_commands() -> Result<(
     std::fs::write(root.join(".gitignore"), "target\n")?;
     let ready = setup.sandbox.data.join("tmp/project-write/ready");
     let input = |command: String| GuidedCommandInput {
+        allowed_folders: Vec::new(),
+        extra_write_roots: Vec::new(),
+        protected_roots: Vec::new(),
+        installation_root: None,
         command,
         cwd: None,
         workspace_root: root.clone(),

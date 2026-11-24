@@ -8,6 +8,7 @@ impl GuidedTools {
         connector(name)
             || canon(name)
             || super::computers::supports(name)
+            || name == ToolName::ProposePermissionRule
             || builtin(name)
             || documents::supports(name)
             || browser::supports(name)

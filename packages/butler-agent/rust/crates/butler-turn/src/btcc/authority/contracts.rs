@@ -426,6 +426,7 @@ impl AuthorityAction {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DecisionWrite {
+    pub rules: Vec<crate::btcc::PermissionRuleRow>,
     pub(crate) composer_mode: Option<crate::btcc::AccessMode>,
     pub(crate) request_ref: String,
     pub(crate) owner_session_id: String,
@@ -446,6 +447,8 @@ pub(crate) struct OutcomeWrite {
 }
 
 pub(crate) trait AuthorityRepository {
+    fn add_permission_rule(&mut self, row: &crate::btcc::PermissionRuleRow) -> AuthorityResult<()>;
+    fn revoke_permission_rule(&mut self, id: &str, now: &str) -> AuthorityResult<()>;
     fn has_permission(&mut self, grant_ref: &str) -> AuthorityResult<bool>;
     fn revoke_permissions(&mut self, grants: &[(String, String)], now: &str)
     -> AuthorityResult<()>;

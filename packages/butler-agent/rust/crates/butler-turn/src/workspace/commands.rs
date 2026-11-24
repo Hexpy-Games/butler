@@ -40,6 +40,10 @@ pub enum GuidedAccess {
 /// A guided shell command with its workspace, timeout and access.
 #[derive(Clone)]
 pub struct GuidedCommandInput {
+    pub allowed_folders: Vec<PathBuf>,
+    pub extra_write_roots: Vec<PathBuf>,
+    pub protected_roots: Vec<PathBuf>,
+    pub installation_root: Option<PathBuf>,
     pub command: String,
     pub cwd: Option<String>,
     pub workspace_root: PathBuf,

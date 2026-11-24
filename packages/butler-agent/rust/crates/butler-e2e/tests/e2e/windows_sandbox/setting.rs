@@ -101,7 +101,7 @@ async fn asks_without_preparation(
     let id = access_tiers::paused(s, chat, prompt).await?;
     access_tiers::assert_counts(s, &id, 1, 1)?;
     assert!(!project.join("made.txt").exists());
-    access_tiers::approve(s, chat, "deny").await?;
+    access_tiers::approve(s, chat, "deny", None).await?;
     access_tiers::delivered(s, chat, &id).await?;
     access_tiers::assert_counts(s, &id, 1, 0)?;
     assert!(!project.join("made.txt").exists());

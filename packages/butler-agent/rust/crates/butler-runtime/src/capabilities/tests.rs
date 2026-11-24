@@ -43,6 +43,7 @@ impl Fixture {
             .invoke(
                 "read_file",
                 CapabilityInvocation {
+                    allowed_folders: &[],
                     contained: false,
                     call,
                     workspace_reference: reference,
@@ -77,6 +78,7 @@ async fn supplied_protected_root_and_workspace_reference_are_live() {
         .invoke(
             "read_file",
             CapabilityInvocation {
+                allowed_folders: &[],
                 contained: false,
                 call: &call,
                 workspace_reference: None,
@@ -98,6 +100,7 @@ async fn supplied_protected_root_and_workspace_reference_are_live() {
         .invoke(
             "read_file",
             CapabilityInvocation {
+                allowed_folders: &[],
                 contained: false,
                 call: &regular,
                 workspace_reference: Some(&reference),
@@ -178,6 +181,7 @@ async fn guided_absolute_path_is_read_and_utf8_cursor_respects_character_boundar
             .invoke(
                 "read_file",
                 CapabilityInvocation {
+                    allowed_folders: &[],
                     contained: false,
                     call: &call,
                     workspace_reference: None,

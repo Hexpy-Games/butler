@@ -29,6 +29,7 @@ impl RegisteredEditPort for RegisteredEdit {
                 .invoke(
                     "edit_file",
                     CapabilityInvocation {
+                        allowed_folders: &self.context.allowed_folders,
                         contained: self.context.contained,
                         call: &call,
                         workspace_reference: self.context.workspace_reference.as_ref(),

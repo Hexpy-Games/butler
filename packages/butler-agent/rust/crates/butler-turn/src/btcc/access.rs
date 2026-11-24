@@ -84,6 +84,7 @@ pub fn stored_binding_access_mode(binding: &StoredSessionBinding) -> AccessMode 
 }
 
 mod decision;
+pub(super) mod rules;
 mod web;
 pub use web::{same_origin, types_text, web_read_carries_data, web_search_carries_data};
 mod mode;

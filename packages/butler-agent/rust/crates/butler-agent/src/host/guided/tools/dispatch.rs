@@ -42,6 +42,9 @@ pub(super) async fn execute(
     if super::effect::routes_effect(&call.name) {
         return super::effect::execute(owner, invocation, call, call_id).await;
     }
+    if call.name == ToolName::ProposePermissionRule {
+        return super::permission_rule::execute(owner, call, call_id).await;
+    }
     if super::direct_approval::supports(call) {
         return Box::pin(super::direct_approval::execute(
             owner, invocation, call, call_id,
@@ -228,7 +231,7 @@ async fn read_native(
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "list_skills" | "load_skill" | "read_skill_file" => {
-            file_capability(owner, call, &args, false).await
+            file_capability(owner, call, &args, false, &[]).await
         }
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
@@ -254,7 +257,7 @@ pub(super) async fn save_skill(
         );
     }
     let args = Value::Object(call.arguments.clone());
-    let result = file_capability(owner, call, &args, false).await;
+    let result = file_capability(owner, call, &args, false, &[]).await;
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
 }
 
@@ -278,12 +281,14 @@ async fn file_capability(
     call: &ModelRoundToolCall,
     args: &Value,
     contained: bool,
+    allowed_folders: &[std::path::PathBuf],
 ) -> Result<Value, BtccError> {
     owner
         .capabilities
         .invoke(
             &call.name,
             CapabilityInvocation {
+                allowed_folders,
                 contained,
                 call: &json!({"arguments": args, "projectId": owner.binding.memory.project_id}),
                 workspace_reference: owner.binding.workspace_reference.as_ref(),

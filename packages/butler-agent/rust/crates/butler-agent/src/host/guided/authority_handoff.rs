@@ -1,13 +1,15 @@
 //! App decisions use the existing principal store and inbound control queue.
 
-use std::sync::Arc;
+mod allowed_folders;
+
+use std::{path::PathBuf, sync::Arc};
 
 use serde_json::json;
 
 use butler_core::json::JsonDocument;
 use butler_gateway::gateway::{
-    AppAuthorityDecision, AppAuthorityDecisionInput, AppAuthorityHandoff, AppAuthorityPage,
-    ApplicationFuture, GatewayApplicationError, InboundQueue,
+    AppAllowedFolder, AppAuthorityDecision, AppAuthorityDecisionInput, AppAuthorityHandoff,
+    AppAuthorityPage, AppGrantView, ApplicationFuture, GatewayApplicationError, InboundQueue,
 };
 use butler_turn::btcc::{AuthorityDecisionInput, AuthorityError, PrincipalAuthority};
 
@@ -16,6 +18,7 @@ pub(crate) struct AuthorityHandoff {
     authority: Arc<PrincipalAuthority>,
     continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
     queue: Arc<InboundQueue>,
+    folder_roots: (PathBuf, PathBuf),
     now_iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
@@ -24,12 +27,14 @@ impl AuthorityHandoff {
         authority: Arc<PrincipalAuthority>,
         continuity: Arc<crate::host::memory_jobs::continuity::Continuity>,
         queue: Arc<InboundQueue>,
+        folder_roots: (PathBuf, PathBuf),
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
             authority,
             continuity,
             queue,
+            folder_roots,
             now_iso,
         }
     }
@@ -232,17 +237,28 @@ impl AppAuthorityHandoff for AuthorityHandoff {
         })
     }
 
+    fn allowed_folders(&self) -> ApplicationFuture<Vec<AppAllowedFolder>> {
+        self.folders()
+    }
+    fn add_allowed_folder(&self, path: String) -> ApplicationFuture<()> {
+        self.add_folder(path)
+    }
+    fn remove_allowed_folder(&self, rule_id: String) -> ApplicationFuture<()> {
+        self.remove_folder(rule_id)
+    }
+
     fn list_all_permissions(
         &self,
     ) -> ApplicationFuture<Vec<butler_gateway::gateway::AppGrantView>> {
         let authority = self.authority.clone();
         Box::pin(async move {
-            Ok(authority
+            let mut grants: Vec<_> = authority
                 .list_all_permissions()
                 .await
                 .map_err(permission_error)?
                 .into_iter()
-                .map(|g| butler_gateway::gateway::AppGrantView {
+                .map(|g| AppGrantView {
+                    effect: "allow",
                     grant_ref: g.grant_ref,
                     capability: g.capability,
                     target: g.target,
@@ -255,7 +271,34 @@ impl AppAuthorityHandoff for AuthorityHandoff {
                     project_id: None,
                     project_name: None,
                 })
-                .collect())
+                .collect();
+            grants.extend(
+                authority
+                    .list_permission_rules()
+                    .await
+                    .map_err(permission_error)?
+                    .into_iter()
+                    .filter(|row| row.kind == "command_prefix")
+                    .map(|row| AppGrantView {
+                        grant_ref: row.rule_id,
+                        capability: "run_command".into(),
+                        target: row.pattern,
+                        cwd: None,
+                        scope: if row.owner_session_id.is_some() {
+                            "conversation"
+                        } else {
+                            "always"
+                        },
+                        effect: row.effect,
+                        session_id: row.owner_session_id.unwrap_or_default(),
+                        workspace_path: String::new(),
+                        created_at: row.created_at,
+                        session_title: None,
+                        project_id: None,
+                        project_name: None,
+                    }),
+            );
+            Ok(grants)
         })
     }
     fn revoke_permissions(
@@ -376,6 +419,11 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
             (400, error.code(), "Modify instruction is invalid.")
         }
         "browser_confirm_once_required" => (400, error.code(), "Allow this action once."),
+        "rule_scope_invalid" => (
+            400,
+            error.code(),
+            "Rule scope is unavailable for this action.",
+        ),
         "site_scope_invalid" => (
             400,
             error.code(),

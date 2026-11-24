@@ -3,11 +3,15 @@ use super::GuidedTools;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessMode, AccessRequest, ApprovalRisk, BtccError, CapabilityKind,
-    CommandSandbox, GrantUse, ModelRoundToolCall, TargetScope, ToolExecutionError,
-    command_access_risk, command_scope_unresolved, decide, needs_scope,
+    CommandSandbox, DenyReason, GrantUse, ModelRoundToolCall, RuleVerdict, TargetScope,
+    ToolExecutionError, apply_allow, command_access_risk, command_scope_unresolved, decide,
+    needs_scope, rule_verdict,
 };
-use butler_turn::workspace::{FolderRelation, ScopeRoots, classify_targets};
+use butler_turn::workspace::{
+    FolderRelation, FolderRoots, ScopeRoots, allowed_folder, classify_targets,
+};
 use serde_json::Value;
+use std::path::PathBuf;
 
 pub(super) async fn kind(
     owner: &GuidedTools,
@@ -64,6 +68,7 @@ pub(super) struct ClassifiedAccess {
     /// The command would run with the user's access while its secret reads
     /// stay open; its fresh approval says so ([`unsandboxed`]).
     pub unsandboxed: bool,
+    pub allowed_folders: Vec<PathBuf>,
 }
 
 pub(super) async fn decision(
@@ -79,12 +84,32 @@ pub(super) async fn decision_for_kind(
     args: &Value,
     kind: CapabilityKind,
 ) -> Result<ClassifiedAccess, BtccError> {
-    let scope = if needs_scope(&owner.access_mode(), kind) {
-        target_scope(owner, call, args).await?
-    } else {
-        TargetScope::NoTarget
-    };
     let mode = &owner.access_mode();
+    let command =
+        (call.name == ToolName::RunCommand).then(|| args["command"].as_str().unwrap_or(""));
+    let classify = needs_scope(mode, kind);
+    let rules = if command.is_some() || classify {
+        owner.permission_rules().await?
+    } else {
+        Default::default()
+    };
+    let verdict = command.map_or(RuleVerdict::NoRule, |line| {
+        rule_verdict(line, &rules.commands)
+    });
+    if verdict == RuleVerdict::Deny {
+        return Ok(ClassifiedAccess {
+            decision: AccessDecision::Deny(DenyReason::UserRule),
+            scope: TargetScope::NoTarget,
+            unsandboxed: false,
+            allowed_folders: Vec::new(),
+        });
+    }
+    let (scope, allowed_folders) = if classify || command.is_some() && verdict == RuleVerdict::Allow
+    {
+        target_scope(owner, call, args, rules.folders).await?
+    } else {
+        (TargetScope::NoTarget, Vec::new())
+    };
     let mut decision = decide(
         mode,
         AccessRequest {
@@ -114,10 +139,11 @@ pub(super) async fn decision_for_kind(
         decision: if unsandboxed {
             AccessDecision::Ask(GrantUse::Ignore)
         } else {
-            decision
+            apply_allow(decision, verdict, scope)
         },
         scope,
         unsandboxed,
+        allowed_folders,
     })
 }
 
@@ -144,7 +170,10 @@ fn unsandboxed(
         CapabilityKind::CommandMutation { sandbox } => {
             !(decision == AccessDecision::Allow
                 && *mode == AccessMode::Auto
-                && sandbox == CommandSandbox::ProjectWrite)
+                && matches!(
+                    sandbox,
+                    CommandSandbox::ProjectWrite | CommandSandbox::ProjectAndFolders
+                ))
         }
         CapabilityKind::Network => true,
         _ => false,
@@ -159,9 +188,10 @@ async fn target_scope(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
-) -> Result<TargetScope, BtccError> {
+    allowed_folders: Vec<PathBuf>,
+) -> Result<(TargetScope, Vec<PathBuf>), BtccError> {
     if call.name == ToolName::SwitchFolder {
-        return Ok(folder_scope(owner, args).await);
+        return Ok((folder_scope(owner, args).await, Vec::new()));
     }
     let consented = owner.folder_consented();
     let root = owner.current_workspace()?;
@@ -173,22 +203,34 @@ async fn target_scope(
     let args = args.clone();
     let name = call.name.clone();
     tokio::task::spawn_blocking(move || {
+        let folder_roots = FolderRoots {
+            butler_data: &data,
+            protected_roots: &protected,
+            installation_root: installation.as_deref(),
+        };
+        let allowed_folders: Vec<_> = allowed_folders
+            .into_iter()
+            .filter(|path| {
+                allowed_folder(&path.to_string_lossy(), &folder_roots).as_ref() == Ok(path)
+            })
+            .collect();
         let roots = ScopeRoots {
+            allowed_folders: &allowed_folders,
             attachments: &attachments,
             project: project.as_deref(),
             butler_data: &data,
             protected_ledger_roots: &protected,
             installation_root: installation.as_deref(),
         };
-        if name == "run_command" {
+        let scope = if name == "run_command" {
             let command = args["command"].as_str().unwrap_or("");
             if command_scope_unresolved(command) {
-                return TargetScope::Outside;
+                return (TargetScope::Outside, allowed_folders);
             }
             let Ok(cwd) =
                 butler_platform::tool_paths::parse(&root, args["cwd"].as_str().unwrap_or("."))
             else {
-                return TargetScope::Outside;
+                return (TargetScope::Outside, allowed_folders);
             };
             let cwd = root.join(cwd);
             let mut targets = vec![cwd.to_string_lossy().into_owned()];
@@ -198,37 +240,49 @@ async fn target_scope(
                     .filter(|token| !token.starts_with('-'))
                     .map(butler_platform::command_sandbox::normalize_path_token),
             );
+            targets.extend(
+                butler_turn::btcc::command_segments(command)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|word| !word.text.starts_with('-'))
+                    .map(|word| butler_platform::command_sandbox::normalize_path_token(&word.text)),
+            );
             classify_targets(
                 &roots,
                 &cwd,
                 &targets.iter().map(String::as_str).collect::<Vec<_>>(),
             )
         } else {
-            let paths = |list: &str| -> Vec<&str> {
-                args[list]
-                    .as_array()
-                    .map(|items| items.iter().filter_map(|r| r["path"].as_str()).collect())
-                    .unwrap_or_default()
-            };
-            let targets = match name.as_str() {
-                "read_file" => paths("requests"),
-                // A missing path cannot be proven inside the project.
-                "write_file" | "edit_file" => {
-                    let mut targets = paths("edits");
-                    targets.extend(args["path"].as_str());
-                    if targets.is_empty() {
-                        return TargetScope::Outside;
-                    }
-                    targets
-                }
-                _ => vec![args["root"].as_str().unwrap_or(".")],
-            };
-            classify_targets(&roots, &root, &targets)
-        }
+            file_targets(&name, &args).map_or(TargetScope::Outside, |targets| {
+                classify_targets(&roots, &root, &targets)
+            })
+        };
+        (scope, allowed_folders)
     })
     .await
     .map_err(|e| BtccError::relayed("scope_classification_failed", e.to_string()))
 }
+fn file_targets<'a>(name: &str, args: &'a Value) -> Option<Vec<&'a str>> {
+    let paths = |list: &str| -> Vec<&str> {
+        args[list]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["path"].as_str())
+            .collect()
+    };
+    match name {
+        "read_file" => Some(paths("requests")),
+        "write_file" | "edit_file" => {
+            let mut targets = paths("edits");
+            targets.extend(args["path"].as_str());
+            (!targets.is_empty()).then_some(targets)
+        }
+        _ => Some(vec![args["root"].as_str().unwrap_or(".")]),
+    }
+}
+
 /// A folder switch stays in scope within a consented folder or its
 /// repository; a refused folder is outside (its preparation reports why).
 async fn folder_scope(owner: &GuidedTools, args: &Value) -> TargetScope {

@@ -84,7 +84,7 @@ async fn link_targets_ask_with_the_real_place_and_bind_it() -> Result<(), Harnes
             assert_eq!(target["kind"], "outside", "{card}");
             assert_eq!(target["path"], json!(linked), "{card}");
         }
-        approve(&s, &chat, "deny").await?;
+        approve(&s, &chat, "deny", None).await?;
         delivered(&s, &chat, &id).await?;
     }
     assert!(!linked.join("made.txt").exists() && !linked.join("abs.txt").exists());
@@ -133,7 +133,7 @@ async fn retargeted(
     let link = project.join("out-link");
     std::fs::remove_dir(&link).or_else(|_| std::fs::remove_file(&link))?;
     directory_alias(&home.join("linked-b"), &link)?;
-    approve(s, chat, "allow").await?;
+    approve(s, chat, "allow", None).await?;
     delivered(s, chat, &id).await?;
     let output = outputs(s, chat, &id, script, RETARGET).await?;
     assert!(

@@ -43,6 +43,7 @@ pub(super) async fn execute(
         !gated
             && owner.access_mode().reviews_effects()
             && access.scope != butler_turn::btcc::TargetScope::Attachment,
+        if gated { &[] } else { &access.allowed_folders },
     )
     .await;
     if gated {

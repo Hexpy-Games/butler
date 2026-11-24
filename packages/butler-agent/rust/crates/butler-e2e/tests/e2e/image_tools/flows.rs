@@ -91,7 +91,7 @@ async fn asking_tiers_show_exact_facts_and_denial_never_dispatches() -> Result<(
                 json!({"action":"generate","model":"GPT Image 2.5 Sunburst","model_ref":MODEL,"size":"1024x1024","quality":"high","images":[],"mask":null,"prompt":prompt})
             );
             assert!(f.image.requests().is_empty());
-            approve(&f.s, "general", decision).await?;
+            approve(&f.s, "general", decision, None).await?;
             delivered(&f.s, "general", &id).await?;
             assert_eq!(f.image.requests().len(), usize::from(decision == "allow"));
             if decision == "deny" {

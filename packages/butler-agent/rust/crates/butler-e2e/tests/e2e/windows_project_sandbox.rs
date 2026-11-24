@@ -181,7 +181,7 @@ async fn approval_fallback_with_helper(
     let turn = super::access_tiers::paused(&s, &chat, prompt).await?;
     super::access_tiers::assert_counts(&s, &turn, 1, 1)?;
     assert!(!project.join("made.txt").exists());
-    super::access_tiers::approve(&s, &chat, "deny").await?;
+    super::access_tiers::approve(&s, &chat, "deny", None).await?;
     super::access_tiers::delivered(&s, &chat, &turn).await?;
     super::access_tiers::assert_counts(&s, &turn, 1, 0)?;
     assert!(!project.join("made.txt").exists());

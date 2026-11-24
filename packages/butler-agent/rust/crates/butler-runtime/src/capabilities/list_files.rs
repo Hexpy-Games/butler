@@ -2,7 +2,6 @@
 
 mod cursor;
 
-use std::path::PathBuf;
 use std::time::Instant;
 
 use serde_json::{Value, json};
@@ -65,14 +64,7 @@ pub(super) async fn execute(
         max_depth: integer(args.get("max_depth"), 25, 0, 100)?,
         elapsed_ms: integer(args.get("timeout_ms"), 5_000, 10, 30_000)? as u64,
     };
-    let query = super::cursor::query_hash(&json!({
-        "workspace_root":workspace_root, "root":root,
-        "include_globs":include, "exclude_globs":exclude,
-        "limits":{"maxResults":limits.max_results,"maxFiles":limits.max_files,
-            "maxDirs":limits.max_dirs,"maxDepth":limits.max_depth,
-            "elapsedMs":limits.elapsed_ms}
-    }))
-    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
+    let query = request_query(&workspace_root, &root, &include, &exclude, limits)?;
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
@@ -84,10 +76,15 @@ pub(super) async fn execute(
             u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         ));
     }
+    let (admitted_root, requested_root) = butler_turn::workspace::contained_target(
+        std::path::Path::new(&workspace_root),
+        &root,
+        input.allowed_folders,
+    );
     let outcome = workspace
         .list_files(WorkspaceListInput {
-            root: PathBuf::from(&workspace_root),
-            requested_root: root,
+            root: admitted_root.to_path_buf(),
+            requested_root,
             path_form: super::arguments::path_form(&input),
             protected_roots: super::arguments::read_protected_roots(&input),
             include_globs: include.clone(),
@@ -274,4 +271,21 @@ fn invalid_cursor(elapsed_ms: u64) -> Value {
         "recovery_hint":"Restart list_files without cursor using the same root and glob filters.",
         "metrics":{"elapsed_ms":elapsed_ms},
         "evidence_capability_receipts":evidence::list_limitation("invalid_cursor")})
+}
+
+fn request_query(
+    workspace_root: &str,
+    root: &str,
+    include: &[String],
+    exclude: &[String],
+    limits: WorkspaceListLimits,
+) -> Result<String, CapabilityError> {
+    super::cursor::query_hash(&json!({
+        "workspace_root":workspace_root, "root":root,
+        "include_globs":include, "exclude_globs":exclude,
+        "limits":{"maxResults":limits.max_results,"maxFiles":limits.max_files,
+            "maxDirs":limits.max_dirs,"maxDepth":limits.max_depth,
+            "elapsedMs":limits.elapsed_ms}
+    }))
+    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))
 }

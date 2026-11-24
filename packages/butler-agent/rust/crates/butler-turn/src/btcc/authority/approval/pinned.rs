@@ -149,6 +149,10 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
     );
     assert_path_and_example_bounds();
     super::command_risk::pinned::assert_command_risks();
+    super::command_words::tests::segment_table();
+    super::command_words::tests::read_only_table();
+    super::command_words::tests::rule_prefix_table();
+    super::command_words::tests::normalize_prefix_table();
 }
 
 fn assert_path_and_example_bounds() {

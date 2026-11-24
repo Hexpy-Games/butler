@@ -57,6 +57,7 @@ async fn contained_read_file_refusals_preserve_guard_fields_and_safe_explanation
             .invoke(
                 "read_file",
                 CapabilityInvocation {
+                    allowed_folders: &[],
                     contained: true,
                     call: &call,
                     workspace_reference: None,

@@ -35,6 +35,7 @@ pub struct Capabilities {
 
 #[derive(Clone, Debug)]
 pub struct CapabilityInvocation<'a> {
+    pub allowed_folders: &'a [PathBuf],
     pub contained: bool,
     pub call: &'a Value,
     pub workspace_reference: Option<&'a WorkspaceReference>,

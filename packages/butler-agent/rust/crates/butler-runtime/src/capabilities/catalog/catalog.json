@@ -280,7 +280,7 @@
             },
             "cwd": {
               "type": "string",
-              "description": "Optional contained workspace directory; relative paths use its root."
+              "description": "Optional contained workspace directory; relative paths use its root. Set cwd to the folder you work in."
             },
             "timeout_ms": {
               "type": "integer",
@@ -812,6 +812,72 @@
         "session",
         "workspace",
         "native"
+      ],
+      "durable": false
+    },
+    {
+      "name": "propose_permission_rule",
+      "definition": {
+        "type": "function",
+        "name": "propose_permission_rule",
+        "description": "Ask the user to add a standing permission rule when they say to stop asking (or always refuse) for some commands or a folder. Opens a card; nothing changes unless the user approves. Use the narrowest rule that matches what they said.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "effect": {
+              "type": "string",
+              "enum": [
+                "allow",
+                "deny"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "command_prefix",
+                "folder"
+              ],
+              "description": "command_prefix: commands starting with these words. folder: a folder to work in without asking; allow and always only."
+            },
+            "pattern": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "description": "Leading words such as \"git status\", or an absolute or ~/ folder path."
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "always"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "effect",
+            "kind",
+            "pattern",
+            "scope",
+            "reason"
+          ]
+        },
+        "effectBoundary": "reviewed_persistent",
+        "concurrencySafe": false,
+        "interruptBehavior": "cancel",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "reviewed_persistent",
+      "category": "settings",
+      "tags": [
+        "permission",
+        "rule",
+        "approval",
+        "folder"
       ],
       "durable": false
     },
@@ -8351,6 +8417,7 @@
     }
   ],
   "workerForbidden": [
+    "propose_permission_rule",
     "complete_project_work",
     "generate_image",
     "edit_image",
@@ -10096,7 +10163,7 @@
           },
           "cwd": {
             "type": "string",
-            "description": "Optional contained workspace directory; relative paths use its root."
+            "description": "Optional contained workspace directory; relative paths use its root. Set cwd to the folder you work in."
           },
           "timeout_ms": {
             "type": "integer",
@@ -10656,6 +10723,60 @@
         "required": [
           "action",
           "branch"
+        ]
+      },
+      "effectBoundary": "reviewed_persistent",
+      "concurrencySafe": false,
+      "interruptBehavior": "cancel",
+      "transcriptVisibility": "visible"
+    },
+    "propose_permission_rule": {
+      "type": "function",
+      "name": "propose_permission_rule",
+      "description": "Ask the user to add a standing permission rule when they say to stop asking (or always refuse) for some commands or a folder. Opens a card; nothing changes unless the user approves. Use the narrowest rule that matches what they said.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "command_prefix",
+              "folder"
+            ],
+            "description": "command_prefix: commands starting with these words. folder: a folder to work in without asking; allow and always only."
+          },
+          "pattern": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Leading words such as \"git status\", or an absolute or ~/ folder path."
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "conversation",
+              "always"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "effect",
+          "kind",
+          "pattern",
+          "scope",
+          "reason"
         ]
       },
       "effectBoundary": "reviewed_persistent",

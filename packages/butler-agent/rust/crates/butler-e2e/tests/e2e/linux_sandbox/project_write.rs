@@ -30,7 +30,7 @@ async fn auto_mutation_waits_for_approval_without_running() -> Result<(), Harnes
     let turn = super::super::access_tiers::paused(&s, &chat, prompt).await?;
     super::super::access_tiers::assert_counts(&s, &turn, 1, 1)?;
     assert!(!project.join("made.txt").exists(), "ran before approval");
-    super::super::access_tiers::approve(&s, &chat, "deny").await?;
+    super::super::access_tiers::approve(&s, &chat, "deny", None).await?;
     super::super::access_tiers::delivered(&s, &chat, &turn).await?;
     super::super::access_tiers::assert_counts(&s, &turn, 1, 0)?;
     assert!(!project.join("made.txt").exists(), "ran after denial");
@@ -140,7 +140,7 @@ async fn auto_project_writes_sweep_and_retry_asks() -> Result<(), HarnessError> 
         cards[0].to_string().contains(command),
         "approval must show exact action"
     );
-    super::super::access_tiers::approve(&s, &chat, "deny").await?;
+    super::super::access_tiers::approve(&s, &chat, "deny", None).await?;
     super::super::access_tiers::delivered(&s, &chat, &id).await?;
     if mounted {
         assert_eq!(

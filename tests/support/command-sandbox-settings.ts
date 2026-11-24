@@ -5,7 +5,7 @@ import type { AppCopy } from "../../packages/butler-i18n/src/copy-contract";
 import type { NativeAppServerHandle } from "./native-app-server";
 
 export async function commandSandboxSettings(page: Page, server: NativeAppServerHandle, copy: AppCopy) {
-  await page.goto(`${server.url}?settings=general`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${server.url}?settings=security`, { waitUntil: "domcontentloaded" });
   const toggle = page.getByRole("switch", { name: copy.settings.fields.commandSandbox, exact: true });
   await toggle.waitFor();
   const settings = await server.api<{ command_sandbox_available: boolean; command_sandbox_enabled: boolean }>("/settings");

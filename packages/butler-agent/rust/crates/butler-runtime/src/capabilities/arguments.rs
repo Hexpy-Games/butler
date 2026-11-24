@@ -55,6 +55,7 @@ pub(super) fn root(
 pub(super) fn context(input: &CapabilityInvocation<'_>, root: PathBuf) -> MutationContext {
     let installation_root = input.installation_root.map(Path::to_path_buf);
     MutationContext {
+        allowed_folders: input.allowed_folders.to_vec(),
         butler_data: input.butler_data.to_path_buf(),
         root,
         path_form: path_form(input),
@@ -187,6 +188,7 @@ pub(super) fn read_protected_roots(input: &CapabilityInvocation<'_>) -> Vec<Path
 
 pub(super) fn read_context(input: &CapabilityInvocation<'_>, root: PathBuf) -> MutationContext {
     MutationContext {
+        allowed_folders: input.allowed_folders.to_vec(),
         butler_data: input.butler_data.to_path_buf(),
         root,
         path_form: path_form(input),
