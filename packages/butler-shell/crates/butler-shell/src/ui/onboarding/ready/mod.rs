@@ -65,7 +65,7 @@ pub(crate) fn screen(
         let text = shared_words(view.lang).finish_failed;
         body.push(Typo::caption(text).tone(Tone::Danger).into_any_element());
     }
-    body.push(rows(view, card, account.as_ref(), copy, cx));
+    body.push(rows(view, &card, account.as_ref(), copy, cx));
     if show_notice {
         body.push(notice_row(copy, cx));
     }
@@ -85,17 +85,17 @@ pub(crate) fn screen(
 /// The summary rows: the AI (with the ChatGPT account) and the reply language.
 fn rows(
     view: &Onboarding,
-    card: CardId,
+    card: &CardId,
     account: Option<&Value>,
     copy: &Words,
     cx: &App,
 ) -> AnyElement {
-    let name = card_name(&card, view.lang, &view.providers.read(cx).hosted());
+    let name = card_name(card, view.lang, &view.providers.read(cx).hosted());
     let email = account
         .and_then(|account| account.get("label"))
         .and_then(Value::as_str)
         .filter(|label| label.contains('@'));
-    let ai = match (&card, email) {
+    let ai = match (card, email) {
         (CardId::Chatgpt, Some(email)) => format!("{name} · {email}").into(),
         _ => name,
     };

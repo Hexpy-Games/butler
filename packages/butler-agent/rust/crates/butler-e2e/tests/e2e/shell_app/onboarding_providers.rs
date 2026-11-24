@@ -37,7 +37,7 @@ async fn shell_app_30_onboarding_providers() -> Result<(), HarnessError> {
         .map(|p| p["provider_id"].as_str().expect("provider id"))
         .filter(|id| *id != "local")
         .collect::<Vec<_>>();
-    assert!(!hosted.is_empty());
+    assert_ne!(hosted, [] as [&str; 0]);
     for id in hosted {
         shell
             .run(&[&format!("expect-anchor first-run-key-card-{id}")])

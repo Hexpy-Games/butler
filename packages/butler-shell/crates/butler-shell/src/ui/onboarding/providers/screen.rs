@@ -249,9 +249,10 @@ pub(crate) fn screen(
             shared.back,
             cx.listener(|view, _, _, cx| view.back_from_connect(cx)),
         )
-        .footer_start(crate::ui::widgets::anchored(
-            toggle,
-            "first-run-more-toggle",
-        ))
+        .footer_start(
+            Stack::new()
+                .cross(Cross::Start)
+                .child(crate::ui::widgets::anchored(toggle, "first-run-more-toggle")),
+        )
         .into_any_element()
 }
