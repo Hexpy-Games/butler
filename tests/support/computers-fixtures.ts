@@ -1,10 +1,10 @@
 import type { CredentialListView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import type { Computer, ComputerConnection } from "../../packages/butler-app/client/ui/src/components/settings/computerTypes.ts";
+import type { Computer, ComputerConnection, ComputerModelSource, MainModelKind } from "../../packages/butler-app/client/ui/src/components/settings/computerTypes.ts";
 
 const addedAt = "2026-11-23T00:00:00Z";
 const defaults = {
   port: null, key_file: null, folder: "~/projects", os: "linux", arch: "x86_64", glibc: null,
-  stops_on_logout: false, ai_connected: true, added_at: addedAt,
+  stops_on_logout: false, ai_connected: true, added_at: addedAt, model_source: "follow" as ComputerModelSource,
 };
 
 export const computerFixtures = [
@@ -25,7 +25,6 @@ const credentials: CredentialListView = {
   store: { backend: "fallback_file", reason: "config", override_ignored: false, legacy_plaintext: 0 },
 };
 
-export const computerFingerprint = "SHA256:ZHZyHrDgIaLB0y6BWe1G2oaquq6YTs7lQ9Tms7rIoKw";
 export const computerAuthUrl = "http://127.0.0.1:9/oauth";
 type ComputerCall = { method: string; path: string; body: unknown };
 type ComputerStep = "host-key" | "add" | "start";
@@ -34,7 +33,7 @@ export function computersFocusResponse(path: string): unknown {
   if (path === "/security") {
     return { remote_access_enabled: false, bind_addresses: ["127.0.0.1:18765"], lan_urls: [], allowed_hosts: [], content_hosts: [] };
   }
-  if (path === "/computers") return { computers: computerFixtures };
+  if (path === "/computers") return { computers: computerFixtures, main_model: "key" };
   const id = path.match(/^\/computers\/([^/]+)\/connection$/u)?.[1];
   if (id) return { state: states[id] ?? "idle", error: null };
 }
@@ -45,6 +44,7 @@ export function createComputersFake() {
   const fake = {
     calls,
     computers: [] as Computer[],
+    mainModel: "key" as MainModelKind,
     startHold: undefined as Promise<void> | undefined,
     oauthStatus: "pending",
     oauthCancelStatus: "cancelled",
@@ -52,7 +52,7 @@ export function createComputersFake() {
     respond,
   };
   const ok = (data: unknown, status = 200) => ({ status, json: { protocol_version: "butler.app.v1", data } });
-  const error = (code: string) => ({ status: code === "host_key_unconfirmed" ? 409 : 422, json: { error: { code, message: "TEST" } } });
+  const error = (code: string) => ({ status: 422, json: { error: { code, message: "TEST" } } });
 
   async function respond(call: ComputerCall) {
     calls.push(call);
@@ -65,11 +65,11 @@ export function createComputersFake() {
       return error(failure);
     }
     if (path === "/credentials" && method === "GET") return ok(credentials);
-    if (path === "/computers" && method === "GET") return ok({ computers: fake.computers });
-    if (step === "host-key") return ok({ trusted: false, fingerprint: computerFingerprint, key_type: "ED25519" });
+    if (path === "/computers" && method === "GET") return ok({ computers: fake.computers, main_model: fake.mainModel });
+    if (step === "host-key") return ok({ trusted: true });
     if (step === "add") {
-      const { name, address, port, key_file, folder } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder">;
-      const computer = { ...defaults, id: addedId, name, address, folder, port: port ?? null, key_file: key_file ?? null, ai_connected: false };
+      const { name, address, port, key_file, folder, model_source } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source">;
+      const computer = { ...defaults, id: addedId, name, address, folder, port: port ?? null, key_file: key_file ?? null, ai_connected: false, model_source };
       fake.computers.push(computer);
       return ok({ computer }, 201);
     }
@@ -82,19 +82,24 @@ export function createComputersFake() {
     }
     if (step === "start") {
       await fake.startHold;
+      computer.ai_connected = computer.model_source !== "none" && computer.model_source !== "chatgpt";
       return ok({ state: "ready", version: "1.0.0" });
     }
     if (action === "connection" && method === "GET") return ok({ state: states[computer.id] ?? "idle", error: null });
-    if (action === "credentials" && method === "POST") {
-      computer.ai_connected = true;
-      return ok({ credential: credentials.credentials[0] });
+    if (method === "PATCH" && !action) {
+      computer.model_source = (body as Pick<Computer, "model_source">).model_source;
+      computer.ai_connected = computer.model_source !== "none" && computer.model_source !== "chatgpt";
+      return ok({ computer });
     }
     if (action === "oauth/start" && method === "POST") {
       return ok({ status: "pending", flow_id: "flow_1", auth_url: computerAuthUrl });
     }
     if ((action === "oauth/flow_1" && method === "GET") || (action === "oauth/flow_1/cancel" && method === "POST")) {
       const status = method === "GET" ? fake.oauthStatus : fake.oauthCancelStatus;
-      if (status === "completed") computer.ai_connected = true;
+      if (status === "completed") {
+        computer.ai_connected = true;
+        computer.model_source = "chatgpt";
+      }
       return ok({ status });
     }
     throw new Error(`Unexpected computer request: ${method} ${path}`);

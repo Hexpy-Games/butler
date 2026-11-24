@@ -15,7 +15,7 @@ const id = "01234567-89ab-4def-8123-456789abcdef";
 const path = `/computers/${id}`;
 const host = { address: "studio", port: 22 };
 const added = { ...host, name: "Studio", folder: "~/projects" };
-const credential = { credential_id: "openai" };
+const model = { model_source: "follow" };
 const kind = { kind: "default" };
 const flow = "flow_1";
 const routes = [
@@ -25,7 +25,7 @@ const routes = [
   ["DELETE", path, undefined, "deleteComputer", { id }, { id }],
   ["POST", `${path}/start`, undefined, "startComputer", { id }, { id }],
   ["GET", `${path}/connection`, undefined, "getComputerConnection", { id }, { id }],
-  ["POST", `${path}/credentials`, credential, "sendComputerCredential", { id, payload: credential }, { id, payload: credential }],
+  ["PATCH", path, model, "updateComputerModel", { id, payload: model }, { id, payload: model }],
   ["POST", `${path}/oauth/start`, kind, "startComputerOauth", { id, payload: kind }, { id, payload: kind }],
   ["GET", `${path}/oauth/${flow}`, undefined, "getComputerOauth", { id, flow }, { id, flow }],
   ["POST", `${path}/oauth/${flow}/cancel`, {}, "cancelComputerOauth", { id, flow }, { id, flow }],

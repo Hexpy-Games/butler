@@ -96,6 +96,13 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Disabled: the same disabled tone and surface as Input, never an editable look. */
+.trigger:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
 .content {
   z-index: var(--z-popover);
   max-height: var(--radix-select-content-available-height);

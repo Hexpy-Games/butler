@@ -21,14 +21,15 @@ export function computersSection({ section, savedKeys }: {
       emptyMessage={copy.empty} onRetry={() => void computers.refresh()}
       actions={<>
         <Button size="sm" variant="outline" onClick={() => section.setAdding(true)}>{copy.add}</Button>
-        <ComputerAddDialog open={section.adding} onOpenChange={section.setAdding} onAdded={section.added} />
+        <ComputerAddDialog open={section.adding} onOpenChange={section.setAdding} onAdded={section.added}
+          mainModel={computers.mainModel} savedKeys={savedKeys} />
         <ComputerAiDialog key={section.aiFor?.id ?? "none"} computer={section.aiFor} savedKeys={savedKeys} onClose={section.aiClosed} />
         <ComputerDeleteDialog computer={section.removing} onCancel={() => section.setRemoving(null)} onConfirm={section.confirmRemove} />
       </>}
     >
       {computers.computers.map((computer) => (
         <ComputerRow key={computer.id} computer={computer} status={computers.statusOf(computer)} busy={computers.busy}
-          onConnectAi={() => section.setAiFor(computer)} onRemove={() => section.setRemoving(computer)} />
+          onModelSettings={() => section.setAiFor(computer)} onRemove={() => section.setRemoving(computer)} />
       ))}
     </SettingsSection>
   );

@@ -97,7 +97,7 @@ pub use butler_platform::secrets::read_secret_input;
 pub use configuration::chatgpt;
 pub use configuration::sealed;
 pub use configuration::{
-    CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
+    ComputerModel, CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
     CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
     SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,

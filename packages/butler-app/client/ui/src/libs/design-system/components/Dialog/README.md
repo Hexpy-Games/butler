@@ -60,6 +60,10 @@ Product engineers, design-system maintainers, and coding agents can use it when 
   and the content gives it back, so the form keeps its width and centre when
   content starts or stops scrolling, and a dialog that fits shows no empty
   lane. Overlay scrollbars change nothing.
+- A dialog that scrolls itself keeps `--focus-ring-room` at its block edges
+  (`scroll-padding-block`). Keyboard focus scrolls a control, including the
+  close button, a ring's width clear of the edge, so its ring is never cut.
+  A `scroll-body` dialog's ScrollArea keeps its own room.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

@@ -44,7 +44,8 @@ pub(crate) use auth::AuthError as ModelAuthError;
 pub use auth::{generate_pkce_verifier, pkce_challenge};
 pub use butler_platform::secrets::{SecretBackend, SecretStoreMode};
 pub use credential_admin::{
-    CredentialError, CredentialList, CredentialListItem, CredentialStoreView, DeletedCredential,
+    ComputerModel, CredentialError, CredentialList, CredentialListItem, CredentialStoreView,
+    DeletedCredential,
 };
 pub use credential_migration::{
     CredentialFileSummary, CredentialMigrationFailure, CredentialMigrationReport,

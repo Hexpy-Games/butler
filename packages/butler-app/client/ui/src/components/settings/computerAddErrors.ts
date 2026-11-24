@@ -20,7 +20,6 @@ export function addFailure(code: string | undefined): ComputerFieldError | null 
     ["ssh_unreachable", { field: "address", message: copy.unreachable }],
     ["ssh_client_missing", { field: "address", message: copy.unreachable }],
     ["host_key_changed", { field: "address", message: copy.fingerprintChanged }],
-    ["host_key_unconfirmed", { field: "address", message: copy.fingerprintChanged }],
     ["unsupported_computer", { field: "address", message: copy.unsupported }],
     ["computer_address_invalid", { field: "address", message: copy.addressInvalid }],
     ["computer_name_taken", { field: "name", message: copy.nameTaken }],

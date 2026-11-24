@@ -15,9 +15,9 @@ export function computerBridgeCall(method: string, path: string, body: unknown):
   if (method === "GET" && suffix === "/connection") return { action: "getComputerConnection", input: { id } };
   if (method === "POST") {
     if (suffix === "/start") return { action: "startComputer", input: { id } };
-    if (suffix === "/credentials") return { action: "sendComputerCredential", input: { id, payload: payload() } };
     if (suffix === "/oauth/start") return { action: "startComputerOauth", input: { id, payload: payload() } };
   }
+  if (method === "PATCH" && !suffix) return { action: "updateComputerModel", input: { id, payload: payload() } };
   const oauth = suffix?.match(/^\/oauth\/([A-Za-z0-9_]+)(\/cancel)?$/u);
   if (oauth) {
     const [, flow, cancel] = oauth;

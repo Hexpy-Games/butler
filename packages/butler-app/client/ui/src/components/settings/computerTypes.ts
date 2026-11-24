@@ -1,3 +1,6 @@
+export type ComputerModelSource = "follow" | "chatgpt" | "none" | { key: string };
+export type MainModelKind = "key" | "chatgpt" | "none";
+
 export interface Computer {
   id: string;
   name: string;
@@ -10,6 +13,7 @@ export interface Computer {
   glibc: string | null;
   stops_on_logout: boolean;
   ai_connected: boolean;
+  model_source: ComputerModelSource;
   added_at: string;
 }
 

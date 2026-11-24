@@ -81,11 +81,11 @@ pub(super) async fn delete(path: PathBuf, id: String) -> Result<(), HttpError> {
     .map_err(|_| HttpError::Internal)?
 }
 
-pub(super) async fn set_ai_connected(
+pub(super) async fn update(
     path: PathBuf,
     id: String,
-    connected: bool,
-) -> Result<(), HttpError> {
+    change: impl FnOnce(&mut Computer) + Send + 'static,
+) -> Result<Computer, HttpError> {
     let guard = lock_file_async(&path)
         .await
         .map_err(|_| HttpError::Internal)?;
@@ -96,15 +96,14 @@ pub(super) async fn set_ai_connected(
             .iter_mut()
             .find(|record| record.id == id)
             .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
-        if computer.ai_connected == connected {
-            return Ok(());
-        }
-        computer.ai_connected = connected;
+        change(computer);
+        let updated = computer.clone();
         write_json_atomic(
             &path,
             &serde_json::json!({"version": 1, "computers": records}),
         )
-        .map_err(|_| HttpError::Internal)
+        .map_err(|_| HttpError::Internal)?;
+        Ok(updated)
     })
     .await
     .map_err(|_| HttpError::Internal)?

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { setComputerConnection, useComputerConnections } from "@/app/computerEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
+import type { MainModelKind } from "../computerTypes";
 import { computerConnection, deleteComputer, forgetComputerMemory, listComputers, type Computer } from "../computersApi";
 
 export type ComputerStatus = "connected" | "disconnected" | "aiNeeded" | "stopsOnLogout";
 
 export function useComputers() {
   const [computers, setComputers] = useState<Computer[]>([]);
+  const [mainModel, setMainModel] = useState<MainModelKind>("none");
   const [state, setState] = useState<"loading" | "error" | "ready">("loading");
   const [busy, setBusy] = useState(false);
   const mounted = useRef(false);
@@ -18,9 +20,10 @@ export function useComputers() {
   const refresh = useCallback(async () => {
     const request = ++revision.current;
     try {
-      const next = await listComputers();
+      const { computers: next, main_model } = await listComputers();
       if (!mounted.current || request !== revision.current) return;
       setComputers(next);
+      setMainModel(main_model);
       setState("ready");
       for (const { id } of next) {
         void computerConnection(id).then(({ state }) => {
@@ -70,5 +73,5 @@ export function useComputers() {
     }
   }
 
-  return { computers, state, busy, refresh, remove, statusOf };
+  return { computers, mainModel, state, busy, refresh, remove, statusOf };
 }

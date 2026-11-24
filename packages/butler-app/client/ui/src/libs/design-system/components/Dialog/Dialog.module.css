@@ -58,6 +58,9 @@
   max-height: var(--dialog-max-height);
   gap: var(--space-4);
   overflow: auto;
+  /* Keyboard focus scrolls a control, the close button included, a ring's
+     width clear of the scroll edge, so its ring is never cut. */
+  scroll-padding-block: var(--focus-ring-room);
   padding: var(--dialog-padding);
   outline: none;
   container-type: inline-size;

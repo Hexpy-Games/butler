@@ -84,11 +84,9 @@ async fn computer_records_ai_connection_and_refuses_home_folder() -> Result<(), 
     let cid = saved.data()["credential"]["id"].as_str().unwrap();
     let sent = api
         .send(
-            Method::POST,
-            &format!("/computers/{id}/credentials"),
-            Some(json!({
-                "credential_id": cid,
-            })),
+            Method::PATCH,
+            &format!("/computers/{id}"),
+            Some(json!({"model_source":{"key":cid}})),
             &[],
         )
         .await?;

@@ -6,6 +6,20 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub fn user_ssh_config(home: &Path) -> std::io::Result<PathBuf> {
+    let ssh = home.join(".ssh");
+    std::fs::create_dir_all(&ssh)?;
+    let config = ssh.join("config");
+    std::fs::write(
+        &config,
+        format!(
+            "UserKnownHostsFile {}\nGlobalKnownHostsFile none\n",
+            ssh.join("known_hosts").display()
+        ),
+    )?;
+    Ok(config)
+}
+
 /// Children this fixture started, stopped by PID on every exit path.
 struct Children(Vec<Child>);
 

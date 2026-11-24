@@ -3,11 +3,11 @@ import { Button, ButtonContainer, ListRow, Monitor, Stack, Tooltip } from "@/but
 import type { Computer } from "./computersApi";
 import type { ComputerStatus } from "./hooks/useComputers";
 
-export function ComputerRow({ computer, status, busy, onConnectAi, onRemove }: {
+export function ComputerRow({ computer, status, busy, onModelSettings, onRemove }: {
   computer: Computer;
   status: ComputerStatus;
   busy: boolean;
-  onConnectAi(): void;
+  onModelSettings(): void;
   onRemove(): void;
 }) {
   const copy = appCopy.computers;
@@ -23,14 +23,12 @@ export function ComputerRow({ computer, status, busy, onConnectAi, onRemove }: {
       <Stack grow minWidth="0">
         <ListRow icon={<Monitor size="md" />} title={computer.name} description={computer.address} meta={copy.status[status]} />
       </Stack>
-      {status === "aiNeeded" ? (
-        <ButtonContainer size="sm">
-          <Tooltip label={busy ? working : undefined}>
-            <Button size="sm" variant="outline" disabled={busy} onClick={onConnectAi}>{copy.connectAi}</Button>
-          </Tooltip>
-          {remove}
-        </ButtonContainer>
-      ) : remove}
+      <ButtonContainer size="sm">
+        <Tooltip label={busy ? working : undefined}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={onModelSettings}>{copy.modelSettings}</Button>
+        </Tooltip>
+        {remove}
+      </ButtonContainer>
     </Stack>
   );
   return status === "stopsOnLogout" ? <Tooltip label={copy.stopsOnLogoutHint} wrap>{row}</Tooltip> : row;

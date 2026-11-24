@@ -56,7 +56,7 @@ pub(in crate::gateway) async fn open_stream(
         Opened::Stream(stream) => Ok(*stream),
         Opened::NotRunning => {
             let (_lock, computer) = locked(&link.root, &computer.id).await?;
-            connect(
+            let _ = connect(
                 &link.setup,
                 &link.root,
                 &link.version,
@@ -83,7 +83,7 @@ async fn send(
         relay::Sent::Reply(reply) => Ok(reply),
         relay::Sent::NotRunning => {
             let (_lock, computer) = locked(&link.root, &computer.id).await?;
-            connect(
+            let _ = connect(
                 &link.setup,
                 &link.root,
                 &link.version,

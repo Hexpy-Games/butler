@@ -15,7 +15,7 @@ export function useComputersSection() {
     setAdding(false);
     void computers.refresh();
     if (failure) notifyStatus(failure, { id: "computers", tone: "error" });
-    else setAiFor(computer);
+    else if (computer.model_source === "chatgpt") setAiFor(computer);
   }
 
   function aiClosed() {

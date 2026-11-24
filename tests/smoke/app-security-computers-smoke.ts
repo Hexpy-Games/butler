@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
-import { computerAuthUrl, computerFingerprint, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
+import { computerAuthUrl, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 
@@ -54,7 +54,7 @@ async function captureStates(page: Page, output: string, variant: string) {
     });
     await page.getByRole("tooltip").waitFor({ state: "hidden" });
     const path = join(output, `${state}-${variant}.png`);
-    await target.screenshot({ path, animations: "allow", timeout: 10_000 });
+    await target.screenshot({ path, animations: "disabled", timeout: 10_000 });
     console.log(path);
     captures++;
   }
@@ -72,16 +72,11 @@ async function captureStates(page: Page, output: string, variant: string) {
   await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
   await dialog.locator("#computer-port").fill("22");
   await dialog.locator("#computer-key-file").fill(copy.form.keyFilePlaceholder);
-  await submit.click();
-  const fingerprint = page.getByRole("alertdialog");
-  await assertVisible(fingerprint, computerFingerprint);
-  await screenshot("A4-fingerprint", fingerprint);
-
   let release!: () => void;
   fake.startHold = new Promise<void>((resolve) => { release = resolve; });
   try {
     const startRequest = page.waitForRequest((request) => /^\/computers\/[^/]+\/start$/u.test(new URL(request.url()).pathname));
-    await button(fingerprint, copy.fingerprint.confirm).click();
+    await submit.click();
     await startRequest;
     await assertVisible(dialog.getByRole("status"), copy.form.preparing);
     await screenshot("A5-preparing", dialog);
@@ -90,19 +85,25 @@ async function captureStates(page: Page, output: string, variant: string) {
     fake.startHold = undefined;
   }
 
+  await dialog.waitFor({ state: "hidden" });
+  await button(row(page, name), copy.modelSettings).click();
   const ai = aiDialog(page);
-  await assertVisible(ai, copy.ai.sendKey);
+  await assertVisible(ai, copy.model.field);
   await screenshot("M1-ai", ai);
+  await ai.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: copy.model.options.chatgpt, exact: true }).click();
   await button(ai, appCopy.chatgptPlan.continue).click();
   await assertVisible(ai, appCopy.chatgptSignIn.pending);
   await page.waitForFunction((url) => (window as Window & { __opened?: string[] }).__opened?.includes(url), computerAuthUrl);
   await screenshot("M2-chatgpt-waiting", ai);
   await button(ai, common.cancel).click();
-  await ai.getByRole("combobox").click();
+  await ai.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: copy.model.options.key, exact: true }).click();
+  await ai.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: "OpenAI", exact: true }).click();
-  assert(await button(ai, copy.ai.send).isEnabled());
+  assert(await button(ai, copy.model.save).isEnabled());
   await screenshot("M3-key-chosen", ai);
-  await button(ai, copy.ai.later).click();
+  await button(ai, common.cancel).click();
 
   await button(section(page), copy.add).click();
   await dialog.locator("#computer-name").fill(name);
@@ -116,13 +117,15 @@ async function captureStates(page: Page, output: string, variant: string) {
   ] as const) {
     fake.failNext(step, code);
     await submit.click();
-    if (step === "add") await button(fingerprint, copy.fingerprint.confirm).click();
     await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), message);
     await screenshot(state, dialog);
   }
   await button(dialog, common.cancel).click();
 
-  fake.computers = [...computerFixtures.map((computer) => ({ ...computer })), ...fake.computers];
+  fake.computers = [
+    ...computerFixtures.map((computer) => ({ ...computer })),
+    ...fake.computers.map((computer) => ({ ...computer, model_source: "none" as const, ai_connected: false })),
+  ];
   await page.reload();
   const [connected, unreachable, logout] = computerFixtures;
   await assertVisible(row(page, connected!.name), copy.status.connected);
@@ -192,6 +195,7 @@ try {
   assert(await submit.isDisabled());
   await submit.hover({ force: true });
   await assertVisible(page.getByRole("tooltip"), copy.form.required);
+  await assertVisible(dialog.getByRole("combobox").first(), copy.model.options.follow);
 
   const name = copy.form.namePlaceholder;
   const address = copy.form.addressPlaceholder;
@@ -205,24 +209,18 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement?.id), "computer-folder");
   assert.equal(lastCall("POST", "/computers/host-key"), undefined);
 
-  // A4 and A5.
+  // A5
   await dialog.locator("#computer-folder").fill(folder);
   await dialog.locator("#computer-port").fill("22");
   await dialog.locator("#computer-key-file").fill(keyFile);
-  await submit.click();
-  const fingerprint = page.getByRole("alertdialog");
-  await assertVisible(fingerprint, copy.fingerprint.title);
-  await assertVisible(fingerprint, computerFingerprint);
-  await button(fingerprint, common.cancel).click();
-  assert.equal(lastCall("POST", "/computers"), undefined);
-  assert(await dialog.locator("#computer-folder").isEnabled());
   fake.startHold = new Promise<void>((resolve) => { releaseStart = resolve; });
-  await submit.click();
   const startRequest = page.waitForRequest((request) => /^\/computers\/[^/]+\/start$/u.test(new URL(request.url()).pathname));
-  await button(fingerprint, copy.fingerprint.confirm).click();
+  await submit.click();
   await startRequest;
+  assert.equal(await page.getByRole("alertdialog").count(), 0);
+  assert.deepEqual(lastCall("POST", "/computers/host-key")?.body, { address, port: 22, key_file: keyFile });
   assert.deepEqual(lastCall("POST", "/computers")?.body, {
-    name, address, port: 22, key_file: keyFile, folder, host_fingerprint: computerFingerprint,
+    name, address, port: 22, key_file: keyFile, folder, model_source: "follow",
   });
   await assertVisible(dialog.getByRole("status"), copy.form.preparing);
   assert.equal(await dialog.locator("input:disabled").count(), 5);
@@ -230,37 +228,38 @@ try {
   assert(await button(dialog, common.cancel).isDisabled());
   releaseStart?.();
   await dialog.waitFor({ state: "hidden" });
-  const ai = aiDialog(page);
-  await assertVisible(ai, copy.ai.title);
-  await assertVisible(ai, copy.ai.description(name));
+  assert.equal(await aiDialog(page).count(), 0);
   await row(page, name).waitFor();
-  assert(await row(page, name).isVisible());
+  await assertVisible(row(page, name), copy.status.connected);
 
-  // M4, M2, M1 and M3.
+  // M1, M2 and M3.
   const computerPath = `/computers/${fake.computers[0]!.id}`;
-  await button(ai, copy.ai.later).click();
-  await assertVisible(row(page, name), copy.status.aiNeeded);
-  await button(row(page, name), copy.connectAi).click();
+  await button(row(page, name), copy.modelSettings).click();
+  const ai = aiDialog(page);
+  await ai.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: copy.model.options.chatgpt, exact: true }).click();
   await button(ai, appCopy.chatgptPlan.continue).click();
   await assertVisible(ai, appCopy.chatgptSignIn.pending);
   await page.waitForFunction((url) => (window as Window & { __opened?: string[] }).__opened?.includes(url), computerAuthUrl);
   assert.deepEqual(lastCall("POST", `${computerPath}/oauth/start`)?.body, { kind: "default" });
-  assert.equal(await ai.getByText(copy.ai.sendKey, { exact: true }).count(), 0);
+  assert.equal(await ai.getByText(copy.model.field, { exact: true }).count(), 0);
   const cancelled = page.waitForResponse((response) => new URL(response.url()).pathname === `${computerPath}/oauth/flow_1/cancel` && response.request().method() === "POST");
   await button(ai, common.cancel).click();
   assert.equal((await cancelled).status(), 200);
-  await assertVisible(ai, copy.ai.sendKey);
-  const send = button(ai, copy.ai.send);
-  assert(await send.isDisabled());
-  await send.hover({ force: true });
-  await assertVisible(page.getByRole("tooltip"), copy.ai.chooseKeyFirst);
-  await ai.getByRole("combobox").click();
+  await assertVisible(ai, copy.model.field);
+  await ai.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: copy.model.options.key, exact: true }).click();
+  const save = button(ai, copy.model.save);
+  assert(await save.isDisabled());
+  await save.hover({ force: true });
+  await assertVisible(page.getByRole("tooltip"), copy.model.chooseKeyFirst);
+  await ai.getByRole("combobox").nth(1).click();
   await page.getByRole("option", { name: "OpenAI", exact: true }).click();
-  assert(await send.isEnabled());
-  await send.click();
+  assert(await save.isEnabled());
+  await save.click();
   await ai.waitFor({ state: "hidden" });
-  assert.deepEqual(lastCall("POST", `${computerPath}/credentials`)?.body, { credential_id: "openai" });
-  await assertVisible(page, copy.ai.connected);
+  assert.deepEqual(lastCall("PATCH", computerPath)?.body, { model_source: { key: "openai" } });
+  await assertVisible(page, copy.model.saved);
 
   // A6, A6b, A6c and A7.
   await button(section(page), copy.add).click();
@@ -275,7 +274,6 @@ try {
   ] as const) {
     fake.failNext(step, code);
     await submit.click();
-    if (step === "add") await button(fingerprint, copy.fingerprint.confirm).click();
     await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), message);
     assert.equal(await dialog.locator("input:enabled").count(), 5);
     assert.equal(await page.evaluate(() => document.activeElement?.id), "computer-address");
@@ -284,10 +282,15 @@ try {
 
   // A2 and A10.
   fake.computers = computerFixtures.map((computer) => ({ ...computer }));
+  fake.mainModel = "chatgpt";
   await page.reload();
   await openSettings(page);
   const [connected, unreachable, logout] = computerFixtures;
   await assertVisible(row(page, connected!.name), copy.status.connected);
+  await button(section(page), copy.add).click();
+  await assertVisible(dialog.getByRole("combobox").first(), copy.model.options.chatgpt);
+  await button(dialog, common.cancel).click();
+  fake.mainModel = "key";
   await assertVisible(row(page, unreachable!.name), copy.status.disconnected);
   await assertVisible(row(page, logout!.name), copy.status.stopsOnLogout);
   await row(page, logout!.name).hover();
@@ -324,7 +327,7 @@ try {
   await verifyLayouts(page);
   assert.equal(server.stubModelCalls.length, 0);
   console.log(JSON.stringify({
-    ok: true, checks: ["empty", "required", "home-folder", "fingerprint", "preparing", "later", "chatgpt", "send-key", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
+    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "model-settings", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
   }));
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;

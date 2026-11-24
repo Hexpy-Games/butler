@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { apiErrorCode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { SavedCredentialView } from "@/app/types";
@@ -8,47 +9,53 @@ import {
 } from "@/butler-ds";
 import { ChatGptSignInCard } from "@/components/chatgpt/ChatGptSignInCard";
 import { useSignIn } from "@/components/first-run/useSignIn";
-import { computerSignInTransport, sendComputerCredential, type Computer } from "./computersApi";
-import { ProviderMark } from "./ProviderMark";
-import { SettingsSelect } from "./SettingsSelect";
+import { ComputerModelFields } from "./ComputerModelFields";
+import { computerSignInTransport, updateComputerModel, type Computer } from "./computersApi";
+import { useComputerModelChoice } from "./hooks/useComputerModelChoice";
 
 export function ComputerAiDialog({ computer, savedKeys, onClose }: {
   computer: Computer | null;
   savedKeys: SavedCredentialView[];
-  onClose(result: "connected" | "later"): void;
+  onClose(): void;
 }) {
-  const copy = appCopy.computers.ai;
-  const [key, setKey] = useState("");
-  const [sending, setSending] = useState(false);
+  const copy = appCopy.computers.model;
+  const model = useComputerModelChoice(computer?.model_source ?? "none");
+  const [saving, setSaving] = useState(false);
   const transport = useMemo(() => computerSignInTransport(computer?.id ?? ""), [computer?.id]);
   const signIn = useSignIn({ onSignedIn: connected, transport });
   const waiting = signIn.phase === "starting" || signIn.phase === "waiting";
 
   function connected() {
     notifyStatus(copy.connected, { id: "computers", tone: "ok" });
-    onClose("connected");
+    onClose();
   }
 
-  function later() {
+  function close() {
     signIn.leave();
-    onClose("later");
+    onClose();
   }
 
-  async function send() {
-    if (!computer || !key || sending) return;
-    setSending(true);
+  async function save() {
+    if (!computer || !model.ready || saving) return;
+    setSaving(true);
     try {
-      await sendComputerCredential(computer.id, key);
-      connected();
+      const source = model.source;
+      const result = await updateComputerModel(computer.id, source);
+      if ((source === "follow" || typeof source === "object") && !result.ai_connected) {
+        notifyStatus(copy.syncFailed, { id: "computers", tone: "error" });
+      } else {
+        notifyStatus(copy.saved, { id: "computers", tone: "ok" });
+      }
     } catch (error) {
-      notifyError(error, copy.sendFailed, { id: "computers" });
-    } finally {
-      setSending(false);
+      const code = apiErrorCode(error);
+      notifyError(error, ["credential_not_found", "computer_not_found", "not_found", "invalid_json"].includes(code ?? "")
+        ? copy.saveFailed : copy.syncFailed, { id: "computers" });
     }
+    onClose();
   }
 
   return (
-    <Dialog open={computer !== null} onOpenChange={(open) => { if (!open) later(); }}>
+    <Dialog open={computer !== null} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent closeLabel={appCopy.common.close} data-test-class="computer-ai-dialog">
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
@@ -56,14 +63,9 @@ export function ComputerAiDialog({ computer, savedKeys, onClose }: {
         </DialogHeader>
         <SettingsFieldScopeProvider>
           <SettingsFieldGroup>
-            <SettingsField label={copy.chatgpt} controlWidth="full" control={<ChatGptSignInCard signIn={signIn} account={null} />} />
-            {!waiting && (
-              <SettingsSelect controlWidth="full" label={copy.sendKey} description={copy.sendKeyHint}
-                placeholder={copy.chooseKey} disabledReason={savedKeys.length ? undefined : copy.noSavedKeys}
-                value={key} onChange={setKey} options={savedKeys.map((key) => ({
-                  value: key.id, label: key.label, icon: <ProviderMark providerId={key.provider_id} besideProviderName />,
-                }))}
-              />
+            {!waiting && <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={saving ? appCopy.settings.security.working : undefined} />}
+            {model.choice === "chatgpt" && (
+              <SettingsField label={copy.signIn} controlWidth="full" control={<ChatGptSignInCard signIn={signIn} account={null} />} />
             )}
           </SettingsFieldGroup>
         </SettingsFieldScopeProvider>
@@ -72,9 +74,9 @@ export function ComputerAiDialog({ computer, savedKeys, onClose }: {
             {waiting ? (
               <Button type="button" variant="outline" onClick={() => void signIn.cancel()}>{appCopy.common.cancel}</Button>
             ) : <>
-              <Button type="button" variant="outline" onClick={later}>{copy.later}</Button>
-              <Tooltip label={sending ? appCopy.settings.security.working : !key ? copy.chooseKeyFirst : undefined}>
-                <Button type="button" disabled={!key || sending} onClick={() => void send()}>{copy.send}</Button>
+              <Button type="button" variant="outline" onClick={close}>{appCopy.common.cancel}</Button>
+              <Tooltip label={saving ? appCopy.settings.security.working : !model.ready ? copy.chooseKeyFirst : undefined}>
+                <Button type="button" disabled={!model.ready || saving} onClick={() => void save()}>{copy.save}</Button>
               </Tooltip>
             </>}
           </ButtonContainer>

@@ -239,7 +239,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/computers/{id}/oauth/start", Handler::Computers),
     ("/computers/{id}/oauth/{flow_id}", Handler::Computers),
     ("/computers/{id}/oauth/{flow_id}/cancel", Handler::Computers),
-    ("/computers/{id}/credentials", Handler::Computers),
     ("/computers/{id}/connection", Handler::Computers),
     ("/computers/{id}/reconnect", Handler::Computers),
     ("/mcp-capabilities", Handler::Mcp),

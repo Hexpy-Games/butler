@@ -1,6 +1,6 @@
 //! Local-admin HTTP boundary for the SSH computer registry.
 use super::*;
-use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput, SendCredential};
+use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput, ModelInput};
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -16,7 +16,12 @@ pub(super) async fn route(
                 .iter()
                 .map(Computer::wire)
                 .collect::<Result<Vec<_>, _>>()?;
-            (StatusCode::OK, serde_json::json!({"computers": computers}))
+            let setup = state.application.setup()?;
+            let main_model = setup.computer_model(None).await?.kind();
+            (
+                StatusCode::OK,
+                serde_json::json!({"computers": computers, "main_model": main_model}),
+            )
         }
         (Method::POST, "/computers/host-key") => {
             let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
@@ -52,8 +57,8 @@ pub(super) async fn route(
             )
             .await?,
         ),
-        (Method::POST, p) if p.starts_with("/computers/") && p.ends_with("/credentials") => {
-            send_credential(&state, request, root, p).await?
+        (Method::PATCH, p) if p.starts_with("/computers/") => {
+            update_model(&state, request, root, p).await?
         }
         (method, p)
             if p.starts_with("/computers/")
@@ -134,7 +139,7 @@ async fn connection(
     ))
 }
 
-async fn send_credential(
+async fn update_model(
     state: &HttpState,
     request: Request<Body>,
     root: &std::path::Path,
@@ -143,21 +148,21 @@ async fn send_credential(
     let bytes = read_body_with_limit(request.into_body(), 64 * 1024)
         .await
         .map_err(|_| HttpError::invalid_json())?;
-    let input: SendCredential =
+    let input: ModelInput =
         serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let setup = state.application.setup()?;
-    let key = setup.saved_provider_key(input.credential_id).await?;
+    let computer = remote_computers::update_model(
+        &setup,
+        root,
+        path,
+        &state.agent_version,
+        input,
+        state.shutdown.clone(),
+    )
+    .await?;
     Ok((
         StatusCode::OK,
-        remote_computers::send_credential(
-            &setup,
-            root,
-            path,
-            &state.agent_version,
-            key,
-            state.shutdown.clone(),
-        )
-        .await?,
+        serde_json::json!({"computer": computer.wire()?}),
     ))
 }
 

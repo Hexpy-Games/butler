@@ -74,6 +74,7 @@ mod composer_decoration;
 mod composer_fold;
 mod computer_account;
 mod computer_ai_connection;
+mod computer_model_sync;
 mod computers;
 mod connectors;
 mod context_telemetry;

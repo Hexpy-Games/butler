@@ -107,7 +107,7 @@ test("the security routes carry the admin header next to the bearer token", asyn
     [{ route: "deleteComputer", body: { id: COMPUTER_ID } }, "DELETE", `/computers/${COMPUTER_ID}`],
     [{ route: "startComputer", body: { id: COMPUTER_ID } }, "POST", `/computers/${COMPUTER_ID}/start`],
     [{ route: "getComputerConnection", body: { id: COMPUTER_ID } }, "GET", `/computers/${COMPUTER_ID}/connection`],
-    [{ route: "sendComputerCredential", body: { id: COMPUTER_ID, payload: {} } }, "POST", `/computers/${COMPUTER_ID}/credentials`],
+    [{ route: "updateComputerModel", body: { id: COMPUTER_ID, payload: {} } }, "PATCH", `/computers/${COMPUTER_ID}`],
     [{ route: "startComputerOauth", body: { id: COMPUTER_ID, payload: {} } }, "POST", `/computers/${COMPUTER_ID}/oauth/start`],
     [{ route: "getComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "GET", `/computers/${COMPUTER_ID}/oauth/flow_1`],
     [{ route: "cancelComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "POST", `/computers/${COMPUTER_ID}/oauth/flow_1/cancel`],

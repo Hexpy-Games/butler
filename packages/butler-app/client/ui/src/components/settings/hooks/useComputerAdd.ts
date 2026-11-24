@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
-import { confirmAction } from "@/app/confirmation.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { addFailure, hostTarget, validateComputerForm, type ComputerFieldError, type ComputerForm } from "../computerAddErrors";
+import type { ComputerModelSource } from "../computerTypes";
 import { addComputer, checkHostKey, startComputer, type Computer } from "../computersApi";
 
-type AddStep = "form" | "checking" | "confirming" | "adding" | "starting";
+type AddStep = "form" | "checking" | "adding" | "starting";
 
 export function useComputerAdd(onAdded: (computer: Computer, failure?: string) => void) {
   const [step, setStep] = useState<AddStep>("form");
@@ -19,7 +19,7 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     setError(null);
   }
 
-  async function submit(form: ComputerForm) {
+  async function submit(form: ComputerForm, modelSource: ComputerModelSource) {
     if (running.current) return;
     const validation = validateComputerForm(form);
     setError(validation);
@@ -30,21 +30,10 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     const target = hostTarget(form);
     try {
       setStep("checking");
-      const hostKey = await checkHostKey(target);
-      let fingerprint: string | undefined;
-      if (!hostKey.trusted) {
-        setStep("confirming");
-        const confirmed = await confirmAction(copy.fingerprint.body, {
-          title: copy.fingerprint.title,
-          confirmLabel: copy.fingerprint.confirm,
-          details: [{ label: hostKey.key_type, text: hostKey.fingerprint }],
-        });
-        if (!confirmed) return;
-        fingerprint = hostKey.fingerprint;
-      }
+      await checkHostKey(target);
       setStep("adding");
       const computer = await addComputer({
-        ...target, name: form.name.trim(), folder: form.folder.trim(), host_fingerprint: fingerprint,
+        ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource,
       });
       setStep("starting");
       let failure: string | undefined;

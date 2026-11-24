@@ -26,8 +26,8 @@ use butler_gateway::gateway::{
     SavedProviderKey, SetupReadinessView, butler_account_disabled,
 };
 use butler_models::models::{
-    CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
-    detect_local_servers,
+    ComputerModel, CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe,
+    ModelConfiguration, detect_local_servers,
 };
 use butler_runtime::operations::ServiceReadiness;
 
@@ -196,6 +196,19 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move {
             let root = this.validated_root()?;
             credentials::saved_key(&this.configuration, &name, &root).await
+        })
+    }
+
+    fn computer_model(&self, credential_id: Option<String>) -> ApplicationFuture<ComputerModel> {
+        let this = self.0.clone();
+        let configuration = this.configuration.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let root = this.validated_root()?;
+                credentials::computer_model(&configuration, credential_id.as_deref(), &root)
+            })
+            .await
+            .map_err(|_| GatewayApplicationError::internal())?
         })
     }
 
