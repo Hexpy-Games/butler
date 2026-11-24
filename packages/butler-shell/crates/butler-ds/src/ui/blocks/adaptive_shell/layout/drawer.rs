@@ -163,6 +163,7 @@ fn drawer_panel(
         .bottom_0()
         .w(px(width))
         .overflow_hidden()
+        .occlude()
         .bg(ds.color(Color::AdaptivePanelBg))
         .child(content);
     let el = if right { el.right_0() } else { el.left_0() };

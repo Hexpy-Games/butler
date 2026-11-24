@@ -42,6 +42,10 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def cache_root():
+    return Path(os.environ.get("BUTLER_LICENSE_CACHE") or tempfile.gettempdir())
+
+
 def cache_text(destination, text):
     # Readers must only observe complete entries, including concurrent fetches
     # of the same URL. Use a unique sibling so replacement stays atomic.
@@ -77,7 +81,7 @@ def fetch(url):
 
 
 def fetch_text(url):
-    cache = Path(tempfile.gettempdir()) / "butler-license-evidence"
+    cache = cache_root() / "butler-license-evidence"
     cache.mkdir(parents=True, exist_ok=True)
     saved = cache / digest(url.encode())
     if saved.exists():
@@ -87,8 +91,6 @@ def fetch_text(url):
         saved.unlink(missing_ok=True)
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
-            if response.status != 200:
-                raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {response.status}")
             text = response.read().decode("utf-8")
             return cache_text(saved, text) or None
     except urllib.error.HTTPError as error:
@@ -386,8 +388,8 @@ def runtime_components():
     # Credits vary by platform. Include all three official release runtime lists.
     for target in ("linux-x64", "linux-arm64", "darwin-arm64"):
         archive = f"electron-v{version}-{target}.zip"
-        cache = Path(os.environ.get("BUTLER_LICENSE_CACHE", "/tmp/butler-license-runtime"))
-        cache.mkdir(exist_ok=True)
+        cache = cache_root() / "butler-license-runtime"
+        cache.mkdir(parents=True, exist_ok=True)
         saved = cache / archive
         if not saved.exists():
             url = f"https://github.com/electron/electron/releases/download/v{version}/{archive}"

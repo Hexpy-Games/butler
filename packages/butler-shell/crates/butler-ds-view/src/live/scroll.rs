@@ -47,6 +47,7 @@ impl Live {
             delta: ScrollDelta::Pixels(point(px(-dx), px(-dy))),
             modifiers: Modifiers::default(),
             touch_phase: TouchPhase::Moved,
+            momentum: false,
         }))?;
         self.wait(100);
         Ok(())
@@ -90,6 +91,7 @@ impl Live {
             delta: ScrollDelta::Pixels(point(px(0.), px(-delta))),
             modifiers: Modifiers::default(),
             touch_phase: TouchPhase::Moved,
+            momentum: false,
         }))?;
         self.settle();
         // The pointer ends on the part of the story that is on screen, so `shot` finds it.

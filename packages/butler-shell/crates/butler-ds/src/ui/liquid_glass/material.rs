@@ -246,7 +246,8 @@ fn shadow(dark: bool, s: f32) -> Option<BoxShadow> {
     Some(BoxShadow {
         color: rgba(0, 0, 0, alpha.min(0.9)).into(),
         offset: point(px(0.), px(lerp(3., 8.5, grow))),
-        blur_radius: px(lerp(6., 16., grow)),
+        // Fitted as a Gaussian sigma; a BoxShadow blur is the CSS radius, 2 sigma.
+        blur_radius: px(2. * lerp(6., 16., grow)),
         spread_radius: px(0.),
         inset: false,
     })

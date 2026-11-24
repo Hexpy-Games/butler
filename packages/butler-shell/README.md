@@ -83,7 +83,7 @@ libcef.dll is linked at load time, so Windows must also find it beside the execu
 ```powershell
 $env:CEF_PATH = "$PWD\target\cef"
 py -3 packages/butler-agent/rust/crates/butler-platform/cef/fetch.py --dest $env:CEF_PATH
-cargo build --manifest-path packages/butler-agent/rust/Cargo.toml -p butler-cef --features cef -j 6
+cargo build --manifest-path packages/butler-agent/rust/Cargo.toml -p butler-cef -p butler-cef-bootstrap --features butler-cef/cef,butler-cef-bootstrap/cef -j 6
 cargo build --manifest-path packages/butler-shell/Cargo.toml -p butler-shell --features cef --bin butler-shell -j 6
 py -3 packages/butler-agent/rust/crates/butler-platform/cef/stage.py --cef $env:CEF_PATH --target packages/butler-agent/rust/target/debug --out target/cef-shell
 Copy-Item packages/butler-shell/target/debug/butler-shell.exe target/cef-shell/

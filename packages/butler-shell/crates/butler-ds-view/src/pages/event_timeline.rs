@@ -7,7 +7,8 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Space, Stack};
-use butler_ds::ui::typo::{Role, Tone, Typo, Weight, Wrap};
+use butler_ds::ui::section::Section;
+use butler_ds::ui::typo::{Tone, Typo, Weight, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div};
 
 use super::Story;
@@ -144,9 +145,8 @@ fn history(lang: Lang, cx: &mut App) -> AnyElement {
             stack,
         ));
     }
-    Stack::new()
-        .gap(Space::Md)
-        .child(Typo::new(Role::PanelSectionTitle, c.date).tone(Tone::Primary))
+    Section::new("event-history")
+        .title(c.date)
         .child(timeline)
         .into_any_element()
 }

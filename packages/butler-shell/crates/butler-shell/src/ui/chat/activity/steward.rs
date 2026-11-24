@@ -111,13 +111,19 @@ fn progress_card(
             cx,
         )
     {
-        disclosure = disclosure.child(work);
+        disclosure = disclosure.child(anchor(
+            div().child(work),
+            &format!("work-details-{}", child.session_id),
+        ));
     }
     let header = header(child, t, window, cx);
     SurfacePanel::new()
         .elevation(Elevation::None)
         .radius(PanelRadius::Lg)
-        .child(Stack::new().gap(Space::Sm).child(header).child(disclosure))
+        .child(Stack::new().gap(Space::Sm).child(header).child(anchor(
+            div().child(disclosure),
+            &format!("steward-disclosure-{}", child.session_id),
+        )))
         .child(recorder)
         .into_any_element()
 }
@@ -228,6 +234,7 @@ fn details(
         let body = timeline(rows, Some(turn_id), None, live, t, window, cx)?;
         Some(
             ScrollArea::new(SharedString::from(format!("plan-details:{session_id}")))
+                .probe(format!("work-details-edge-{session_id}"))
                 .max_height(MaxHeight::Sm)
                 .follow_end(live)
                 .child(DsBox::new().padding_x(Space::Md).child(body))
