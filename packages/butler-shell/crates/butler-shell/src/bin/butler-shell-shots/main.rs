@@ -326,6 +326,8 @@ impl Options {
 }
 
 fn main() -> ExitCode {
+    // gpui's and wgpu's `log` records go to the App log (lifecycle/logs/bridge.rs).
+    lifecycle::logs::install_log_bridge();
     // CEF runs in this process.
     #[cfg(feature = "cef")]
     butler_cef_host::shorten_temp_path();

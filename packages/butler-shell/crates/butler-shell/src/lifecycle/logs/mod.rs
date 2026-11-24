@@ -147,12 +147,13 @@ pub(crate) fn install_crash_hook(data: &Path) {
             .spawn(move || run(root, &rx))
             .is_ok()
         {
-            if let Ok(mut pending) = PENDING.lock() {
-                for row in pending.drain(..) {
-                    let _ = tx.send(Msg::Record(row));
-                }
-                let _ = WRITER.set(tx);
+            let mut pending = PENDING
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for row in pending.drain(..) {
+                let _ = tx.send(Msg::Record(row));
             }
+            let _ = WRITER.set(tx);
             let _ = DATA.set(data.to_path_buf());
             app_log(
                 "INFO",
@@ -190,12 +191,13 @@ pub(crate) fn app_log(level: &str, category: &str, event: &str, attrs: Value) {
         return;
     }
     // Before the writer starts (gpui's own startup), rows wait here, bounded.
-    if let Ok(mut pending) = PENDING.lock() {
-        if let Some(tx) = WRITER.get() {
-            let _ = tx.send(Msg::Record(row));
-        } else if pending.len() < PENDING_MAX {
-            pending.push(row);
-        }
+    let mut pending = PENDING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(tx) = WRITER.get() {
+        let _ = tx.send(Msg::Record(row));
+    } else if pending.len() < PENDING_MAX {
+        pending.push(row);
     }
 }
 
