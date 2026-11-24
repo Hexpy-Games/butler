@@ -9,6 +9,35 @@ use std::collections::HashSet;
 const PAGE: usize = 500;
 
 impl ConversationSourceReader {
+    pub fn session_transfer(
+        &self,
+        gateway: &str,
+        external_session_id: &str,
+    ) -> ConversationResult<Vec<TransferTurn>> {
+        let db = self.connection()?;
+        let tx = db
+            .unchecked_transaction()
+            .map_err(ConversationError::sqlite)?;
+        let mut query = tx
+            .prepare(
+                "SELECT id FROM conversation_turns WHERE session_id=(\
+             SELECT conversation_session_id FROM conversation_bindings \
+             WHERE gateway=?1 AND external_session_id=?2) ORDER BY started_at",
+            )
+            .map_err(ConversationError::sqlite)?;
+        let mut rows = query
+            .query(params![gateway, external_session_id])
+            .map_err(ConversationError::sqlite)?;
+        let mut turns = Vec::new();
+        while let Some(row) = rows.next().map_err(ConversationError::sqlite)? {
+            let id: String = row.get(0).map_err(ConversationError::sqlite)?;
+            if let Some(turn) = read_turn(&tx, &id)? {
+                turns.push(turn);
+            }
+        }
+        Ok(turns)
+    }
+
     /// Export finished turns through the captured head, releasing the snapshot before each send.
     pub fn export_transfer(
         &self,

@@ -5,6 +5,7 @@ export const COMPUTERS_COPY = {
     location: "실행 위치",
     thisComputer: "이 컴퓨터",
     removedComputer: "삭제한 컴퓨터",
+    removedComputerSend: "삭제한 컴퓨터의 대화",
     unreachable: (name: string) => `${name}에 연결할 수 없습니다`,
     mainNotConnected: "메인 기기에 연결되지 않음",
     pendingInstruction: {
@@ -100,6 +101,7 @@ export const COMPUTERS_COPY = {
       unreachableBody: "아직 가져오지 못한 대화는 사라질 수 있습니다.",
       forceConfirm: "그래도 삭제",
       notSynced: "대화 기록을 가져오지 못해 삭제하지 않았습니다",
+      busy: "대화가 진행 중이라 삭제하지 않았습니다",
       removeFailed: "컴퓨터를 삭제하지 못했습니다",
       remoteNotCleaned: "그 컴퓨터의 버틀러는 지우지 못했습니다",
       forgetFailed: "기억을 지우지 못했습니다",
@@ -111,6 +113,7 @@ export const COMPUTERS_COPY = {
     location: "Run on",
     thisComputer: "This computer",
     removedComputer: "a removed computer",
+    removedComputerSend: "Removed computer",
     unreachable: (name: string) => `Can't reach ${name}`,
     mainNotConnected: "Not connected to the main device",
     pendingInstruction: {
@@ -206,6 +209,7 @@ export const COMPUTERS_COPY = {
       unreachableBody: "Conversations not brought back yet may be lost.",
       forceConfirm: "Remove anyway",
       notSynced: "Couldn't bring back its conversations, so it wasn't removed",
+      busy: "A conversation is running, so it wasn't removed",
       removeFailed: "Couldn't remove the computer",
       remoteNotCleaned: "Couldn't remove Butler from that computer",
       forgetFailed: "Couldn't delete the memories",

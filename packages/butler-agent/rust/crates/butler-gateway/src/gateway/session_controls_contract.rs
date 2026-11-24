@@ -7,6 +7,14 @@ pub trait GatewaySessionControls: Send + Sync {
         Box::pin(async { Ok(None) })
     }
 
+    fn project_transferred(
+        &self,
+        _chat_id: String,
+        _turns: Vec<butler_turn::conversation::TransferTurn>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+
     /// Main-only canonical workspace and current output attribution.
     fn browser_download_context(
         &self,

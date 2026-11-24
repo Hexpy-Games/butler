@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Locator, Page } from "playwright";
+import type { NavigationView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { computerAuthUrl, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
@@ -359,6 +360,88 @@ try {
   console.log(JSON.stringify({
     ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "delete-unreachable", "forget-memories", "layouts"], widths,
   }));
+
+  const removedScreens = "/tmp/removed-computer-screens";
+  mkdirSync(removedScreens, { recursive: true });
+  const { session } = await server.api<{ session: { id: string } }>("/sessions", {
+    method: "POST", body: JSON.stringify({ kind: "chat", title: "지난 대화" }),
+  });
+  const text = "이 대화를 다시 읽을 수 있나요?";
+  await server.api("/messages", {
+    method: "POST", body: JSON.stringify({ chat_id: session.id, text, client_message_id: crypto.randomUUID() }),
+  });
+  const deadline = Date.now() + 30_000;
+  let answer = "";
+  while (!answer) {
+    const view = await server.api<{ messages: { role: string; status: string; text: string }[] }>(`/session-view?session_id=${session.id}`);
+    answer = view.messages.find(message => message.role === "assistant" && message.status === "delivered")?.text ?? "";
+    assert(Date.now() < deadline, "Missing fixture answer");
+    if (!answer) await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const computer = computerFixtures[0]!;
+  for (const theme of ["light", "dark"]) {
+    await server.api("/settings", { method: "PATCH", headers: adminHeaders, body: JSON.stringify({ appearance_theme: theme }) });
+    for (const [width, height] of [[1280, 900], [375, 812]] as const) {
+      fake.computers = [{ ...computer }];
+      let publish = () => {};
+      const deleted = new Promise<void>(resolve => { publish = resolve; });
+      const removedPage = await browser.newPage({ viewport: { width, height } });
+      try {
+        await configurePage(removedPage, server, adminHeaders);
+        await removedPage.route("**/navigation", async route => {
+          const data = await server.api<NavigationView>("/navigation");
+          const chat = data.chats?.find(chat => chat.id === session.id);
+          assert(chat);
+          chat.computer_id = computer.id;
+          chat.computer_name = fake.computers.find(entry => entry.id === computer.id)?.name;
+          await route.fulfill({ json: { protocol_version: "butler.app.v1", data } });
+        });
+        await removedPage.route("**/events/live**", async route => {
+          await deleted;
+          await route.fulfill({ headers: { "content-type": "text/event-stream" }, body: `data: ${JSON.stringify({
+            id: 900_000, type: "computers.changed", created_at: new Date().toISOString(), payload: { computer_id: computer.id },
+          })}\n\n` });
+          await removedPage.unroute("**/events/live**");
+        }, { times: 1 });
+        await removedPage.goto(server.url);
+        const showSidebar = button(removedPage, appCopy.titlebar.showLeftPanel);
+        if (width === 375) await showSidebar.click();
+        const chatRow = removedPage.locator('[data-test-class="tree-row"]').filter({ hasText: "지난 대화" }).first();
+        await assertVisible(chatRow, computer.name);
+        await removedPage.screenshot({ path: join(removedScreens, `before-list-${theme}-${width}.png`) });
+        await chatRow.click();
+        await assertVisible(removedPage, text);
+        await assertVisible(removedPage, answer);
+        await removedPage.screenshot({ path: join(removedScreens, `before-conversation-${theme}-${width}.png`) });
+        if (await showSidebar.isVisible()) await showSidebar.click();
+        await openSettings(removedPage);
+        const settingsRow = row(removedPage, computer.name);
+        await button(settingsRow, copy.removeComputer(computer.name)).click();
+        const dialog = removedPage.locator('[data-test-class="computer-delete-dialog"]');
+        await button(dialog, copy.removeDialog.confirm).click();
+        await settingsRow.waitFor({ state: "hidden" });
+        publish();
+        const back = button(removedPage, appCopy.settings.back);
+        await back.click();
+        if (width === 375) await back.click();
+        if (await showSidebar.isVisible()) await showSidebar.click();
+        await assertVisible(chatRow, copy.removedComputer);
+        await removedPage.screenshot({ path: join(removedScreens, `R1-list-after-delete-${theme}-${width}.png`) });
+        await chatRow.click();
+        await assertVisible(removedPage, text);
+        await assertVisible(removedPage, answer);
+        const send = button(removedPage, appCopy.composer.send);
+        assert(await send.isDisabled());
+        assert.equal(await removedPage.locator('[data-test-class="composer-toolbar-spacer"]').count(), 0);
+        await send.hover();
+        await assertVisible(removedPage.getByRole("tooltip"), copy.removedComputerSend);
+        await removedPage.screenshot({ path: join(removedScreens, `R2-removed-conversation-${theme}-${width}.png`) });
+      } finally {
+        publish();
+        await removedPage.close();
+      }
+    }
+  }
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
   if (screenshots !== undefined) {

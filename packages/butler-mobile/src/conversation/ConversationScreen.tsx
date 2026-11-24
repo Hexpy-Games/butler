@@ -28,8 +28,8 @@ import { useElapsed } from "./useElapsed";
 import { ActivityTimeline, LiveTurnWork } from "./ActivityHistory";
 import { projectActivities } from "./activityProjection";
 
-export function ConversationScreen({ id, title, project, group, initialText = "" }: {
-  id?: string; title: string; project?: string; group?: string; initialText?: string;
+export function ConversationScreen({ id, title, project, group, initialText = "", computerRemoved }: {
+  id?: string; title: string; project?: string; group?: string; initialText?: string; computerRemoved?: boolean;
 }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());

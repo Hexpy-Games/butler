@@ -1,4 +1,4 @@
-//! One rule for conversations that run on a registered computer: forward, refuse, or serve here.
+//! One rule for computer conversations: forward, refuse, or serve here.
 use super::{
     Body, HttpError, HttpState, MAX_REQUEST_BODY_SIZE, Method, Request, Response, StatusCode, Uri,
     content, json, query, read_body_with_limit, router::Handler,
@@ -45,7 +45,7 @@ pub(super) async fn route(
     let Some(id) = id.or_else(|| body_session(handler, &parts.method, &bytes)) else {
         return Ok(Routed::Here(Request::from_parts(parts, Body::from(bytes))));
     };
-    let Some(computer) = state.application.session_computer(id).await? else {
+    let Some(computer) = state.application.session_computer(id.clone()).await? else {
         return Ok(Routed::Here(Request::from_parts(parts, Body::from(bytes))));
     };
     if refused(handler) {
@@ -55,16 +55,47 @@ pub(super) async fn route(
             "This conversation runs on another computer.",
         ));
     }
+    let root = state.output_data.as_deref().ok_or(HttpError::Internal)?;
+    if !remote_computers::list(root)
+        .await?
+        .iter()
+        .any(|entry| entry.id() == computer)
+    {
+        if parts.method != Method::GET {
+            return Err(HttpError::public(
+                409,
+                "computer_removed",
+                "This computer was removed.",
+            ));
+        }
+        let turns = state
+            .application
+            .setup()?
+            .computer_session_turns(computer, id.clone())
+            .await?;
+        state.application.project_transferred(id, turns).await?;
+        return Ok(Routed::Here(Request::from_parts(parts, Body::from(bytes))));
+    }
     if !matches!(
         parts.method,
         Method::GET | Method::POST | Method::PATCH | Method::DELETE
     ) {
         return Ok(Routed::Here(Request::from_parts(parts, Body::from(bytes))));
     }
+    forward(state, handler, parts, bytes, &computer).await
+}
+
+async fn forward(
+    state: &Arc<HttpState>,
+    handler: Handler,
+    parts: Parts,
+    bytes: Bytes,
+    computer: &str,
+) -> Result<Routed, HttpError> {
     if bytes.len() > 1024 * 1024 {
         return Err(HttpError::PayloadTooLarge);
     }
-    if let Some(response) = remote_view(state, handler, &parts, &computer).await? {
+    if let Some(response) = remote_view(state, handler, &parts, computer).await? {
         return Ok(Routed::Answered(response));
     }
     let path = parts
@@ -73,12 +104,12 @@ pub(super) async fn route(
         .map_or(parts.uri.path(), |p| p.as_str());
     let remote = link(state)?;
     if parts.method == Method::GET && streamed(handler) {
-        let stream = remote_computers::open_stream(&remote, &computer, path).await?;
+        let stream = remote_computers::open_stream(&remote, computer, path).await?;
         return Ok(Routed::Answered(streamed_response(stream)?));
     }
     let reply = remote_computers::forward(
         &remote,
-        &computer,
+        computer,
         parts.method.as_str(),
         path,
         bytes.to_vec(),
@@ -89,7 +120,7 @@ pub(super) async fn route(
     {
         state
             .remote_live
-            .ensure(remote, state.application.clone(), &computer);
+            .ensure(remote, state.application.clone(), computer);
     }
     Ok(Routed::Answered(forwarded_response(reply)?))
 }

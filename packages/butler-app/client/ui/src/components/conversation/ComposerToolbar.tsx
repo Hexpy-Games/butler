@@ -33,24 +33,31 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
   const reconnecting = useButlerStore((store) => store.liveConnectionLost);
   const agentNotice = useButlerStore((store) => store.agentNotice);
   const computerId = useButlerStore((store) => sessionFromNavigation(store.navigation, store.activeChatId)?.computer_id);
+  const computerName = useButlerStore((store) => sessionFromNavigation(store.navigation, store.activeChatId)?.computer_name);
+  const computerRemoved = computerId && !computerName;
   const computerUnreachable = useComputerConnections((store) => computerId && store.states[computerId] === "unreachable");
 
   return (
     <ComposerCardToolbar>
       <ComposerAttachmentMenu />
       <ComposerCompactPreview />
-      <ComposerCardExpandedControls>
-        <AccessModeMenu />
-        <ComposerWorkspaceSelect />
-        <ComposerLocationSelect />
-        <ComposerPlanModeBadge />
-        <ComposerCardToolbarSpacer />
-        <ComposerContextControl />
-        <ModelMenu />
-      </ComposerCardExpandedControls>
+      {!computerRemoved && (
+        <ComposerCardExpandedControls>
+          <AccessModeMenu />
+          <ComposerWorkspaceSelect />
+          <ComposerLocationSelect />
+          <ComposerPlanModeBadge />
+          <ComposerCardToolbarSpacer />
+          <ComposerContextControl />
+          <ModelMenu />
+        </ComposerCardExpandedControls>
+      )}
       {agentNotice ? (
         <ComposerSendButton busy={agentNotice === "restarting"} disabled
           aria-label={agentNoticeLabel(agentNotice)} title={agentNoticeLabel(agentNotice)} />
+      ) : computerRemoved ? (
+        <ComposerSendButton disabled aria-label={appCopy.composer.send}
+          disabledReason={appCopy.computers.removedComputerSend} />
       ) : reconnecting ? (
         <ComposerSendButton busy aria-label={appCopy.feedback.reconnectingShort}
           title={appCopy.feedback.reconnectingShort} />

@@ -17,9 +17,9 @@ import { documentContent, documentKindLabel } from "./documents";
 
 export type ChatComposerHandle = { send(text?: string): Promise<void> };
 
-export function ChatComposer({ ref, id, project, group, view, hasDecision, text, setText, onPending,
+export function ChatComposer({ ref, id, project, group, view, hasDecision, computerRemoved, text, setText, onPending,
   refreshQueue, onHeightChange, onSend, backdrop, accessory }: {
-  ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
+  ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean; computerRemoved?: boolean;
   text: string; setText(text: string): void; onPending(text: string | null): void;
   refreshQueue(): Promise<void>; onHeightChange(height: number, keyboard: number): void; onSend(): void;
   backdrop?: { color: string; visible: boolean }; accessory?: React.ReactNode;
@@ -38,7 +38,7 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
   const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
   const hasReferences = attachments.items.some(item => item.status === "ready" && item.reference);
   const uploading = attachments.items.some(item => item.status === "uploading");
-  const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision;
+  const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision && !computerRemoved;
   const { busy, setBusy, send } = useMessageSend({ id, project, group, text, setText, ready, attachments,
     activeTurn: !!turn, canSend, onPending, onSend, refreshQueue, controls: model.controls });
   useImperativeHandle(ref, () => ({ send }));

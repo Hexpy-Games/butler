@@ -62,6 +62,30 @@ impl ComputerMemory {
     }
 }
 
+pub(super) async fn session_turns(
+    root: std::path::PathBuf,
+    computer_id: String,
+    chat_id: String,
+) -> Result<Vec<TransferTurn>, GatewayApplicationError> {
+    use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
+    tokio::task::spawn_blocking(move || {
+        let path = conversation_store_path(&root);
+        if !path
+            .try_exists()
+            .map_err(GatewayApplicationError::internal_from)?
+        {
+            return Ok(Vec::new());
+        }
+        ConversationSourceReader::open(&path)
+            .and_then(|reader| {
+                reader.session_transfer(&format!("computer:{computer_id}"), &chat_id)
+            })
+            .map_err(GatewayApplicationError::internal_from)
+    })
+    .await
+    .map_err(GatewayApplicationError::internal_from)?
+}
+
 #[derive(Deserialize)]
 struct ComputerRead {
     read_id: String,
