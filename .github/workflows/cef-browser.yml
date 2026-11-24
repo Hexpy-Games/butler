@@ -12,6 +12,7 @@ on:
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'packages/butler-agent/rust/crates/butler-platform/cef/**'
+      - 'packages/butler-agent/rust/crates/butler-platform/cef-bootstrap/**'
       - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless/**'
       - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless.rs'
       # Builds the headless backend's config (its root, the CEF host).
@@ -102,7 +103,7 @@ jobs:
 
       - name: Build and stage the CEF host
         run: |
-          cargo build --locked -p butler-cef --features cef --target ${{ matrix.target }}
+          cargo build --locked -p butler-cef -p butler-cef-bootstrap --features butler-cef/cef,butler-cef-bootstrap/cef --target ${{ matrix.target }}
           py=$(command -v python3 || command -v python)
           host=$("$py" crates/butler-platform/cef/stage.py --cef "$CEF_PATH" --target "$CARGO_TARGET_DIR/${{ matrix.target }}/debug" --out "$RUNNER_TEMP/cef-host" | tail -n1)
           echo "BUTLER_E2E_CEF_HOST=$host" >> "$GITHUB_ENV"

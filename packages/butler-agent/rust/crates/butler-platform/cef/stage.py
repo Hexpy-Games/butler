@@ -83,7 +83,7 @@ def main():
     if system == "Windows":
         executable = out / "butler_cef_host.exe"
         shutil.copy2(cef_dir / "bootstrapc.exe", executable)
-        shutil.copy2(args.target / "butler_cef_host.dll", out / "butler_cef_host.dll")
+        shutil.copy2(args.target / "butler_cef_bootstrap.dll", out / "butler_cef_host.dll")
     else:
         executable = out / "butler-cef-host"
         shutil.copy2(args.target / executable.name, executable)
