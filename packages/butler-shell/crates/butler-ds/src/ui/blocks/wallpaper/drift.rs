@@ -1,7 +1,9 @@
 //! The resting print crossfades cached keyframes; host changes retain the current mix.
 use crate::ui::cover::cover;
+use std::cell::Cell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
@@ -9,6 +11,7 @@ use gpui::{
     Styled as _, Window, canvas, div,
 };
 
+use super::live_print::KeptRects;
 use super::{WallpaperHost, live::LiveFrame, live_modules, live_print};
 
 // RISO_SEGMENT_MS
@@ -57,6 +60,7 @@ struct Drift {
     dur_ms: u32,
     host: DriftHost,
     top: bool,
+    kept: [Rc<Cell<KeptRects>>; 2],
     wake: Option<(u32, gpui::Task<()>)>,
 }
 
@@ -69,6 +73,7 @@ impl Drift {
             dur_ms: 0,
             host: DriftHost::Still,
             top: false,
+            kept: Default::default(),
             wake: None,
         }
     }
@@ -174,23 +179,37 @@ pub(super) fn layer(
         (key, top).hash(&mut hash);
         hash.finish()
     };
-    let print = |slot_key, flow| {
+    let print = |slot_key, flow, kept: Rc<Cell<KeptRects>>| {
         canvas(
             |_, _, _| (),
             move |bounds, (), window, _| {
-                live_print::paint(bounds, slot_key, params, frame, flow, module, window);
+                live_print::paint(
+                    bounds,
+                    slot_key,
+                    params,
+                    frame,
+                    flow,
+                    module,
+                    Some(&kept),
+                    window,
+                );
             },
         )
         .size_full()
     };
-    let layer = div()
-        .relative()
-        .size_full()
-        .child(print(slot_key(d.top), d.flow));
+    let layer = div().relative().size_full().child(print(
+        slot_key(d.top),
+        d.flow,
+        Rc::clone(&d.kept[usize::from(d.top)]),
+    ));
     if d.host == DriftHost::Still {
         return layer.into_any_element();
     }
-    let top = cover().child(print(slot_key(!d.top), d.flow + SEGMENT_FLOW));
+    let top = cover().child(print(
+        slot_key(!d.top),
+        d.flow + SEGMENT_FLOW,
+        Rc::clone(&d.kept[usize::from(!d.top)]),
+    ));
     let top = match d.host {
         DriftHost::Full | DriftHost::Slow => top.motion(LayerMotion {
             start_ms: d.t0_ms,

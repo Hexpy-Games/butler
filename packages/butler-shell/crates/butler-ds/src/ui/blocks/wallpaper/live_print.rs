@@ -1,4 +1,5 @@
 //! Riso density/print and the intro end frame. // DS: glPrint.ts, intro/introFrame.ts
+use std::cell::Cell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -174,8 +175,32 @@ struct Shared {
     col: [f32; 4],
 }
 
+/// The keep-out rects a drift slot was last generated with (engine.ts: a moved rect waits for the next keyframe).
+#[derive(Clone, Copy, Default)]
+pub(super) struct KeptRects {
+    base: u64,
+    rects: [Option<ContentRect>; 2],
+}
+
+impl KeptRects {
+    /// The rects to print with: the kept ones while only their position changed, else `now`.
+    pub(super) fn resolve(self, base: u64, now: [Option<ContentRect>; 2]) -> Self {
+        let same_presence = self.rects[0].is_some() == now[0].is_some()
+            && self.rects[1].is_some() == now[1].is_some();
+        if self.base == base && same_presence {
+            self
+        } else {
+            Self { base, rects: now }
+        }
+    }
+}
+
 /// The density pass at 1 texel per 4 CSS px (keep-outs scaled into it), then the print pass
 /// over it at device pixels. // DS: glScene.ts:63-80
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the print inputs, optional drift slot state and window context"
+)]
 pub(super) fn paint(
     bounds: Bounds<Pixels>,
     key: u64,
@@ -183,6 +208,7 @@ pub(super) fn paint(
     frame: LiveFrame,
     flow: f32,
     module: &super::live_modules::Module,
+    kept: Option<&Cell<KeptRects>>,
     window: &mut Window,
 ) {
     let css = [f32::from(bounds.size.width), f32::from(bounds.size.height)];
@@ -207,30 +233,40 @@ pub(super) fn paint(
             .column
             .map_or(REST.col, |[left, right, top]| [left, right, top, 1.]),
     };
-    let rect = buffer_rect(frame.content_rect, bounds, buffer);
     let (sx, sy) = (density[0] / buffer[0], density[1] / buffer[1]);
     let scaled = |r: [f32; 4]| [r[0] * sx, r[1] * sy, r[2] * sx, r[3] * sy];
-    let rect2 = buffer_rect(frame.content_rect2, bounds, buffer);
     let density_ratio = density[0] / css[0];
-    let passes = [
-        pass(
-            module.shaders[0],
-            density,
-            PRINT_NOISE,
-            uniforms(
+    let build_passes = |[rect, rect2]: [Option<ContentRect>; 2]| {
+        let rect = buffer_rect(rect, bounds, buffer);
+        let rect2 = buffer_rect(rect2, bounds, buffer);
+        [
+            pass(
+                module.shaders[0],
                 density,
-                density_ratio,
-                [scaled(rect), scaled(rect2)],
-                &shared,
+                PRINT_NOISE,
+                uniforms(
+                    density,
+                    density_ratio,
+                    [scaled(rect), scaled(rect2)],
+                    &shared,
+                ),
             ),
-        ),
-        pass(
-            module.shaders[1],
-            buffer,
-            PREVIOUS_PASS,
-            uniforms(buffer, pixel_ratio, [rect, rect2], &shared),
-        ),
-    ];
+            pass(
+                module.shaders[1],
+                buffer,
+                PREVIOUS_PASS,
+                uniforms(buffer, pixel_ratio, [rect, rect2], &shared),
+            ),
+        ]
+    };
+    let mut rects = [frame.content_rect, frame.content_rect2];
+    if let Some(kept) = kept {
+        let base = generation(&build_passes([None; 2]));
+        let k = kept.get().resolve(base, rects);
+        kept.set(k);
+        rects = k.rects;
+    }
+    let passes = build_passes(rects);
     let wallpaper = WallpaperPaint {
         key,
         image: None,
