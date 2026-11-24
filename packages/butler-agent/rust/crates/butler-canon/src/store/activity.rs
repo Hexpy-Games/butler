@@ -36,24 +36,52 @@ pub fn comment(tx: &Transaction<'_>, ctx: &Context, id: &str, input: Value) -> R
     if !(1..=8000).contains(&input.body.chars().count()) {
         return Err(Error::Invalid("body must be 1..8000 characters"));
     }
-    let epic = read_work(tx, id)?;
-    let summary: String = input
-        .body
+    let seq = record_comment(tx, ctx, id, &input.body)?;
+    sync::capture_comment(tx, ctx, id, seq, &input.body)?;
+    Ok(json!({"id":id,"activity":page_visible(tx,id,None,ctx.actor["origin"]=="mcp")?["activity"]}))
+}
+/// Writes one comment row and its change event; returns the row's `seq`.
+pub(in crate::store) fn record_comment(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    epic_id: &str,
+    body: &str,
+) -> Result<i64> {
+    let epic = read_work(tx, epic_id)?;
+    let summary: String = body
         .lines()
         .next()
         .unwrap_or_default()
         .chars()
         .take(120)
         .collect();
-    append(tx, ctx, id, "comment", &summary, Some(&input.body))?;
+    append(tx, ctx, epic_id, "comment", &summary, Some(body))?;
+    let seq = tx.last_insert_rowid();
+    comment_changed(tx, ctx, epic_id, &epic["project_id"])?;
+    Ok(seq)
+}
+/// The `canon.changed` activity event a comment write or removal emits.
+pub(in crate::store) fn comment_changed(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    epic_id: &str,
+    project: &Value,
+) -> Result<()> {
+    let origin = if ctx.actor["origin"] == "mcp" {
+        "mcp"
+    } else if ctx.actor["via"] == "butler" {
+        "butler"
+    } else if ctx.actor["via"] == "sync" {
+        "remote"
+    } else {
+        "local"
+    };
     grants::emit(
         tx,
         ctx,
         "canon.changed",
-        &json!({"kind":"activity","id":id,"project_id":epic["project_id"],
-        "origin":if ctx.actor["origin"]=="mcp" {"mcp"} else if ctx.actor["via"]=="butler" {"butler"} else {"local"}}),
-    )?;
-    Ok(json!({"id":id,"activity":page_visible(tx,id,None,ctx.actor["origin"]=="mcp")?["activity"]}))
+        &json!({"kind":"activity","id":epic_id,"project_id":project,"origin":origin}),
+    )
 }
 pub fn page(db: &Connection, epic: &str, before: Option<i64>) -> Result<Value> {
     page_visible(db, epic, before, false)

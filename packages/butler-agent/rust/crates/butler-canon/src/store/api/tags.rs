@@ -92,7 +92,7 @@ pub(super) fn edit(tx: &Transaction<'_>, ctx: &Context, id: &str, value: Value) 
     event(tx, ctx, "tag", id, input.expected_revision + 1, "edit")?;
     one(tx, sql::TAG, [id])
 }
-pub(super) fn delete(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<Value> {
+pub(in crate::store) fn delete(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<Value> {
     let tag = one(tx, sql::TAG, [id])?;
     let epics = rows(tx, sql::TAG_EPICS, [id])?;
     // Append while the tag's project identity still exists; commit atomically.

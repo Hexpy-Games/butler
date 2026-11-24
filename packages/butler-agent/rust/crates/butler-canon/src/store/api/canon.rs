@@ -255,7 +255,7 @@ fn container(db: &Connection, plan: Option<&str>, project: &str) -> Result<Vec<V
     };
     rows(db, q.sql(), [plan.unwrap_or(project)])
 }
-pub(super) fn bump_order(
+pub(in crate::store) fn bump_order(
     tx: &Transaction<'_>,
     ctx: &Context,
     plan: Option<&str>,

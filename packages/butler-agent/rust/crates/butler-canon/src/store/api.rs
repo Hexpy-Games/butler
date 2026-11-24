@@ -3,6 +3,8 @@ mod canon;
 pub mod canon_conversation;
 mod epic_delete;
 mod outbox;
+pub(in crate::store) use canon::bump_order;
+pub(in crate::store) use epic_delete::delete as delete_epic;
 pub(super) use outbox::append as outbox;
 mod reads;
 pub mod sql;

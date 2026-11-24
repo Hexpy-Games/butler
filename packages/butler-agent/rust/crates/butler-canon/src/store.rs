@@ -39,6 +39,7 @@ mod entities;
 mod intents;
 mod specs;
 pub mod sql;
+pub mod sync;
 mod transaction;
 pub use entities::*;
 pub use intents::*;
@@ -182,6 +183,7 @@ fn event_with_details(
             payload.to_string()
         ],
     )?;
+    sync::capture(tx, ctx, kind, id, op)?;
     api::outbox(tx, ctx, kind, id, revision, details)?;
     Ok(())
 }
