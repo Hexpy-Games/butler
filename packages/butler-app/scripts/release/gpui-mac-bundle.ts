@@ -35,6 +35,9 @@ export function stageGpuiMacBundle(input: { root: string; packageOut: string; bu
     throw new Error("CEF runtime is missing ButlerCefHost.app/Contents/Frameworks/Chromium Embedded Framework.framework");
   }
   if (!statSync(credits, { throwIfNoEntry: false })?.isFile()) throw new Error("CEF runtime is missing CREDITS.html");
+  if (!statSync(join(input.bundledAgentResourceDir, "native-agent-manifest.json"), { throwIfNoEntry: false })?.isFile()) {
+    throw new Error(`bundled Agent payload has no native-agent-manifest.json: ${input.bundledAgentResourceDir} (build it with prepare-native-agent.mjs)`);
+  }
 
   const appBundle = join(input.packageOut, "Butler-darwin-arm64", "Butler.app");
   const contents = join(appBundle, "Contents");
