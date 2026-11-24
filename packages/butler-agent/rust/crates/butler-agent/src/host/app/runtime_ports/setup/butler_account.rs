@@ -102,6 +102,8 @@ impl ButlerAccount {
             ButlerAccountRequest::Devices | ButlerAccountRequest::RevokeDevice { .. } => {
                 self.devices(request).await
             }
+            ButlerAccountRequest::PushTokens { tokens } => self.push_tokens(tokens).await,
+            ButlerAccountRequest::Push { messages, tokens } => self.push(messages, tokens).await,
         }
     }
 
