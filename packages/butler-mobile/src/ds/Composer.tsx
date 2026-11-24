@@ -37,6 +37,8 @@ export interface ComposerDockProps {
   onHeightChange?: (height: number, keyboard: number) => void;
   /** Android only: fills the dock area, with a fade above it, while content scrolls beneath; iOS uses the native scroll edge effect. */
   backdrop?: { color: string; visible: boolean };
+  /** Floats centered just above the composer and moves with it over the keyboard; it is not part of the reported height. */
+  accessory?: React.ReactNode;
 }
 
 // Eight input lines before the input scrolls (web `8lh`).
@@ -96,7 +98,7 @@ export function Composer({
 }
 
 /** Keyboard and safe-area placement; the Composer itself has no position. */
-export function ComposerDock({ children, onHeightChange, backdrop }: ComposerDockProps) {
+export function ComposerDock({ children, onHeightChange, backdrop, accessory }: ComposerDockProps) {
   const t = useTokens();
   const insets = useSafeAreaInsets();
   // KeyboardAvoidingView measures from its parent, not the window; offset by where the dock's frame starts on screen.
@@ -126,6 +128,7 @@ export function ComposerDock({ children, onHeightChange, backdrop }: ComposerDoc
       }}>
       <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" keyboardVerticalOffset={top}
         style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
+        {accessory ? <View pointerEvents="box-none" style={{ zIndex: 1, alignItems: "center", paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: gap }}>{accessory}</View> : null}
         <ScrollEdgeEffect edge="bottom" effect="soft">
           <View
             onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
