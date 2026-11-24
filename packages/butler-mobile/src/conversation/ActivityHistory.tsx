@@ -6,7 +6,7 @@ import { Button, Icon, icons, Text, useTokens, WorkActivityBlock } from "@/ds";
 import { run, useReducedMotion } from "@/ds/internal/motion";
 import { AnimatedPressable, usePress } from "@/ds/internal/press";
 import { useAppLocale } from "@/i18n";
-import { activityDisplayTitle, delegatedRequestGoal, projectActivities, type Activity } from "./activityProjection";
+import { activityDisplayTitle, delegatedRequestGoal, liveTurnWork, projectActivities, type Activity, type LiveDecision } from "./activityProjection";
 import { phaseLabel, toolItems, workBlockToolItems } from "./workStatus";
 import { ImageToolStill } from "./ImageToolStill";
 import { useWorkExpanded } from "./workExpansion";
@@ -46,7 +46,9 @@ export function ActivityTimeline({ activities, currentState, live = false, pulse
       {expanded || expandAll ? activities.map((activity, index) => <ActivityRow key={activity.id} activity={activity}
         connected={index < activities.length - 1} last={index === activities.length - 1}
         live={pulseLatest && index === activities.length - 1} goal={index === 0 ? goal : undefined} />)
-        : live ? <LiveActivity key={latest.id} activity={latest} pulseLatest={pulseLatest} goal={activities.length === 1 ? goal : undefined} /> : null}
+        : live ? <LiveEnter itemKey={latest.id}>
+          <ActivityRow key={latest.id} activity={latest} live={pulseLatest} goal={activities.length === 1 ? goal : undefined} last />
+        </LiveEnter> : null}
       {expanded && !expandAll ? <View style={{ alignItems: "flex-start" }}>
         <Button variant="ghost" size="sm" iconStart={icons.ListChecks} label={copy.conversation.work.collapseLabel} onPress={toggle} />
       </View> : null}
@@ -66,7 +68,7 @@ function HistoryHeader({ label, expanded, onToggle }: { label: string; expanded:
   </AnimatedPressable>;
 }
 
-function LiveActivity({ activity, pulseLatest, goal }: { activity: Activity; pulseLatest: boolean; goal?: string }) {
+function LiveEnter({ itemKey, children }: { itemKey: string; children: React.ReactNode }) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
@@ -76,9 +78,9 @@ function LiveActivity({ activity, pulseLatest, goal }: { activity: Activity; pul
     const animation = run(t, enter, 1, "--motion-base", "--motion-ease-standard");
     animation.start();
     return () => animation.stop();
-  }, [activity.id, reduced, t, enter]);
+  }, [itemKey, reduced, t, enter]);
   return <Animated.View style={{ opacity: enter, transform: reduced ? undefined : [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [t.length("--motion-distance-md"), 0] }) }] }}>
-    <ActivityRow activity={activity} live={pulseLatest} goal={goal} last />
+    {children}
   </Animated.View>;
 }
 
@@ -105,18 +107,36 @@ export function ActivityRow({ activity, connected, last, live, goal }: { activit
 
 export function MessageActivity({ message, liveRows }: { message: ConversationMessage; liveRows?: ProgressSummaryRow[] }) {
   const locale = useAppLocale();
-  const { activities, semanticState } = projectActivities(message.turn_activity_rows ?? liveRows ?? [], message.turn_id, locale);
+  const rows = message.turn_activity_rows ?? liveRows ?? [];
+  const { activities, semanticState } = projectActivities(rows, message.turn_id, locale);
   const live = message.status === "streaming";
   if (activities.length) return <ActivityTimeline activities={activities} currentState={live ? semanticState : message.status} live={live} storeKey={message.id} />;
-  return !live && message.work_blocks?.length ? <CompletedWork blocks={message.work_blocks} message={message} /> : null;
+  if (live) return <LiveTurnWork rows={rows} turnId={message.turn_id} storeKey={message.id} />;
+  return message.work_blocks?.length ? <WorkBlocks blocks={message.work_blocks} turnId={message.turn_id} storeKey={message.id} /> : null;
 }
 
-function CompletedWork({ blocks, message }: { blocks: WorkerActivityWorkBlock[]; message: ConversationMessage }) {
+export function LiveTurnWork({ rows, turnId, storeKey }: { rows: ProgressSummaryRow[]; turnId?: string; storeKey: string }) {
+  const locale = useAppLocale();
+  const { blocks, decision } = liveTurnWork(rows, locale);
+  if (blocks.length) return <WorkBlocks blocks={blocks} turnId={turnId} storeKey={storeKey} live />;
+  return decision ? <DecisionRow decision={decision} /> : null;
+}
+
+function DecisionRow({ decision }: { decision: LiveDecision }) {
+  const t = useTokens();
+  return <View style={{ paddingLeft: t.length("--space-2xl"), gap: t.length("--space-xs") }}>
+    <Text variant="body" weight="medium">{decision.summary}</Text>
+    {decision.rationale ? <Text tone="secondary">{decision.rationale}</Text> : null}
+    {decision.nextStep ? <Text tone="secondary">{decision.nextStep}</Text> : null}
+  </View>;
+}
+
+function WorkBlocks({ blocks, turnId, storeKey, live = false }: { blocks: WorkerActivityWorkBlock[]; turnId?: string; storeKey: string; live?: boolean }) {
   const locale = useAppLocale();
   const copy = getAppCopy(locale);
   const t = useTokens();
   const reduced = useReducedMotion();
-  const [expanded, toggleExpanded] = useWorkExpanded(message.id);
+  const [expanded, toggleExpanded] = useWorkExpanded(storeKey);
   const latest = blocks[blocks.length - 1];
   const toggle = () => {
     if (!reduced) LayoutAnimation.configureNext({ duration: t.duration("--motion-base"), update: { type: "easeInEaseOut" },
@@ -124,12 +144,13 @@ function CompletedWork({ blocks, message }: { blocks: WorkerActivityWorkBlock[];
     toggleExpanded();
   };
   return <View style={{ gap: t.length("--space-md") }}>
-    <HistoryHeader label={copy.interfaceTemplates.activityHistory(false, copy.guided.tools[latest.label] ?? latest.label, blocks.length)} expanded={expanded} onToggle={toggle} />
-    {expanded ? <>
-      {blocks.map((block, index) => <WorkActivityBlock renderAfter={tool => tool.images ? <ImageToolStill tool={tool} /> : null} key={block.id} density="normal" title={copy.guided.tools[block.label] ?? block.label}
+    <HistoryHeader label={copy.interfaceTemplates.activityHistory(live, copy.guided.tools[latest.label] ?? latest.label, blocks.length)} expanded={expanded} onToggle={toggle} />
+    {(expanded ? blocks : live ? [latest] : []).map(block => {
+      const row = <WorkActivityBlock renderAfter={tool => tool.images ? <ImageToolStill tool={tool} /> : null} key={block.id} density="normal" title={copy.guided.tools[block.label] ?? block.label}
         description={[block.decision_rationale, block.decision_next_step].filter((line): line is string => Boolean(line))}
-        last={index === blocks.length - 1} live={false} tools={workBlockToolItems(block, message.turn_id, locale)} />)}
-      <View style={{ alignItems: "flex-start" }}><Button variant="ghost" size="sm" iconStart={icons.ListChecks} label={copy.conversation.work.collapseLabel} onPress={toggle} /></View>
-    </> : null}
+        last={block === latest} live={!["delivered", "failed", "cancelled"].includes(block.state)} tools={workBlockToolItems(block, turnId, locale)} />;
+      return expanded ? row : <LiveEnter key={block.id} itemKey={block.id}>{row}</LiveEnter>;
+    })}
+    {expanded ? <View style={{ alignItems: "flex-start" }}><Button variant="ghost" size="sm" iconStart={icons.ListChecks} label={copy.conversation.work.collapseLabel} onPress={toggle} /></View> : null}
   </View>;
 }

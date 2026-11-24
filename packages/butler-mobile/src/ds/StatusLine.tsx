@@ -9,9 +9,9 @@ import { run, useReducedMotion } from "./internal/motion";
 
 const Mask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>; // 0.3.2 class typings predate @types/react 19
 
-export interface StatusLineProps { label: string; elapsed?: string; active: boolean }
+export interface StatusLineProps { label: string; elapsed?: string; active: boolean; morphKey?: string }
 
-export function StatusLine({ label, elapsed, active }: StatusLineProps) {
+export function StatusLine({ label, elapsed, active, morphKey }: StatusLineProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const [labelWidth, setLabelWidth] = useState(0);
@@ -35,7 +35,7 @@ export function StatusLine({ label, elapsed, active }: StatusLineProps) {
   const shimmering = active && !reduced;
   return <View accessible accessibilityLabel={label} style={{ flexDirection: "row", alignItems: "center",
     gap: t.length("--space-2"), height: t.length("--typo-body-line-height"), overflow: "hidden" }}>
-    <ThinkingMark working={active} size={t.length("--icon-size-md")} />
+    <ThinkingMark working={active} size={t.length("--icon-size-md")} morphKey={morphKey} />
     <Animated.View key={label} style={{ flexShrink: 1, opacity: enter,
       transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [t.length("--motion-distance-md"), 0] }) }] }}>
       <View onLayout={event => setLabelWidth(event.nativeEvent.layout.width)} style={{ opacity: shimmering ? 0 : 1 }}>{text}</View>

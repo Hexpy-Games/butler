@@ -1,12 +1,14 @@
 import { formatInterfaceText, getAppCopy, type AppCopy, type AppLocale } from "../../../butler-i18n/src/index.ts";
-import type { ConversationMessage, ProgressSummaryRow, SessionView } from "../../../butler-protocol/src/index.ts";
-import { mergeToolRows } from "../../../butler-progress-projection/src/index.ts";
+import type { ConversationMessage, ProgressSummaryRow, SessionView, WorkerActivityWorkBlock } from "../../../butler-protocol/src/index.ts";
+import { mergeToolRows, projectSharedWorkBlocks } from "../../../butler-progress-projection/src/index.ts";
 import { progressRowLabel, visibleRows } from "./workStatus";
 
 export type Activity = {
   id: string; phase?: string; title: string; summary: string; rationale?: string;
   nextStep?: string; createdAt?: string; operations: ProgressSummaryRow[]; turnId?: string;
 };
+
+export type LiveDecision = { summary: string; rationale?: string; nextStep?: string };
 
 /** Port of desktop app/conversation-progress/activity.ts. */
 export function projectActivities(rows: ProgressSummaryRow[], turnId: string | undefined, locale: AppLocale): { activities: Activity[]; semanticState?: string } {
@@ -16,6 +18,43 @@ export function projectActivities(rows: ProgressSummaryRow[], turnId: string | u
   const activities = (phases.length ? phases : fallbackOrdinaryActivity(activityRows, turnId, getAppCopy(locale)))
     .map(activity => ({ ...activity, turnId }));
   return { activities, semanticState: currentSemanticState(activityRows, activities) };
+}
+
+export function liveTurnWork(rows: ProgressSummaryRow[], locale: AppLocale): { blocks: WorkerActivityWorkBlock[]; decision?: LiveDecision } {
+  const ordered = mergeToolRows(orderedProgressRows(visibleRows(rows).map(row => localizeProgressRow(row, locale))));
+  const activityRows = ordered.filter(row => row.kind !== "todo");
+  const { blocks } = projectSharedWorkBlocks(activityRows, { completedOnly: false });
+  if (blocks.length) return { blocks };
+  const decision = findLatest(activityRows, row => row.kind === "decision" &&
+    (row.public_decision_source === "assistant-authored" || row.public_decision_source === "model-authored" ||
+      row.public_decision_source === "principal-authored") && Boolean(row.public_decision_summary));
+  if (!decision?.public_decision_summary ||
+    activityRows.some(row => row.bridge_phase === "btcc_operation" && row.state === "running") ||
+    currentModelRoundWait(activityRows) || latestPublicActivity(activityRows)) return { blocks };
+  return { blocks, decision: {
+    summary: decision.public_decision_summary,
+    rationale: decision.public_decision_rationale,
+    nextStep: decision.public_decision_next_step,
+  } };
+}
+
+function currentModelRoundWait(rows: ProgressSummaryRow[]): ProgressSummaryRow | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (!row) continue;
+    if (["failed", "cancelled", "delivered", "complete", "completed", "stopped"].includes(row.state)) return undefined;
+    if (row.bridge_phase === "model_round_waiting") return row;
+    if (row.work_decision_source === "model-authored" || row.bridge_phase === "operational_recovery") return undefined;
+  }
+  return undefined;
+}
+
+function latestPublicActivity(rows: ProgressSummaryRow[]): ProgressSummaryRow | undefined {
+  return findLatest(rows, row => {
+    if (row.kind !== "message" || row.state !== "running" || row.work_block_id) return false;
+    if (row.bridge_phase === "model_round_waiting" || row.work_decision_source) return false;
+    return row.safe_label.trim().length > 0;
+  });
 }
 
 function localizeProgressRow(row: ProgressSummaryRow, locale: AppLocale): ProgressSummaryRow {
