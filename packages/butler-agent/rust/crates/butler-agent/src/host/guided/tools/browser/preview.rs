@@ -114,6 +114,11 @@ async fn prepare_input(
                 return Err("invalid_preview");
             }
             input["cwd"] = json!(cwd);
+        } else {
+            input
+                .as_object_mut()
+                .ok_or("invalid_preview")?
+                .remove("cwd");
         }
         input["preview_id"] = json!(format!(
             "p-{:x}",

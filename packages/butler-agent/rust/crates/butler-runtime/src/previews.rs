@@ -39,13 +39,6 @@ enum Source {
 }
 
 impl Source {
-    fn attach(occupied: bool) -> Result<Self, &'static str> {
-        if !occupied {
-            return Err("port_not_listening");
-        }
-        Ok(Self::Attached(CancellationToken::new()))
-    }
-
     fn is_running(&self) -> bool {
         match self {
             Self::Spawned(process) => process.is_running(),
@@ -113,10 +106,8 @@ impl Previews {
                 if command.trim().is_empty() || command.len() > 8192 {
                     return Err("invalid_command");
                 }
-                (
-                    command,
-                    PathBuf::from(args["cwd"].as_str().ok_or("invalid_cwd")?),
-                )
+                let cwd = args["cwd"].as_str().ok_or("invalid_cwd")?;
+                (command, PathBuf::from(cwd))
             }
             None => ("", PathBuf::new()),
         };
@@ -150,7 +141,8 @@ impl Previews {
             .await
             .is_ok();
         let process = match (command.is_empty(), occupied) {
-            (true, _) => Source::attach(occupied)?,
+            (true, true) => Source::Attached(CancellationToken::new()),
+            (true, false) => return Err("port_not_listening"),
             (false, true) => return Err("port_in_use"),
             (false, false) => Source::Spawned(
                 PreviewProcess::start(input.command.into(), input.cwd.clone())

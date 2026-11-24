@@ -181,7 +181,10 @@ async fn headless_opens_running_local_server() -> Result<(), HarnessError> {
     assert_eq!(stopped["status"], "ok", "{stopped}");
     let gone = call(&admin, "general", "tab.observe", tab, json!({})).await?;
     assert_eq!(gone["reason"], "not_your_tab", "{gone}");
-    assert!(TcpStream::connect(("127.0.0.1", dev)).is_ok());
+    assert!(
+        TcpStream::connect(("127.0.0.1", dev)).is_ok(),
+        "user's server must survive preview_stop"
+    );
 
     let gateway = reqwest::Url::parse(&s.gw.base).unwrap().port().unwrap();
     let refused = call(
