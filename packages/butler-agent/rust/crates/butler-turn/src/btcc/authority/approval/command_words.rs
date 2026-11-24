@@ -210,10 +210,10 @@ pub(in crate::btcc) fn read_only(words: &[Word], first_segment: bool) -> bool {
         return false;
     }
     let forbidden: &[&str] = match name.as_str() {
-        "ls" | "dir" | "pwd" | "echo" | "cat" | "type" | "head" | "tail" | "wc" | "nl" | "cut"
-        | "tr" | "basename" | "dirname" | "realpath" | "readlink" | "stat" | "du" | "df"
-        | "which" | "where" | "whoami" | "get-childitem" | "gci" | "get-location" | "test-path"
-        | "resolve-path" | "measure-object" | "select-object" | "sort-object" => &[],
+        "ls" | "dir" | "pwd" | "echo" | "printf" | "cat" | "type" | "head" | "tail" | "wc"
+        | "nl" | "cut" | "tr" | "basename" | "dirname" | "realpath" | "readlink" | "stat"
+        | "du" | "df" | "which" | "where" | "whoami" | "get-childitem" | "gci" | "get-location"
+        | "test-path" | "resolve-path" | "measure-object" | "select-object" | "sort-object" => &[],
         "grep" | "egrep" | "fgrep" => &[
             "-r",
             "-R",
