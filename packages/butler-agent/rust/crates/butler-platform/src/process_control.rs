@@ -24,6 +24,7 @@ pub use usage::{ProcessUsage, sample as sample_usage};
 
 use std::io;
 use std::process::{Command, ExitStatus};
+use std::time::Duration;
 
 /// Linux refuses exec while another process holds the inode open for writing.
 /// Callers may retry a failed spawn after the writer closes its handle.
@@ -259,5 +260,29 @@ impl StdinLease {
     /// its end); bytes written to it are ignored.
     pub async fn closed(&self) -> io::Result<()> {
         self.0.closed().await
+    }
+}
+
+/// The exit code of another process, read through a handle opened by [`ExitWatch::capture`]
+/// while the process runs, so a reused process id is never read. Windows only: elsewhere a
+/// non-child's exit code cannot be read and `capture` returns `Unsupported`.
+#[derive(Clone)]
+pub struct ExitWatch(tokio::sync::watch::Receiver<Option<u32>>);
+
+impl ExitWatch {
+    /// Opens a handle on the running process `pid`; `Unsupported` outside Windows.
+    pub fn capture(pid: u32) -> io::Result<Self> {
+        sys::capture_exit(pid).map(Self)
+    }
+
+    /// The exit code once the process has ended, waiting at most `timeout`; `None` while it
+    /// still runs or when its code could not be read.
+    pub async fn code(&self, timeout: Duration) -> Option<u32> {
+        let mut receiver = self.0.clone();
+        let code = tokio::time::timeout(timeout, receiver.wait_for(Option::is_some))
+            .await
+            .ok()?
+            .ok()?;
+        *code
     }
 }

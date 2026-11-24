@@ -11,6 +11,7 @@ use nix::sys::signal::{Signal, kill, killpg};
 use nix::unistd::Pid;
 use tokio::io::unix::AsyncFd;
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::watch;
 
 use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
 
@@ -212,4 +213,8 @@ impl StdinLease {
             }
         }
     }
+}
+
+pub(super) fn capture_exit(_pid: u32) -> io::Result<watch::Receiver<Option<u32>>> {
+    Err(io::Error::from(io::ErrorKind::Unsupported))
 }
