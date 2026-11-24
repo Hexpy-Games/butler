@@ -156,6 +156,10 @@ pub struct AppSessionSummary {
     pub project_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<AppSessionProject>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub computer_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub computer_name: Option<String>,
     pub session_hint: String,
     pub created_at: String,
     pub updated_at: String,

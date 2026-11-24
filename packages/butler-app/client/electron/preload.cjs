@@ -929,6 +929,8 @@ const butlerApp = Object.freeze({
       (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));
     const proposals = (method === "GET" && path === "/memory/pattern-proposals") ||
       (method === "POST" && /^\/memory\/pattern-proposals\/[A-Za-z0-9_-]+$/.test(path));
+    const pendingInstruction = method === "POST" && /^\/memory\/instructions\/pending\/[A-Za-z0-9_-]{1,200}$/.test(path);
+    if (pendingInstruction) return requestBridgeResult(path, { method, body: JSON.stringify(body) });
     if (proposals) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
     const consolidation = path === "/memory/consolidation" && ["GET", "POST"].includes(method);
     if (consolidation) return requestBridgeResult(path, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}) });
@@ -1000,13 +1002,14 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/sessions?${query}` : "/sessions");
   },
-  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey, workspaceMode }) => requestJson("/sessions", {
+  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey, workspaceMode, computerId }) => requestJson("/sessions", {
     method: "POST",
     body: JSON.stringify({
       kind,
       title,
       initial_message: initialMessage,
       workspace_mode: workspaceMode,
+      computer_id: computerId,
       project_id: projectId,
       session_hint: sessionHint,
       idempotency_key: idempotencyKey,
@@ -1451,6 +1454,7 @@ const butlerApp = Object.freeze({
   deleteComputer: ({ id } = {}) => requestSecurity("deleteComputer", { id }),
   startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
   getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
+  reconnectComputer: ({ id } = {}) => requestSecurity("reconnectComputer", { id }),
   updateComputerModel: ({ id, payload } = {}) => requestSecurity("updateComputerModel", { id, payload }),
   editComputer: ({ id, payload } = {}) => requestSecurity("editComputer", { id, payload }),
   startComputerOauth: ({ id, payload } = {}) => requestSecurity("startComputerOauth", { id, payload }),
@@ -1605,8 +1609,8 @@ const butlerApp = Object.freeze({
   exportDocument: (input) => ipcRenderer.invoke("butler:export-document", input),
   saveMessageFile: ({ fileId, suggestedName } = {}) =>
     ipcRenderer.invoke("butler:save-message-file", { fileId, suggestedName }),
-  openMessageFile: ({ fileId } = {}) =>
-    ipcRenderer.invoke("butler:open-message-file", { fileId }),
+  openMessageFile: ({ fileId, sessionId } = {}) =>
+    ipcRenderer.invoke("butler:open-message-file", { fileId, sessionId }),
   getContextDetails: ({ sessionId }) => {
     const params = new URLSearchParams({ session_id: sessionId });
     return requestJson(`/context-details?${params.toString()}`);

@@ -23,6 +23,7 @@ pub(super) fn link(state: &HttpState) -> Result<remote_computers::Link, HttpErro
         root: state.output_data.clone().ok_or(HttpError::Internal)?,
         version: state.agent_version.clone(),
         cancel: state.shutdown.clone(),
+        relays: Some(state.remote_live.clone()),
     })
 }
 

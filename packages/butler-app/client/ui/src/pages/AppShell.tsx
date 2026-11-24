@@ -23,7 +23,7 @@ import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
 import { useOrganizationNotice } from "@/components/space/hooks/useOrganizationNotice";
 import { Titlebar } from "@/components/layout/Titlebar.tsx";
-import { LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
+import { ConversationConnectionNotice, LiveConnectionNotice } from "@/components/layout/LiveConnectionNotice.tsx";
 import { ConversationBrowserFrame } from "@/components/browser/ConversationBrowserFrame";
 import type { RightSlotPane } from "@/components/file-viewer/useRightSlot";
 import { LibraryDialogHost } from "@/components/library/LibraryDialogHost";
@@ -238,7 +238,7 @@ function AppWorkspaceContent({ leftOpen, pane, chatWidth }: { leftOpen: boolean;
         <AdaptiveShellCard><LiveConnectionNotice /><ErrorBoundary key={view.projectId} scope="project-dashboard"><ProjectDashboardView /></ErrorBoundary></AdaptiveShellCard>
       ) : (
         <ErrorBoundary resetKey={activeChatId} scope="conversation"><ConversationBrowserFrame
-          sessionId={activeChatId} pane={pane} chatWidth={chatWidth} notice={<LiveConnectionNotice />} /></ErrorBoundary>
+          sessionId={activeChatId} pane={pane} chatWidth={chatWidth} notice={<ConversationConnectionNotice />} /></ErrorBoundary>
       )}
     </AdaptiveShellWorkspace>
   </>;

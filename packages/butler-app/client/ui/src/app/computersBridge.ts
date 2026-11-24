@@ -14,6 +14,7 @@ export function computerBridgeCall(method: string, path: string, body: unknown):
   if (method === "DELETE" && !suffix) return { action: "deleteComputer", input: { id } };
   if (method === "GET" && suffix === "/connection") return { action: "getComputerConnection", input: { id } };
   if (method === "POST") {
+    if (suffix === "/reconnect") return { action: "reconnectComputer", input: { id } };
     if (suffix === "/start") return { action: "startComputer", input: { id } };
     if (suffix === "/oauth/start") return { action: "startComputerOauth", input: { id, payload: payload() } };
   }

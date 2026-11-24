@@ -69,6 +69,7 @@ const SECURITY_ROUTES = Object.freeze({
   deleteComputer: { method: "DELETE", path: "/computers", entry: true },
   startComputer: { method: "POST", path: "/computers", entry: true, suffix: "/start" },
   getComputerConnection: { method: "GET", path: "/computers", entry: true, suffix: "/connection" },
+  reconnectComputer: { method: "POST", path: "/computers", entry: true, suffix: "/reconnect" },
   updateComputerModel: { method: "PATCH", path: "/computers", entry: true, payload: true },
   editComputer: { method: "PUT", path: "/computers", entry: true, payload: true },
   startComputerOauth: { method: "POST", path: "/computers", entry: true, suffix: "/oauth/start", payload: true },

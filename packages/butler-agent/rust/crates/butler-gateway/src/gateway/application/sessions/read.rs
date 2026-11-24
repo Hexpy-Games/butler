@@ -66,6 +66,7 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  c.runtime_session_hint,
  ",
     read_marker_columns!(),
+    ",c.computer_id",
     r"
 FROM chats c
 LEFT JOIN turns t ON t.rowid=(
@@ -75,6 +76,7 @@ LEFT JOIN turns t ON t.rowid=(
 );
 
 struct SessionRow {
+    computer_id: Option<String>,
     runtime_session_hint: Option<String>,
     id: String,
     kind: String,
@@ -119,6 +121,7 @@ fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
         project_display_name: row.get(16)?,
         latest_reply_rowid: row.get(18)?,
         read_rowid: row.get(19)?,
+        computer_id: row.get(20)?,
     })
 }
 
@@ -305,6 +308,8 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         title: row.title,
         project_id,
         project,
+        computer_id: row.computer_id,
+        computer_name: None,
         session_hint: row
             .runtime_session_hint
             .unwrap_or_else(|| crate::gateway::app_session_hint(&row.id)),

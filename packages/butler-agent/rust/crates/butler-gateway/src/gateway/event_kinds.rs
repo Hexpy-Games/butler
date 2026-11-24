@@ -53,6 +53,7 @@ const EVENT_TYPES: &[(&str, Scope)] = &[
     ("provider_quota_updated", Scope::Local),
     ("question.answered", Scope::Session),
     ("remote.connection_changed", Scope::Local),
+    ("remote.instruction_pending", Scope::Local),
     ("runtime.fault", Scope::Session),
     ("security.connection_code_rotated", Scope::Local),
     ("security.device_paired", Scope::Local),

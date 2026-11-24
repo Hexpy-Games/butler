@@ -40,6 +40,10 @@ export function deleteComputer(id: string): Promise<{ deleted: boolean; remote_c
   return api(`/computers/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export function reconnectComputer(id: string): Promise<{ state: ComputerConnection; error: string | null }> {
+  return api(`/computers/${encodeURIComponent(id)}/reconnect`, { method: "POST" });
+}
+
 export function computerConnection(id: string): Promise<{ state: ComputerConnection; error: string | null }> {
   return api(`/computers/${encodeURIComponent(id)}/connection`);
 }

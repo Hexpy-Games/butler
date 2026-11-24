@@ -792,6 +792,8 @@ export type ComposerModelState = Exclude<ModelCatalogState, "error">;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  computer_id?: string;
+  computer_name?: string;
   epic_ids?: string[];
   session_hint?: string;
   work_progress?: { completed: number; total: number };
@@ -1904,6 +1906,7 @@ export interface ComposerControls {
   imageEdit?: { image: string; mask?: string };
   onImageEditAccepted?: (turnId: string) => void;
   workspaceMode?: "local" | "worktree";
+  computerId?: string;
   /** UI target for the existing sender; dashboard remains visible until acceptance. */
   dashboardTarget?: { projectId: string; sessionId?: string; clientMessageId?: string; onSessionCreated?: (id: string) => void };
   contentParts?: import("./messageContent").MessageContent;

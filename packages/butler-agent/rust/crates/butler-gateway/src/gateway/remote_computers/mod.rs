@@ -19,10 +19,12 @@ mod relay;
 mod sessions;
 pub(super) use relay::{Reply, data};
 pub(super) use sessions::{Link, create_session, forward, open_stream};
+mod session_state;
 mod ssh;
 mod store;
 mod streams;
 mod transcripts;
+pub(super) use session_state::{SessionStateCache, SessionStateRow, session_state_path};
 pub(super) use streams::RemoteStream;
 
 use super::{AppSetupPort, http::HttpError};
@@ -59,6 +61,10 @@ pub(super) struct Computer {
 impl Computer {
     pub(super) fn id(&self) -> &str {
         &self.id
+    }
+
+    pub(super) fn name(&self) -> &str {
+        &self.name
     }
 
     pub(super) fn wire(&self) -> Result<serde_json::Value, HttpError> {
@@ -216,6 +222,11 @@ pub(super) async fn delete(
     let cleaned = deploy::remove(computer, cancel).await.is_ok();
     store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
     setup.delete_computer_key(computer.id.clone()).await?;
+    if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(computer_id = %computer.id, %error, "Remote computer session state was not removed");
+    }
     Ok(cleaned)
 }
 
@@ -298,6 +309,7 @@ async fn connect(
             root: root.to_path_buf(),
             version: version.to_owned(),
             cancel,
+            relays: None,
         },
         computer.id.clone(),
     );

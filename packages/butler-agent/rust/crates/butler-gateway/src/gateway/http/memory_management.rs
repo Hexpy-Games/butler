@@ -94,7 +94,7 @@ async fn pending_route(
     request: axum::http::Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
-    use crate::gateway::remote_computers::{decide_pending, get_pending, list_pending};
+    use crate::gateway::remote_computers::{decide_pending, get_pending};
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Decision {
@@ -103,7 +103,7 @@ async fn pending_route(
     }
     let root = state.output_data.as_deref().ok_or(HttpError::Internal)?;
     if request.method() == Method::GET && uri.path() == "/memory/instructions/pending" {
-        let items = list_pending(root).await;
+        let items = pending_with_chat_ids(&state, root).await?;
         return execute(
             state,
             AppMemoryCommand::PendingInstructions { items },
@@ -149,6 +149,35 @@ async fn pending_route(
         }
     })
     .await
+}
+
+async fn pending_with_chat_ids(
+    state: &HttpState,
+    root: &std::path::Path,
+) -> Result<Vec<serde_json::Value>, HttpError> {
+    let mut items = crate::gateway::remote_computers::list_pending(root).await;
+    for item in &mut items {
+        let Some(runtime_id) = item["session_id"].as_str() else {
+            continue;
+        };
+        let Some(candidate) = runtime_id.strip_prefix("butler/app-") else {
+            continue;
+        };
+        let Some(computer) = item["computer_id"].as_str() else {
+            continue;
+        };
+        if crate::gateway::app_session_hint(candidate) == runtime_id
+            && state
+                .application
+                .session_computer(candidate.to_owned())
+                .await?
+                .as_deref()
+                == Some(computer)
+        {
+            item["chat_id"] = candidate.into();
+        }
+    }
+    Ok(items)
 }
 
 fn is_reset_path(path: &str) -> bool {

@@ -12,9 +12,11 @@ export function presentStructuredOperation(value: OutputRecord): OperationOutput
     return { kind: "summary", content: appCopy.interfaceStatus.notExecuted };
   }
   const error = record(value.error);
-  if (value.ok === false && (error?.message || typeof value.error === "string")) {
+  const mainNotConnected = error?.code === "main_not_connected";
+  if (value.ok === false && (mainNotConnected || error?.message || typeof value.error === "string")) {
     return { kind: "sections", summary: appCopy.interfaceStatus.toolFailed, sections: [{
-      title: appCopy.interfaceStatus.failureReason, content: text(error?.message) || text(value.error),
+      title: appCopy.interfaceStatus.failureReason,
+      content: mainNotConnected ? appCopy.computers.mainNotConnected : text(error?.message) || text(value.error),
     }] };
   }
   const sections = publicSections(value);

@@ -13,6 +13,7 @@ pub(in crate::gateway) struct Link {
     pub root: PathBuf,
     pub version: String,
     pub cancel: CancellationToken,
+    pub relays: Option<super::live::LiveRelays>,
 }
 
 pub(in crate::gateway) async fn create_session(

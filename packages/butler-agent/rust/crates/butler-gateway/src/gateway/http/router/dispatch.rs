@@ -120,28 +120,7 @@ async fn commands(
         {
             session_queue::route(state, request, uri).await
         }
-        Handler::RemoteAccount if transcript_request(&state, &request) => {
-            remote_transcripts::get(&state, uri)
-        }
-        Handler::RemoteAccount if !remote_account::admitted(&state, &request) => {
-            Err(HttpError::public(404, "not_found", "Route not found."))
-        }
-        Handler::RemoteAccount if request.uri().path() == "/remote/memory" => {
-            remote_memory::copy(state, request).await
-        }
-        Handler::RemoteAccount if request.uri().path() == "/remote/memory/answers" => {
-            remote_memory::answer(request).await
-        }
-        Handler::RemoteAccount if request.uri().path() == "/remote/memory/pending" => {
-            remote_memory::pending(state, request).await
-        }
-        Handler::RemoteAccount if request.uri().path() == "/remote/memory/pending/ack" => {
-            remote_memory::ack(state, request).await
-        }
-        Handler::RemoteAccount if request.uri().path() == "/remote/sessions" => {
-            remote_account::create_session(state, request).await
-        }
-        Handler::RemoteAccount => remote_account::unlock(request).await,
+        Handler::RemoteAccount => remote_routes(state, request, uri).await,
         Handler::Computers => computers::route(state, request).await,
         Handler::Mcp => mcp_servers::route(state, request, uri).await,
         Handler::Operation => required(operation_output::route(state, request, uri).await?),
@@ -157,9 +136,35 @@ async fn commands(
         _ => super::super::route(state, request, handler).await,
     }
 }
-fn transcript_request(state: &HttpState, request: &Request<Body>) -> bool {
+async fn remote_routes(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    match uri.path() {
+        _ if remote_read(&state, &request, "/remote/transcripts") => {
+            remote_transcripts::get(&state, uri)
+        }
+        _ if remote_read(&state, &request, "/remote/sessions/state") => {
+            remote_account::session_state(&state).await
+        }
+        _ if !remote_account::admitted(&state, &request)
+            || request.uri().path() == "/remote/sessions/state" =>
+        {
+            Err(HttpError::public(404, "not_found", "Route not found."))
+        }
+        "/remote/memory" => remote_memory::copy(state, request).await,
+        "/remote/memory/answers" => remote_memory::answer(request).await,
+        "/remote/memory/pending" => remote_memory::pending(state, request).await,
+        "/remote/memory/pending/ack" => remote_memory::ack(state, request).await,
+        "/remote/sessions" => remote_account::create_session(state, request).await,
+        _ => remote_account::unlock(request).await,
+    }
+}
+
+fn remote_read(state: &HttpState, request: &Request<Body>, path: &str) -> bool {
     request.method() == Method::GET
-        && request.uri().path() == "/remote/transcripts"
+        && request.uri().path() == path
         && remote_account::from_main(state, request)
 }
 

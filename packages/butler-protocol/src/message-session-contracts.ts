@@ -164,6 +164,8 @@ export interface SessionSummary {
   kind: ChatKind;
   title: string;
   project_id?: string;
+  computer_id?: string;
+  computer_name?: string;
   project?: { id: string; display_name: string };
   session_hint: string;
   created_at: string;

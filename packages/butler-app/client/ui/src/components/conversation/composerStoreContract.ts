@@ -23,6 +23,8 @@ type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
 export interface ComposerStore {
   workspaceMode: "local" | "worktree";
+  computerId: string;
+  setComputerId: (computerId: string) => void;
   setWorkspaceMode: (mode: "local" | "worktree") => void;
   draftRevision: number;
   draftSessionId: string;

@@ -25,6 +25,7 @@ const routes = [
   ["DELETE", path, undefined, "deleteComputer", { id }, { id }],
   ["POST", `${path}/start`, undefined, "startComputer", { id }, { id }],
   ["GET", `${path}/connection`, undefined, "getComputerConnection", { id }, { id }],
+  ["POST", `${path}/reconnect`, undefined, "reconnectComputer", { id }, { id }],
   ["PATCH", path, model, "updateComputerModel", { id, payload: model }, { id, payload: model }],
   ["PUT", path, { ...added, ...model }, "editComputer", { id, payload: { ...added, ...model } }, { id, payload: { ...added, ...model } }],
   ["POST", `${path}/oauth/start`, kind, "startComputerOauth", { id, payload: kind }, { id, payload: kind }],

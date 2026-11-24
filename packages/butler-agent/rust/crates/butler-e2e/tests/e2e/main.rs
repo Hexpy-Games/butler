@@ -185,6 +185,7 @@ mod remote_deploy;
 mod remote_live;
 mod remote_memory;
 mod remote_mode;
+mod remote_session_list;
 mod remote_sessions;
 mod research_eval;
 mod sandbox_installation;

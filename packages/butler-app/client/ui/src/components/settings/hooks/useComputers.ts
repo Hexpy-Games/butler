@@ -2,10 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { setComputerConnection, useComputerConnections } from "@/app/computerEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
-import type { MainModelKind } from "../computerTypes";
+import type { ComputerConnection, MainModelKind } from "../computerTypes";
 import { computerConnection, deleteComputer, forgetComputerMemory, listComputers, type Computer } from "../computersApi";
 
 export type ComputerStatus = "connected" | "disconnected" | "aiNeeded" | "stopsOnLogout";
+
+export function computerStatus(computer: Computer, connection: ComputerConnection): ComputerStatus {
+  if (connection === "unreachable" || connection === "reconnecting") return "disconnected";
+  if (!computer.ai_connected) return "aiNeeded";
+  if (computer.stops_on_logout) return "stopsOnLogout";
+  return "connected";
+}
 
 export function useComputers() {
   const [computers, setComputers] = useState<Computer[]>([]);
@@ -42,11 +49,7 @@ export function useComputers() {
   }, [refresh]);
 
   function statusOf(computer: Computer): ComputerStatus {
-    const connection = states[computer.id] ?? "idle";
-    if (connection === "unreachable" || connection === "reconnecting") return "disconnected";
-    if (!computer.ai_connected) return "aiNeeded";
-    if (computer.stops_on_logout) return "stopsOnLogout";
-    return "connected";
+    return computerStatus(computer, states[computer.id] ?? "idle");
   }
 
   async function remove(computer: Computer, forget: boolean) {

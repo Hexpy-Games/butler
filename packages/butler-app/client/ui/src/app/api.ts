@@ -98,7 +98,7 @@ interface ButlerAppBridge extends PendingAsksBridge {
   }) => Promise<SessionFolderLaunchResult>;
   exportDocument?: (input: { format: "markdown" | "pdf"; name: string; content: string }) => Promise<unknown>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
-  openMessageFile?: (input: { fileId: string }) => Promise<{ opened: boolean; revealed?: boolean; code?: string }>;
+  openMessageFile?: (input: { fileId: string; sessionId?: string }) => Promise<{ opened: boolean; revealed?: boolean; code?: string }>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
   testDesktopNotification?: () => Promise<unknown>;
@@ -675,7 +675,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       path: url.pathname, method,
       ...(options.body == null ? {} : { body: parseBody(options.body) }),
     });
-    return /^\/memory\/(?:pattern-proposals(?:\/[^/]+)?|consolidation)$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
+    return /^\/memory\/(?:pattern-proposals(?:\/[^/]+)?|consolidation|instructions\/pending\/[^/]+)$/u.test(url.pathname) ? unwrapBridgeResult<T>(result) : result as T;
   }
   const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/);
   if (projectMatch && method === "PATCH") {
@@ -731,6 +731,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       title: body.title,
       initialMessage: body.initial_message,
       workspaceMode: body.workspace_mode,
+      computerId: body.computer_id,
       projectId: body.project_id,
       sessionHint: body.session_hint,
       idempotencyKey: body.idempotency_key,
