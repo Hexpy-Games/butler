@@ -4,12 +4,14 @@
 //! One owned thread writes the store (`writer.rs`); callers only send it rows. The IPC payload
 //! `bodies` lane of `log/bodies.mjs` is not ported: it records Electron IPC at the `full`
 //! level, and the shell has no IPC.
+mod bridge;
 mod crash;
 mod redact;
 mod writer;
 pub(crate) mod zip;
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
@@ -18,6 +20,7 @@ use chrono::Utc;
 use gpui::App;
 use serde_json::{Value, json};
 
+pub(crate) use bridge::install as install_log_bridge;
 use writer::Writer;
 
 use crate::ui::source::agent::Jobs;
@@ -33,6 +36,8 @@ enum Msg {
 
 static WRITER: OnceLock<Sender<Msg>> = OnceLock::new();
 static DATA: OnceLock<PathBuf> = OnceLock::new();
+static PENDING: Mutex<Vec<Value>> = Mutex::new(Vec::new());
+const PENDING_MAX: usize = 64;
 
 /// `MESSAGES` + `appMessage`: the readable text of an event id.
 fn message(event: &str) -> String {
@@ -142,6 +147,12 @@ pub(crate) fn install_crash_hook(data: &Path) {
             .spawn(move || run(root, &rx))
             .is_ok()
         {
+            let mut pending = PENDING
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for row in pending.drain(..) {
+                let _ = tx.send(Msg::Record(row));
+            }
             let _ = WRITER.set(tx);
             let _ = DATA.set(data.to_path_buf());
             app_log(
@@ -174,7 +185,20 @@ pub(crate) fn read_crashes(data: &Path) -> Vec<Value> {
 
 /// One app log line (`ui.send`, `ui.error`, …); secrets are redacted before writing.
 pub(crate) fn app_log(level: &str, category: &str, event: &str, attrs: Value) {
-    send(Msg::Record(row(level, category, event, attrs)));
+    let row = row(level, category, event, attrs);
+    if let Some(tx) = WRITER.get() {
+        let _ = tx.send(Msg::Record(row));
+        return;
+    }
+    // Before the writer starts (gpui's own startup), rows wait here, bounded.
+    let mut pending = PENDING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(tx) = WRITER.get() {
+        let _ = tx.send(Msg::Record(row));
+    } else if pending.len() < PENDING_MAX {
+        pending.push(row);
+    }
 }
 
 /// `refresh`: reads `/logs/config` and the committed settings, then applies them. A failed

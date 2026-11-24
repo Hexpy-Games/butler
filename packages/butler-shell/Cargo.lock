@@ -1134,6 +1134,7 @@ dependencies = [
  "gpui_ce_elements",
  "gpui_ce_platform",
  "gpui_ce_wgpu",
+ "log",
  "notify",
  "percent-encoding",
  "regex",
