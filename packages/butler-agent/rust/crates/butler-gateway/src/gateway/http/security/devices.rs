@@ -49,6 +49,7 @@ pub(in crate::gateway::http) struct DeviceRegistry {
     changes: tokio::sync::Mutex<()>,
     shutdown: CancellationToken,
     cookie_name: String,
+    host_cookie_name: String,
     butler_id: String,
     #[cfg(feature = "e2e-fixtures")]
     clock_offset: AtomicU64,
@@ -88,6 +89,7 @@ impl DeviceRegistry {
             changes: tokio::sync::Mutex::new(()),
             shutdown,
             cookie_name: format!("butler_session_{port}"),
+            host_cookie_name: format!("__Host-butler_session_{port}"),
             butler_id,
             #[cfg(feature = "e2e-fixtures")]
             clock_offset: AtomicU64::new(0),
@@ -150,10 +152,14 @@ impl DeviceRegistry {
         secure: bool,
     ) -> Result<(HeaderValue, String), HttpError> {
         let (id, secret) = self.insert(name, ip, DeviceKind::Browser).await?;
+        let name = if secure {
+            &self.host_cookie_name
+        } else {
+            &self.cookie_name
+        };
         let transport = if secure { "; Secure" } else { "" };
         let cookie = HeaderValue::from_str(&format!(
-            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}",
-            self.cookie_name
+            "{name}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}"
         ))
         .map_err(|_| HttpError::public(500, "session_unavailable", "Session unavailable."))?;
         Ok((cookie, id))
@@ -227,7 +233,7 @@ impl DeviceRegistry {
                 let Some((name, value)) = pair.trim().split_once('=') else {
                     continue;
                 };
-                if name != self.cookie_name {
+                if name != self.cookie_name && name != self.host_cookie_name {
                     continue;
                 }
                 let mut parts = value.split('.');

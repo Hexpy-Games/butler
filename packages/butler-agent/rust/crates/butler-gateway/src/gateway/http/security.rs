@@ -23,6 +23,7 @@ mod cors;
 mod fetch_metadata;
 mod keys;
 pub(super) mod lan;
+mod pairing_limit;
 mod request_policy;
 mod signed_urls;
 
@@ -31,7 +32,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use axum::body::Body;
-use axum::http::{HeaderMap, Method, Request, StatusCode, Uri, header};
+use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, Uri, header};
 use axum::response::Response;
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -40,6 +41,7 @@ pub(super) use client_place::is_local_client;
 pub(super) use connect::CONNECT_PATH;
 pub(super) use cors::{apply as apply_cors, preflight};
 pub(super) use keys::KeySet;
+pub(super) use pairing_limit::PairingLimits;
 pub(super) use request_policy::{RequestOrigin, require_json_body};
 
 use super::{HttpError, error::json, static_ui};
@@ -220,7 +222,13 @@ impl GatewaySecurity {
             StatusCode::TOO_MANY_REQUESTS => ConnectPage::RateLimited,
             _ => ConnectPage::Failed,
         };
-        page.response_with_status(status)
+        let mut response = page.response_with_status(status);
+        if let HttpError::RateLimited { retry_after } = error {
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from(*retry_after));
+        }
+        response
     }
 
     /// Check proposed trusted hosts against the stored content listener.

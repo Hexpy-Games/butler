@@ -970,6 +970,7 @@ export const enUsCopy: AppCopy = {
     allowPaymentSite: "Always allow payments here",
     allowSiteDescription: "Turns on Use in all conversations. · Turn off in Settings › Browser.",
     paymentSkipped: (site, amount) => ["Payment confirmation skipped", site, amount].filter(Boolean).join(" · "),
+    devicePaired: (name) => ["New device connected", name].filter(Boolean).join(" · "),
     allowScope: "Choose permission scope",
     allowAlways: "Always allow",
     allowAlwaysDescription: "Applies to all chats and schedules. Remove it in Settings → Security.",

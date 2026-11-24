@@ -945,6 +945,7 @@ export interface AppCopy {
     allowPaymentSite: string;
     allowSiteDescription: string;
     paymentSkipped: (site: string, amount: string) => string;
+    devicePaired: (name: string) => string;
     allowScope: string;
     allowConversation: string;
     allowAlways: string;

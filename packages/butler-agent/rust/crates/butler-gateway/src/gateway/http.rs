@@ -124,6 +124,7 @@ struct HttpState {
     security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
+    pairing: security::PairingLimits,
     shutdown: CancellationToken,
     favicons: Arc<favicons::Favicons>,
     uploads: tokio::sync::Semaphore,

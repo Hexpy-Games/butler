@@ -43,6 +43,7 @@ pub(in crate::gateway::http) async fn pair_device_request(
         .get::<ConnectInfo<std::net::SocketAddr>>()
         .map(|info| info.0.ip().to_string())
         .unwrap_or_default();
+    let key = super::pairing_limit::client_key(&request);
     let body = read_body_with_limit(request.into_body(), super::connect::MAX_FORM_BYTES).await?;
     let PairRequest {
         code,
@@ -65,16 +66,17 @@ pub(in crate::gateway::http) async fn pair_device_request(
         return Err(super::connect::invalid_code());
     }
     let _change = state.remote.changes.lock().await;
+    state.pairing.check(&key)?;
     let keyed = state
         .security
         .sessions()
-        .ok_or_else(super::connect::invalid_code)?;
+        .ok_or_else(|| super::connect::rejected(state, &key))?;
     let sessions = keyed
         .sessions
         .as_ref()
-        .ok_or_else(super::connect::invalid_code)?;
+        .ok_or_else(|| super::connect::rejected(state, &key))?;
     let Some(Some(pairing_id)) = sessions.redeem(code, true, &ip) else {
-        return Err(super::connect::invalid_code());
+        return Err(super::connect::rejected(state, &key));
     };
     let (id, device_token) = state.devices.pair_token(name, &ip, kind).await?;
     let mut payload = Map::new();
