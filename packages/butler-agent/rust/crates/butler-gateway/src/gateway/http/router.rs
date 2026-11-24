@@ -466,7 +466,6 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/worker-activity/{id}", Handler::Monitors),
     ("/worker-activity/{id}/control", Handler::Monitors),
     ("/authority-permissions/revoke", Handler::Authority),
-    ("/allowed-folders", Handler::Authority),
     ("/allowed-folders/remove", Handler::Authority),
     ("/internal/browser-host/credentials/{id}", Handler::Browser),
     ("/internal/browser-host/vault/{id}", Handler::Browser),
