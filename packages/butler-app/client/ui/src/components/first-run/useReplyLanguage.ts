@@ -3,10 +3,10 @@ import { api } from "@/app/api.ts";
 import { onboardingCompletedPatch } from "@/app/onboarding.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { PersonalizationView, SettingsView } from "@/app/types.ts";
-import type { FirstRunProviderCardId } from "@/app/setupProviders.ts";
+import type { ProviderCardId } from "@/app/setupProviders.ts";
 import type { FirstRunResult } from "./useFirstRunFlow";
 
-type Connected = { cardId: FirstRunProviderCardId; settings: SettingsView };
+type Connected = { cardId: ProviderCardId; settings: SettingsView };
 
 /** Keep onboarding incomplete until the explicit reply choice is durable. */
 export function useReplyLanguage({ connected, language, onComplete, onSaved }: {

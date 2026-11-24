@@ -9,13 +9,13 @@ import {
   Server,
   Typo,
 } from "@/butler-ds";
-import type { FirstRunProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
+import type { ProviderCardId, LocalModelOption, ProviderCardLogo } from "@/app/setupProviders.ts";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** Detected models on this computer (or on a typed server): pick one and start. */
 export function FirstRunModelPicker({ cardId, flow, options, apiKey, title, body }: {
-  cardId: FirstRunProviderCardId;
+  cardId: ProviderCardId;
   flow: FirstRunFlow;
   options: LocalModelOption[];
   apiKey?: string;

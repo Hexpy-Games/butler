@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PROVIDER_CARDS, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
+import { providerCard, type ProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
 import type { ConnectView, FirstRunMode } from "./useFirstRunFlow";
 import type { useConnectionCommit } from "./useConnectionCommit";
 import type { useSignIn } from "./useSignIn";
@@ -21,7 +21,7 @@ export function connectionActions({ stages, commit, signIn, current, onCancel }:
   stages: ReturnType<typeof useFirstRunStages>;
   commit: ReturnType<typeof useConnectionCommit>;
   signIn: ReturnType<typeof useSignIn>;
-  current: FirstRunProviderCardId | null;
+  current: ProviderCardId | null;
   onCancel?: () => void;
 }) {
   const { setView, setImportDone, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
@@ -36,7 +36,7 @@ export function connectionActions({ stages, commit, signIn, current, onCancel }:
   };
   return {
     ...stageActions(stages, commit),
-    pick: (cardId: FirstRunProviderCardId) => {
+    pick: (cardId: ProviderCardId) => {
       setAuthDone(false); setReplyDone(false); setAdvanceOnConnect(false);
       pickProvider(cardId, commit, setView);
     },
@@ -46,9 +46,9 @@ export function connectionActions({ stages, commit, signIn, current, onCancel }:
     },
     backToList,
     showCustomModels: (options: LocalModelOption[], apiKey?: string) => setView({ kind: "customModels", options, apiKey }),
-    connectKey: (cardId: FirstRunProviderCardId, credentialId: string) =>
+    connectKey: (cardId: ProviderCardId, credentialId: string) =>
       commit.submit({
-        kind: "hosted", cardId, providerId: PROVIDER_CARDS[cardId].providerId ?? cardId, authType: "api_key", credentialId,
+        kind: "hosted", cardId, providerId: providerCard(cardId).providerId, authType: "api_key", credentialId,
         // Routine presets are for a new AI; the AI already in use keeps its model and effort.
         keepDefaults: current === cardId,
       }),
@@ -56,14 +56,14 @@ export function connectionActions({ stages, commit, signIn, current, onCancel }:
 }
 
 /** ② for a card: sign-in, its key form, or Other (models on this computer plus a server address). */
-function connectionView(cardId: FirstRunProviderCardId): ConnectView {
-  const kind = PROVIDER_CARDS[cardId].kind;
+function connectionView(cardId: ProviderCardId): ConnectView {
+  const kind = providerCard(cardId).kind;
   return kind === "key" ? { kind: "key", cardId } : { kind };
 }
 
 /** Selecting a provider only opens its connection screen. */
 function pickProvider(
-  cardId: FirstRunProviderCardId,
+  cardId: ProviderCardId,
   commit: ReturnType<typeof useConnectionCommit>,
   setView: (view: ConnectView) => void,
 ): void {
@@ -78,7 +78,7 @@ function stageActions(stages: ReturnType<typeof useFirstRunStages>, commit: Retu
     /** ② done: the connection is live; ③ asks the reply language. */
     toReply: () => setAuthDone(true),
     /** ② for a model pick: connect, then open ③ once connected. */
-    connectAndAdvance: (cardId: FirstRunProviderCardId, option: LocalModelOption, apiKey?: string) => {
+    connectAndAdvance: (cardId: ProviderCardId, option: LocalModelOption, apiKey?: string) => {
       setAdvanceOnConnect(true);
       commit.submit({ kind: "local", cardId, option, apiKey });
     },

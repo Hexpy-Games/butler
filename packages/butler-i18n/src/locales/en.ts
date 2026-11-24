@@ -296,8 +296,7 @@ const firstRun = {
     },
     providerDescriptions: {
       chatgpt: "Continue with ChatGPT", claude: "Use an Anthropic API key", gemini: "Use a Google AI Studio key",
-      openai: "OpenAI API key", grok: "xAI API key", qwen: "Qwen Cloud API key",
-      kimi: "Moonshot API key", zaiCoding: "Coding Plan key", zaiApi: "Z.AI API key", opencodeGo: "OpenCode Go key",
+      zaiCoding: "Coding Plan key", opencodeGo: "OpenCode Go key",
       other: "Ollama, LM Studio or your own server",
     },
     tagCurrent: "In use",

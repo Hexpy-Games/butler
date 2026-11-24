@@ -12,14 +12,18 @@ import {
   readinessProgress,
 } from "../../packages/butler-app/client/ui/src/app/setupReadiness.ts";
 import {
-  MORE_CARD_IDS,
+  TOP_CARD_IDS,
   connectionCardId,
-  providerLogoName,
-  PROVIDER_CARDS,
   customModelOptions,
+  hostedProviders,
+  keyCardId,
   knownContextWindow,
   localModelOptions,
+  providerCard,
+  providerCardDescription,
   providerCardLayout,
+  providerCardName,
+  providerLogoName,
 } from "../../packages/butler-app/client/ui/src/app/setupProviders.ts";
 import {
   defaultModelSettingsPatch,
@@ -28,7 +32,15 @@ import {
 } from "../../packages/butler-app/client/ui/src/app/setupConnection.ts";
 import type { AppModelSummary, ModelCatalogView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
+import staticCatalog from "../../packages/butler-agent/rust/crates/butler-models/src/models/catalog/static-catalog.json";
+
 const en = getAppCopy("en-US").firstRun;
+const ko = getAppCopy("ko-KR").firstRun;
+type StaticModel = { provider_id: string; provider_label: string; output_modalities?: string[] };
+/** The shipped catalog's providers as `/model-catalog` lists them: first-seen providers of the non-image models. */
+const providers = [...new Map((staticCatalog as { models: StaticModel[] }).models.filter((m) => !m.output_modalities?.includes("image"))
+  .map((m) => [m.provider_id, m.provider_label] as const)).entries()].map(([provider_id, provider_label]) => ({ provider_id, provider_label, latest_model_ref: "", models: [] }));
+const hosted = hostedProviders({ providers: [...providers, { provider_id: "local", provider_label: "Local", latest_model_ref: "", models: [] }] });
 
 test("local preparation gates agent readiness; a pre-#230 agent without the route counts as ready", () => {
   expect(combineReadiness({ phase: "checking" }, null)).toEqual({ status: "preparing", steps: [] });
@@ -97,27 +109,24 @@ test("bug-report info is localized by the renderer, not the desktop bridge", () 
   expect(localized.errors.map((error) => error.message)).toEqual(["백그라운드 서비스가 멈췄습니다.", "백그라운드 서비스가 응답하지 않습니다."]);
 });
 
-test("Other holds local models and joins the top tier only when a local server is reachable", () => {
-  expect(providerCardLayout({ localReachable: false })).toEqual({
-    top: ["chatgpt", "claude", "gemini"],
-    more: [...MORE_CARD_IDS],
-  });
-  expect(providerCardLayout({ localReachable: true })).toEqual({
-    top: ["chatgpt", "claude", "gemini", "other"],
-    more: MORE_CARD_IDS.filter((id) => id !== "other"),
-  });
-  expect(Object.keys(PROVIDER_CARDS)).not.toContain("local");
-  expect(MORE_CARD_IDS).toHaveLength(8);
-  expect(MORE_CARD_IDS.at(-1)).toBe("other");
-  expect(PROVIDER_CARDS.chatgpt).toMatchObject({ kind: "signin", providerId: "openai", logo: "openai" });
-  expect(PROVIDER_CARDS.chatgpt).not.toHaveProperty("tag");
-  expect(PROVIDER_CARDS.kimi).toMatchObject({ kind: "key", providerId: "kimi", logo: "kimi" });
-  expect(PROVIDER_CARDS.zaiApi).toMatchObject({ kind: "key", providerId: "zai-api", logo: "zai" });
-  expect(PROVIDER_CARDS.other).toMatchObject({ kind: "custom", icon: "server" });
-  for (const id of Object.keys(PROVIDER_CARDS) as Array<keyof typeof PROVIDER_CARDS>) {
-    expect(en.providerNames[id].length).toBeGreaterThan(0);
-    if (PROVIDER_CARDS[id].kind === "key") expect(PROVIDER_CARDS[id].providerId).toBeTruthy();
+test("the cards are the top picks plus every hosted catalog provider; Other joins the top only when a local server answers", () => {
+  expect(hosted.map((entry) => entry.providerId)).not.toContain("local");
+  for (const localReachable of [false, true]) {
+    const { top, more } = providerCardLayout({ localReachable, hosted }), cards = [...top, ...more];
+    expect(top.slice(0, 3)).toEqual(["chatgpt", "claude", "gemini"]);
+    expect([top.includes("other"), more.includes("other")]).toEqual([localReachable, !localReachable]);
+    expect(new Set(cards.filter((id) => providerCard(id).kind === "key"))).toEqual(new Set(hosted.map((entry) => keyCardId(entry.providerId))));
+    for (const id of cards) {
+      if (providerCard(id).kind === "key") expect(keyCardId(providerCard(id).providerId)).toBe(id);
+      for (const copy of [en, ko]) {
+        expect(providerCardName(id, copy, hosted).length).toBeGreaterThan(0);
+        if (!Object.hasOwn(copy.providerDescriptions, id)) expect(providerCardDescription(id, copy)).toBe(copy.keyLabel);
+      }
+    }
   }
+  // An empty catalog still shows the top picks and Other.
+  expect(providerCardLayout({ localReachable: false, hosted: [] })).toEqual({ top: [...TOP_CARD_IDS], more: ["other"] });
+  expect([providerCard("chatgpt").kind, providerCard("other").kind]).toEqual(["signin", "custom"]);
 });
 
 test("local servers flatten into model options from reachable servers only", () => {
@@ -210,15 +219,16 @@ test("the default model patch sets the chat model, effort and every worker profi
 test("the connected model maps back to its first-run card (Run setup again shows it as current)", () => {
   const model = (patch: Partial<AppModelSummary>): AppModelSummary => ({ ...FIRST_RUN_TEST_MODEL, ...patch });
   expect(connectionCardId(model({ provider_id: "openai", auth_type: "chatgpt_oauth" }))).toBe("chatgpt");
-  expect(connectionCardId(model({ provider_id: "openai", auth_type: "api_key" }))).toBe("openai");
-  expect(connectionCardId(model({ provider_id: "anthropic" }))).toBe("claude");
-  expect(connectionCardId(model({ provider_id: "google" }))).toBe("gemini");
-  expect(connectionCardId(model({ provider_id: "zai-api" }))).toBe("zaiApi");
   expect(connectionCardId(model({ provider_id: "local", platform: "ollama" }))).toBe("other");
   expect(connectionCardId(model({ provider_id: "local", platform: "lm_studio" }))).toBe("other");
   expect(connectionCardId(model({ provider_id: "local", platform: "custom" }))).toBe("other");
-  expect(connectionCardId(model({ provider_id: "unknown" }))).toBeNull();
   expect(connectionCardId(undefined)).toBeNull();
+  const cards = new Set(Object.values(providerCardLayout({ localReachable: false, hosted })).flat());
+  for (const { providerId } of hosted) {
+    const card = connectionCardId(model({ provider_id: providerId, auth_type: "api_key" }));
+    expect([card, cards.has(card!)]).toEqual([keyCardId(providerId), true]);
+  }
+  expect(connectionCardId(model({ provider_id: "" }))).toBeNull();
 });
 
 test("provider logos: one DS logo name per provider, local servers by platform, none for a custom server", () => {

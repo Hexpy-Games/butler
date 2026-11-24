@@ -14,19 +14,19 @@ import {
   Tooltip,
   Typo,
 } from "@/butler-ds";
-import { PROVIDER_CARDS, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
+import { providerCard, providerCardName, type ProviderCardId } from "@/app/setupProviders.ts";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { KeyCheckFailure } from "@/app/setupConnection.ts";
 import { RETRYABLE_KEY_FAILURES, useKeyVerification, type KeyStatus } from "./useKeyVerification";
 import type { FirstRunFlow } from "./useFirstRunFlow";
 
 /** One API key field, checked on paste; no name field and no Add button. */
-export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
+export function FirstRunKeyForm({ cardId, flow }: { cardId: ProviderCardId; flow: FirstRunFlow }) {
   const { copy } = flow;
-  const spec = PROVIDER_CARDS[cardId];
-  const name = copy.providerNames[cardId];
+  const card = providerCard(cardId);
+  const name = providerCardName(cardId, copy, flow.hosted);
   const key = useKeyVerification({
-    providerId: spec.providerId ?? cardId,
+    providerId: card.providerId,
     onVerified: (credentialId) => flow.connectKey(cardId, credentialId),
   });
   const bad = isKeyFailure(key.status);
@@ -56,7 +56,7 @@ export function FirstRunKeyForm({ cardId, flow }: { cardId: FirstRunProviderCard
         <KeyStatusLine copy={copy} status={connected ? "valid" : connecting ? "checking" : key.status} onRetry={key.retry} />
       </Field>
       <Inline gap="md">
-        {spec.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={spec.keyUrl} iconSrc={faviconSrc(spec.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
+        {card.keyUrl ? <Typo.Body as="span"><InlineReference kind="external" href={card.keyUrl} iconSrc={faviconSrc(card.keyUrl)}>{copy.getKey}</InlineReference></Typo.Body> : null}
         <Typo.Caption tone="tertiary">{copy.keyStored}</Typo.Caption>
       </Inline>
     </FirstRunStepCard>

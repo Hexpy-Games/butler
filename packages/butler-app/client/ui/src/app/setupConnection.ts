@@ -1,7 +1,7 @@
 import { api, apiErrorCode } from "./api.ts";
 import { appCopy } from "./copy.ts";
 import { normalizeReadiness, type SetupReadinessView } from "./setupReadiness.ts";
-import { knownContextWindow, type FirstRunProviderCardId, type LocalModelOption, type LocalModelServerView } from "./setupProviders.ts";
+import { knownContextWindow, type ProviderCardId, type LocalModelOption, type LocalModelServerView } from "./setupProviders.ts";
 import type {
   AppModelSummary,
   HostedModelRegistrationResult,
@@ -155,11 +155,11 @@ export function defaultModelSettingsPatch(settings: SettingsView, model: AppMode
 
 export type PendingConnection =
   | {
-    kind: "hosted"; cardId: FirstRunProviderCardId; providerId: string; authType: "api_key" | "chatgpt_oauth"; credentialId?: string;
+    kind: "hosted"; cardId: ProviderCardId; providerId: string; authType: "api_key" | "chatgpt_oauth"; credentialId?: string;
     /** Run setup again with the AI already in use: keep the chat model, effort and Workers. */
     keepDefaults?: boolean;
   }
-  | { kind: "local"; cardId: FirstRunProviderCardId; option: LocalModelOption; apiKey?: string };
+  | { kind: "local"; cardId: ProviderCardId; option: LocalModelOption; apiKey?: string };
 
 const DEFAULT_LOCAL_CONTEXT_TOKENS = 16_384;
 

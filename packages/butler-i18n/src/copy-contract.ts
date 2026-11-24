@@ -2,10 +2,13 @@ import type { CanonCopy } from "./canon-copy.ts";
 import type { TaskGraphCopy } from "./task-graph-copy.ts";
 
 import type { LifecycleCopy } from "./lifecycle.ts";
-/** Provider cards on the first-run "Pick an AI" screen. */
+/** First-run cards with their own name; any other catalog provider's key card is named by the catalog. */
 export type FirstRunProviderCardId =
   | "chatgpt" | "claude" | "gemini" | "openai" | "grok" | "qwen"
   | "kimi" | "zaiCoding" | "zaiApi" | "opencodeGo" | "other";
+
+/** Cards whose key is not a plain provider API key (or a top pick) keep their own description; the rest say `keyLabel`. */
+export type FirstRunDescribedCardId = "chatgpt" | "other" | "claude" | "gemini" | "zaiCoding" | "opencodeGo";
 
 interface FirstRunCopy {
   product: string;
@@ -67,7 +70,7 @@ interface FirstRunCopy {
   connectLede: string;
   prepWaitConnect: string;
   providerNames: Record<FirstRunProviderCardId, string>;
-  providerDescriptions: Record<FirstRunProviderCardId, string>;
+  providerDescriptions: Record<FirstRunDescribedCardId, string>;
   /** Tag on the connected AI when setup runs again. */
   tagCurrent: string;
   localModelCount: (count: number) => string;

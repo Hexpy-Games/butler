@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { getAppCopy } from "../../packages/butler-i18n/src";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding";
-import { PROVIDER_CARDS } from "../../packages/butler-app/client/ui/src/app/setupProviders";
+import { TOP_CARD_IDS, keyCardId, providerCard } from "../../packages/butler-app/client/ui/src/app/setupProviders";
 import { createNativeAppServer } from "../support/native-app-server";
 import { firstRunElectron } from "../support/first-run-electron";
 import { firstRunStub } from "../support/first-run-stub";
@@ -94,11 +94,16 @@ try {
   await page.getByRole("button", { name: copy.firstRun.memoryChoice.continue, exact: true }).click();
   await page.locator('[data-test-class="first-run-top-cards"]').waitFor();
   await clickEveryLink("providers", []);
-  // Every card that is not a browser sign-in (those are checked below), with exactly its own key page.
-  for (const spec of Object.values(PROVIDER_CARDS).filter(card => card.kind !== "signin")) {
-    await openCard(spec.id);
+  // Every card that is not a browser sign-in (those are checked below), with exactly its own key page; the list is the catalog.
+  await page.locator('[aria-controls="first-run-more-providers"]').click();
+  const cardIds = await page.locator("[data-card-id]").evaluateAll(cards => cards.map(card => card.getAttribute("data-card-id")!));
+  const catalog = await server.api<{ providers: Array<{ provider_id: string }> }>("/model-catalog");
+  for (const { provider_id } of catalog.providers.filter(entry => entry.provider_id !== "local")) assert.ok(cardIds.includes(keyCardId(provider_id)), `${provider_id} has a card`);
+  for (const cardId of cardIds.filter(id => providerCard(id).kind !== "signin")) {
+    const { keyUrl } = providerCard(cardId);
+    await openCard(cardId);
     await page.locator('[data-test-class="first-run-top-cards"]').waitFor({ state: "detached" });
-    await clickEveryLink(`${spec.id} card`, spec.keyUrl ? [spec.keyUrl] : []);
+    await clickEveryLink(`${cardId} card`, keyUrl ? [keyUrl] : []);
     await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
     await page.locator('[data-test-class="first-run-top-cards"]').waitFor();
   }
@@ -143,8 +148,7 @@ try {
   // The steps after a connection: reply language, import and ready.
   await page.getByRole("button", { name: copy.firstRun.back, exact: true }).click();
   await page.locator('[data-test-class="first-run-top-cards"]').waitFor();
-  const keyCard = Object.values(PROVIDER_CARDS).find(card => card.kind === "key")!;
-  await openCard(keyCard.id);
+  await openCard(TOP_CARD_IDS.find(id => providerCard(id).kind === "key")!);
   await page.locator("#first-run-api-key").fill("stub-test-key");
   await page.getByRole("button", { name: copy.firstRun.next, exact: true }).click();
   await page.locator("#first-run-reply-language:enabled").waitFor();

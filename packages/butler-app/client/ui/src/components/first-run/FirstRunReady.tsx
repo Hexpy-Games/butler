@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
+import { providerCardName } from "@/app/setupProviders.ts";
 import { acknowledgeChatGptNotice } from "@/app/setupSignIn";
 import { ManageChatGptUsage } from "../chatgpt/ChatGptPlanUsage";
 import { KeyValueRow, SetupWizardStepAction, Stack, Typo } from "@/butler-ds";
@@ -20,7 +21,7 @@ export function FirstRunReady({ flow }: { flow: FirstRunFlow }) {
       title={copy.finishing} footerStart={<FirstRunPrepStatus flow={flow} />} />
   );
   const cardId = commit.connected.cardId;
-  const name = copy.providerNames[cardId];
+  const name = providerCardName(cardId, copy, flow.hosted);
   // Rows only for what happened: no import (skipped or nothing added) means no row.
   const agents = flow.mode === "first-run" && imported.agents && imported.agents.instructions + imported.agents.servers > 0 ? imported.agents : null;
   return (

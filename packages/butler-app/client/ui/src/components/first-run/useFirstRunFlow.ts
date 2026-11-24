@@ -1,9 +1,9 @@
 import { useButlerVault } from "../vault/useButlerVault";
 import { useChatGptAccount } from "../chatgpt/useChatGptAccount";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
-import { connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
+import { connectionCardId, hostedProviders, type ProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ModelCatalogView } from "@/app/types.ts";
 import { useWelcomeConsent } from "./useWelcomeConsent";
@@ -26,15 +26,15 @@ export type FirstRunMode = "first-run" | "consent" | "rerun";
 export type ConnectView =
   | { kind: "list" }
   | { kind: "signin" }
-  | { kind: "key"; cardId: FirstRunProviderCardId }
+  | { kind: "key"; cardId: ProviderCardId }
   | { kind: "custom" }
   | { kind: "customModels"; options: LocalModelOption[]; apiKey?: string };
 
 /** What the first run connected, for the landing toast; null when no connection changes. */
-export type FirstRunResult = { cardId: FirstRunProviderCardId } | null;
+export type FirstRunResult = { cardId: ProviderCardId } | null;
 
 /** The card of the model Butler uses now; only "Run setup again" shows it. */
-function currentCardId(mode: FirstRunMode, modelRef: string, catalog: ModelCatalogView): FirstRunProviderCardId | null {
+function currentCardId(mode: FirstRunMode, modelRef: string, catalog: ModelCatalogView): ProviderCardId | null {
   if (mode !== "rerun" || !modelRef) return null;
   const model = [...(catalog.registered_models ?? []), ...catalog.models].find((entry) => entry.model_ref === modelRef);
   return connectionCardId(model);
@@ -90,6 +90,9 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const memory = useMemoryChoice({ setup, saveFailed: copy.memoryChoice.saveFailed, onSaved: () => setScreen(vaultOffered ? "vault" : "connect") });
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
+  // The API key cards: the catalog's hosted providers (the gate loads the catalog before setup mounts).
+  const modelCatalog = useButlerStore((state) => state.modelCatalog);
+  const hosted = useMemo(() => hostedProviders(modelCatalog), [modelCatalog]);
   const commit = useConnectionCommit({
     readinessStatus: setup.readiness.status,
     acceptedAt,
@@ -135,7 +138,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 } : undefined;
 
   return {
-    mode, copy, language, setLanguage, online, screen, setScreen, step, vault, vaultOffered, focusStart, view, savingConsent, local, signIn, chatgpt, connectChatGpt, commit, reply, memory,
+    mode, copy, language, setLanguage, online, screen, setScreen, step, vault, vaultOffered, focusStart, view, savingConsent, local, signIn, chatgpt, connectChatGpt, commit, reply, memory, hosted,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,

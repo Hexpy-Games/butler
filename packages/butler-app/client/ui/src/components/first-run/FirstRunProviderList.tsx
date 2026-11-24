@@ -15,7 +15,7 @@ import {
   Tag,
   Typo,
 } from "@/butler-ds";
-import { providerCardLayout, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
+import { providerCardLayout, providerCardName, type ProviderCardId } from "@/app/setupProviders.ts";
 import { providerCardView } from "./firstRunCardView";
 import { CardGlyph } from "./CardGlyph";
 import { FirstRunStepCard } from "./FirstRunStepCard";
@@ -24,7 +24,7 @@ import type { FirstRunFlow } from "./useFirstRunFlow";
 /** "Pick an AI": the well-known services on top, the rest behind "more". */
 export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   const { copy } = flow;
-  const layout = providerCardLayout({ localReachable: flow.local.reachable });
+  const layout = providerCardLayout({ localReachable: flow.local.reachable, hosted: flow.hosted });
   // Run setup again opens "more" when the AI in use is there.
   const [expanded, setExpanded] = useState(() => Boolean(flow.currentCardId && layout.more.includes(flow.currentCardId)));
   return (
@@ -58,7 +58,7 @@ export function FirstRunProviderList({ flow }: { flow: FirstRunFlow }) {
   );
 }
 
-function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
+function TopCard({ cardId, flow }: { cardId: ProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "card");
   const current = flow.currentCardId === cardId;
   const tag = current ? <Tag tone="accent">{flow.copy.tagCurrent}</Tag> : null;
@@ -71,13 +71,13 @@ function TopCard({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: First
       icon={<CardGlyph cardId={cardId} />}
       state={view.state}
       tag={tag}
-      title={flow.copy.providerNames[cardId]}
+      title={providerCardName(cardId, flow.copy, flow.hosted)}
       onClick={() => flow.pick(cardId)}
     />
   );
 }
 
-function MoreTile({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: FirstRunFlow }) {
+function MoreTile({ cardId, flow }: { cardId: ProviderCardId; flow: FirstRunFlow }) {
   const view = providerCardView(cardId, flow, "tile");
   const current = flow.currentCardId === cardId;
   return (
@@ -88,7 +88,7 @@ function MoreTile({ cardId, flow }: { cardId: FirstRunProviderCardId; flow: Firs
       description={view.description}
       icon={<CardGlyph cardId={cardId} size="md" />}
       state={view.state}
-      title={flow.copy.providerNames[cardId]}
+      title={providerCardName(cardId, flow.copy, flow.hosted)}
       onClick={() => flow.pick(cardId)}
     />
   );

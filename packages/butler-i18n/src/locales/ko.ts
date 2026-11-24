@@ -302,8 +302,7 @@ const firstRun = {
     },
     providerDescriptions: {
       chatgpt: "ChatGPT로 계속하기", claude: "Anthropic API 키로 연결", gemini: "Google AI Studio 키로 연결",
-      openai: "OpenAI API 키", grok: "xAI API 키", qwen: "Qwen Cloud API 키",
-      kimi: "Moonshot API 키", zaiCoding: "코딩 플랜 키", zaiApi: "Z.AI API 키", opencodeGo: "OpenCode Go 키",
+      zaiCoding: "코딩 플랜 키", opencodeGo: "OpenCode Go 키",
       other: "Ollama·LM Studio·직접 서버",
     },
     tagCurrent: "사용 중",

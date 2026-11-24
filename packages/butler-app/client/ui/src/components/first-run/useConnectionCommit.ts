@@ -1,4 +1,4 @@
-import { connectionCardId, type FirstRunProviderCardId } from "@/app/setupProviders.ts";
+import { connectionCardId, type ProviderCardId } from "@/app/setupProviders.ts";
 import { useEffect, useRef, useState } from "react";
 import { consentAcceptedPatch, consentIsCurrent } from "@/app/onboarding.ts";
 import { commitConnection, type PendingConnection } from "@/app/setupConnection.ts";
@@ -31,7 +31,7 @@ export function useConnectionCommit({ readinessStatus, acceptedAt, language, res
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
   const mounted = useRef(true);
-  const [connected, setConnected] = useState<{ cardId: FirstRunProviderCardId; settings: SettingsView } | null>(null);
+  const [connected, setConnected] = useState<{ cardId: ProviderCardId; settings: SettingsView } | null>(null);
 
   useEffect(() => () => {
     mounted.current = false;
