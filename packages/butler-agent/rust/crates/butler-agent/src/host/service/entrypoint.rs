@@ -210,10 +210,6 @@ async fn serve(
     } = admission::prepare(&runtime, config, writer.clone(), instance, stop).await?;
     startup.phase("admission");
 
-    let parent_client = butler_log::http::loopback()
-        .redirect(butler_log::http::RedirectPolicy::none())
-        .build()
-        .map_err(io)?;
     let foreground_lease = capture_foreground_lease(instance)?;
     let readiness = support::publish_readiness(config).await?;
     let gateway = Arc::new(AppGatewayLifecycle::new(
@@ -251,7 +247,6 @@ async fn serve(
                 progress: progress.clone(),
                 config,
                 subsessions: &runtime.subsessions,
-                parent_client: &parent_client,
                 app_endpoint: &app_endpoint,
                 readiness: &readiness,
                 logs,

@@ -4,20 +4,15 @@ use serde_json::Value;
 
 use butler_turn::btcc::{BtccError, PortFuture, WorkerProfile, WorkerProfileReader};
 
-use crate::host::ActiveAppEndpoint;
+use crate::host::{ActiveAppEndpoint, app::self_api::SelfApi};
 
 pub(crate) struct AppWorkerProfileReader {
     endpoint: std::sync::Arc<ActiveAppEndpoint>,
-    client: butler_log::http::Client,
 }
 
 impl AppWorkerProfileReader {
-    pub(crate) fn new(endpoint: std::sync::Arc<ActiveAppEndpoint>) -> Result<Self, BtccError> {
-        let client = butler_log::http::loopback()
-            .redirect(butler_log::http::RedirectPolicy::none())
-            .build()
-            .map_err(|source| error("worker_profile_reader_unavailable").with_source(source))?;
-        Ok(Self { endpoint, client })
+    pub(crate) fn new(endpoint: std::sync::Arc<ActiveAppEndpoint>) -> Self {
+        Self { endpoint }
     }
 }
 
@@ -72,22 +67,11 @@ impl AppWorkerProfileReader {
             .endpoint
             .snapshot()
             .ok_or_else(|| error("worker_profile_settings_unavailable"))?;
-        if !matches!(
-            endpoint.configured_host.as_str(),
-            "127.0.0.1" | "localhost" | "::1"
-        ) {
-            return Err(error("worker_profile_app_endpoint_not_local"));
+        if endpoint.local_auth.required && endpoint.local_auth.token().is_none() {
+            return Err(error("app_local_auth_unconfigured"));
         }
-        let mut request = self.client.get(format!("{}/settings", endpoint.base_url));
-        if endpoint.local_auth.required {
-            let token = endpoint
-                .local_auth
-                .token()
-                .ok_or_else(|| error("app_local_auth_unconfigured"))?;
-            request = request.bearer_auth(token);
-        }
-        let response = request
-            .send()
+        let response = SelfApi::new(&self.endpoint)
+            .request(http::Method::GET, "/settings", None, None, None)
             .await
             .map_err(|source| error("worker_profile_settings_unavailable").with_source(source))?;
         if !response.status().is_success() {

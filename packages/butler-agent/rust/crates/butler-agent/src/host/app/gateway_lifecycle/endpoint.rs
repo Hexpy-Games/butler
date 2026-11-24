@@ -4,7 +4,7 @@ use parking_lot::RwLock;
 use std::{net::SocketAddr, path::PathBuf};
 
 use crate::host::service::configuration::AppServiceConfiguration;
-use butler_gateway::gateway::LocalAuthConfig;
+use butler_gateway::gateway::{InProcessGateway, LocalAuthConfig};
 
 #[derive(Clone)]
 pub(crate) struct ActiveAppEndpoint {
@@ -17,6 +17,7 @@ pub(crate) struct ActiveAppEndpoint {
 #[derive(Clone)]
 pub(crate) struct ActiveAppEndpointSnapshot {
     pub(crate) base_url: String,
+    pub(crate) in_process: Option<InProcessGateway>,
     pub(crate) local_auth: LocalAuthConfig,
     pub(crate) configured_host: String,
     pub(crate) configured_port: u16,
@@ -54,10 +55,12 @@ impl ActiveAppEndpoint {
         address: SocketAddr,
         configuration: &AppServiceConfiguration,
         local_auth: LocalAuthConfig,
+        in_process: Option<InProcessGateway>,
     ) {
         let snapshot = ActiveAppEndpointSnapshot {
             base_url: format!("http://{address}"),
             local_auth,
+            in_process,
             configured_host: configuration.host.clone(),
             configured_port: address.port(),
             database_path: configuration.db_path.clone(),

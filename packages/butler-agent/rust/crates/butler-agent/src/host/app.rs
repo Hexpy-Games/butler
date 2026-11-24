@@ -7,5 +7,6 @@ pub(super) mod new_chat_briefing;
 pub(super) mod plan_decision;
 pub(super) mod runtime_ports;
 pub(in crate::host) mod schedule_clock;
+pub(super) mod self_api;
 pub(super) mod server;
 pub(super) mod subsessions;

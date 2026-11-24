@@ -8,7 +8,7 @@ use butler_turn::btcc::{
     ModelRoundToolCall, RequestOutcome, ToolExecutionError, TurnTaint, UserQuestionResponse,
     UserQuestions, question_request_ref,
 };
-use reqwest::Method;
+use http::Method;
 use serde_json::{Value, json};
 
 pub(super) fn supports(name: &str) -> bool {

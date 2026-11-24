@@ -218,10 +218,8 @@ impl AppGatewayLifecycle {
         if app_config.port == 0 {
             self.allocated_port.store(address.port(), Ordering::Relaxed);
         }
-        // AppServer owns the bound listener and initialized dispatch. A one-shot
-        // HTTP probe can time out under load even while that listener is healthy;
-        // status queries still probe it, but startup must not tear it down for that.
-        self.endpoint.publish(address, app_config, local_auth);
+        self.endpoint
+            .publish(address, app_config, local_auth, server.in_process());
         if let Err(error) = self
             .persist(true, Some(format!("http://{address}")), app_config)
             .await
@@ -319,8 +317,10 @@ impl AppGatewayLifecycle {
         let active = self.endpoint.snapshot();
         let enabled = desired.enabled;
         let running = match (current, active.as_ref()) {
-            (Some(_), Some(active)) => {
-                serves_clients(&active.base_url, active.local_auth.clone()).await
+            (Some(_), Some(active))
+                if !active.local_auth.required || active.local_auth.token().is_some() =>
+            {
+                serves_clients(&self.endpoint).await
             }
             _ => false,
         };
@@ -392,39 +392,23 @@ fn view_status(enabled: bool, running: bool, refusing: bool) -> (&'static str, V
 }
 
 /// A bounded status probe; its result never controls startup admission.
-fn probe_client() -> Option<butler_log::http::Client> {
-    butler_log::http::loopback()
-        .timeout(std::time::Duration::from_millis(500))
-        .build()
-        .ok()
-}
-
-fn health_url(base_url: &str) -> String {
-    format!("{}/health", base_url.trim_end_matches('/'))
-}
-
-/// Whether a client holding the token gets a healthy answer: the view's
-/// `running`, false while the gateway refuses every client.
-async fn serves_clients(base_url: &str, auth: butler_gateway::gateway::LocalAuthConfig) -> bool {
-    let Some(client) = probe_client() else {
-        return false;
-    };
-    let mut request = client.get(health_url(base_url));
-    if auth.required {
-        let Some(token) = auth.token() else {
-            return false;
-        };
-        request = request.bearer_auth(token);
-    }
-    let Ok(response) = request.send().await else {
+/// Whether the active gateway answers its health route.
+async fn serves_clients(endpoint: &ActiveAppEndpoint) -> bool {
+    use crate::host::app::self_api::SelfApi;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(500);
+    let Ok(response) = SelfApi::new(endpoint)
+        .request(http::Method::GET, "/health", None, None, Some(deadline))
+        .await
+    else {
         return false;
     };
     if !response.status().is_success() {
         return false;
     }
-    response
-        .json::<Value>()
-        .await
+    let Ok(bytes) = response.bytes().await else {
+        return false;
+    };
+    serde_json::from_slice::<Value>(&bytes)
         .is_ok_and(|body| body["protocol_version"] == "butler.app.v1" && body["data"]["ok"] == true)
 }
 

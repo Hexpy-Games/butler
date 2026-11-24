@@ -2,8 +2,12 @@
 
 use std::{sync::Arc, time::Duration};
 
+use http::Method;
 use serde_json::{Map, Value};
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
+
+use crate::host::app::self_api::{SelfApi, SelfApiError, SelfBodyError};
 
 use crate::host::{ActiveAppEndpoint, GuidedTools};
 use butler_core::json::JsonDocument;
@@ -35,13 +39,6 @@ pub(super) fn prepare(
         target.clone(),
         Value::Object(normalized),
         Arc::new(TopicConversationEffect {
-            client: butler_log::http::loopback().build().map_err(|source| {
-                butler_turn::btcc::BtccError::relayed(
-                    "app_gateway_unavailable",
-                    "App client unavailable.",
-                )
-                .with_source(source)
-            })?,
             endpoint: owner.app_endpoint.clone(),
             current_session_id: owner.binding.app_session_id.clone(),
             target,
@@ -50,7 +47,6 @@ pub(super) fn prepare(
 }
 
 struct TopicConversationEffect {
-    client: butler_log::http::Client,
     endpoint: Arc<ActiveAppEndpoint>,
     current_session_id: Option<String>,
     target: String,
@@ -226,27 +222,13 @@ impl TopicConversationEffect {
 
         // Use the currently active owner, never pending persisted configuration.
         let Some(current) = self.endpoint.snapshot() else {
-            let failure = adapter("app_gateway_unavailable");
-            return Ok(if reconciling {
-                AdapterOutcome::Uncertain(Some(failure))
-            } else {
-                AdapterOutcome::NotApplied(failure)
-            });
+            return Ok(unavailable(reconciling));
         };
         let auth = current.local_auth;
         if auth.required && auth.token().is_none() {
             return Ok(AdapterOutcome::NotApplied(adapter(
                 "app_local_auth_unconfigured",
             )));
-        }
-        let url = format!("{}/internal/session-branches", current.base_url);
-        let mut request = self
-            .client
-            .post(url)
-            .timeout(Duration::from_secs(60))
-            .header(reqwest::header::CONTENT_TYPE, "application/json");
-        if let Some(token) = auth.token() {
-            request = request.bearer_auth(token);
         }
         let mut body = input
             .as_object()
@@ -257,47 +239,73 @@ impl TopicConversationEffect {
             "current_session_id".into(),
             Value::String(current_session_id.to_owned()),
         );
+        let body = Value::Object(body);
+        let api = SelfApi::new(&self.endpoint);
+        let deadline = Instant::now() + Duration::from_secs(60);
         let sent = tokio::select! {
             biased;
             () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
-            result = request.json(&Value::Object(body)).send() => result,
+            result = api.request(Method::POST, "/internal/session-branches", Some(&body), None, Some(deadline)) => result,
         };
-        let Ok(response) = sent else {
-            return Ok(AdapterOutcome::Uncertain(Some(adapter(
-                "branch_outcome_unknown",
-            ))));
+        let response = match sent {
+            Ok(response) => response,
+            Err(SelfApiError::Unavailable) => return Ok(unavailable(reconciling)),
+            Err(SelfApiError::Unknown) => {
+                return Ok(AdapterOutcome::Uncertain(Some(adapter(
+                    "branch_outcome_unknown",
+                ))));
+            }
         };
         let status = response.status();
         let decoded = tokio::select! {
             biased;
             () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
-            result = response.json::<Value>() => result,
+            result = response.bytes() => result,
         };
-        let Ok(payload) = decoded else {
-            return Ok(AdapterOutcome::Uncertain(Some(adapter(
-                "branch_response_invalid",
-            ))));
-        };
-        if !status.is_success() {
-            let error = payload
-                .get("error")
-                .and_then(|value| value.get("code"))
-                .and_then(Value::as_str)
-                .unwrap_or("branch_request_failed");
-            let failure = adapter(error);
-            return Ok(if status.is_client_error() {
-                AdapterOutcome::NotApplied(failure)
-            } else {
-                AdapterOutcome::Uncertain(Some(failure))
-            });
-        }
-        let Some(data) = payload.get("data").filter(|value| value.is_object()) else {
-            return Ok(AdapterOutcome::Uncertain(Some(adapter(
-                "branch_response_invalid",
-            ))));
-        };
-        JsonDocument::from_value(data)
-            .map(AdapterOutcome::Applied)
-            .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))
+        branch_outcome(status, decoded)
     }
+}
+
+fn unavailable(reconciling: bool) -> AdapterOutcome {
+    let failure = adapter("app_gateway_unavailable");
+    if reconciling {
+        AdapterOutcome::Uncertain(Some(failure))
+    } else {
+        AdapterOutcome::NotApplied(failure)
+    }
+}
+
+fn branch_outcome(
+    status: http::StatusCode,
+    bytes: Result<bytes::Bytes, SelfBodyError>,
+) -> Result<AdapterOutcome, EffectFailure> {
+    let Some(payload) = bytes
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+    else {
+        return Ok(AdapterOutcome::Uncertain(Some(adapter(
+            "branch_response_invalid",
+        ))));
+    };
+    if !status.is_success() {
+        let error = payload
+            .get("error")
+            .and_then(|value| value.get("code"))
+            .and_then(Value::as_str)
+            .unwrap_or("branch_request_failed");
+        let failure = adapter(error);
+        return Ok(if status.is_client_error() {
+            AdapterOutcome::NotApplied(failure)
+        } else {
+            AdapterOutcome::Uncertain(Some(failure))
+        });
+    }
+    let Some(data) = payload.get("data").filter(|value| value.is_object()) else {
+        return Ok(AdapterOutcome::Uncertain(Some(adapter(
+            "branch_response_invalid",
+        ))));
+    };
+    JsonDocument::from_value(data)
+        .map(AdapterOutcome::Applied)
+        .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))
 }

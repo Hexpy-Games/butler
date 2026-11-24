@@ -2,9 +2,11 @@
 
 use std::{path::Path, time::Duration};
 
-use reqwest::Method;
+use http::Method;
 use serde_json::{Map, Value, json};
+use tokio::time::Instant;
 
+use crate::host::app::self_api::SelfApi;
 use crate::host::{ActiveAppEndpoint, service::configuration::AppServiceConfiguration};
 
 #[derive(Debug)]
@@ -22,22 +24,22 @@ impl ScheduleError {
     }
 }
 
-pub(crate) struct ScheduleClient {
-    base_url: String,
-    token: std::sync::Arc<str>,
-    http: butler_log::http::Client,
+const TIMEOUT: Duration = Duration::from_secs(30);
+
+pub(crate) enum ScheduleClient {
+    Tcp {
+        base_url: String,
+        token: std::sync::Arc<str>,
+        http: butler_log::http::Client,
+    },
+    InProcess(ActiveAppEndpoint),
 }
 
 impl ScheduleClient {
     pub(crate) fn active(endpoint: &ActiveAppEndpoint) -> Result<Self, ScheduleError> {
         let snapshot = endpoint.snapshot().ok_or_else(unavailable)?;
-        let token = snapshot.local_auth.token().ok_or_else(unavailable)?;
-        Self::new(
-            snapshot
-                .base_url
-                .replace("http://0.0.0.0:", "http://127.0.0.1:"),
-            token,
-        )
+        snapshot.local_auth.token().ok_or_else(unavailable)?;
+        Ok(Self::InProcess(endpoint.clone()))
     }
 
     pub(crate) fn local(data_root: &Path) -> Result<Self, ScheduleError> {
@@ -51,11 +53,11 @@ impl ScheduleClient {
     }
 
     fn new(base_url: String, token: std::sync::Arc<str>) -> Result<Self, ScheduleError> {
-        Ok(Self {
+        Ok(Self::Tcp {
             base_url,
             token,
             http: butler_log::http::loopback()
-                .timeout(Duration::from_secs(30))
+                .timeout(TIMEOUT)
                 .redirect(butler_log::http::RedirectPolicy::none())
                 .build()
                 .map_err(|_| unavailable())?,
@@ -68,16 +70,38 @@ impl ScheduleClient {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, ScheduleError> {
-        let mut request = self
-            .http
-            .request(method, format!("{}{path}", self.base_url))
-            .bearer_auth(&self.token);
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let response = request.send().await.map_err(|_| unavailable())?;
-        let status = response.status();
-        let body: Value = response.json().await.map_err(|_| unavailable())?;
+        let (status, bytes) = match self {
+            Self::Tcp {
+                base_url,
+                token,
+                http,
+            } => {
+                let mut request = http
+                    .request(method, format!("{base_url}{path}"))
+                    .bearer_auth(token);
+                if let Some(body) = body {
+                    request = request.json(&body);
+                }
+                let response = request.send().await.map_err(|_| unavailable())?;
+                let status = response.status();
+                (status, response.bytes().await.map_err(|_| unavailable())?)
+            }
+            Self::InProcess(endpoint) => {
+                let response = SelfApi::new(endpoint)
+                    .request(
+                        method,
+                        path,
+                        body.as_ref(),
+                        None,
+                        Some(Instant::now() + TIMEOUT),
+                    )
+                    .await
+                    .map_err(|_| unavailable())?;
+                let status = response.status();
+                (status, response.bytes().await.map_err(|_| unavailable())?)
+            }
+        };
+        let body: Value = serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
         if !status.is_success() {
             return Err(ScheduleError {
                 code: body
