@@ -57,4 +57,5 @@ CLEAR_PLAN = "UPDATE canon_epics SET plan_id=NULL,revision=revision+1,updated_at
 pub const LINKS: &str = "SELECT * FROM canon_space_links ORDER BY linked_at";
 /// Remote plan delete only (no local plan delete exists in phase 1). Its
 /// foreign-key check scans `canon_session_queue_chains`, so it is not pinned.
+/// That FK is ON DELETE SET NULL: it also clears `canon_session_queue_chains.plan_id`.
 pub const DELETE_PLAN: &str = "DELETE FROM canon_plans WHERE id=?1";

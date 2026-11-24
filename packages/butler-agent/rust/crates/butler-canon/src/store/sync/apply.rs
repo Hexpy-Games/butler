@@ -281,9 +281,16 @@ fn replace(
     owned(tx, id, project)?;
     match (spec(kind), kind) {
         (Some(spec), "plan" | "epic" | "tag") => match local(tx, spec, id, project)? {
-            Some(_) => {
-                let fields = resolve(tx, project, spec, item.fields)?;
-                write_fields(tx, ctx, (spec, project), id, &fields, quiet)?;
+            Some(row) => {
+                // Only the keys that differ; an unchanged entity writes nothing locally.
+                let current = data(spec, &row);
+                let fields: Map<String, Value> = resolve(tx, project, spec, item.fields)?
+                    .into_iter()
+                    .filter(|(name, value)| current.get(name) != Some(value))
+                    .collect();
+                if !fields.is_empty() {
+                    write_fields(tx, ctx, (spec, project), id, &fields, quiet)?;
+                }
                 let copy = data(spec, &one(tx, spec.read, [id])?);
                 put(tx, project, (kind, id, id, None), item.revision, &copy)?;
             }
