@@ -11,7 +11,6 @@ pub(super) const RESET: u8 = 4;
 pub(super) const WINDOW: u8 = 5;
 
 pub(super) const TOO_LARGE: u8 = 2;
-pub(super) const FLOW_VIOLATION: u8 = 3;
 pub(super) const DESKTOP_ERROR: u8 = 4;
 pub(super) const PROTOCOL: u8 = 6;
 
