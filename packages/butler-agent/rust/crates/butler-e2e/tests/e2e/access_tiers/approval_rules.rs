@@ -180,7 +180,15 @@ async fn allowed_folder_is_in_scope() -> Result<(), HarnessError> {
     let prompt = "Write in the allowed folder.";
     script.rounds.lock().unwrap().insert(prompt.into(), vec![call("touch", "run_command",
         &json!({"command":"touch new.txt","cwd":"~/work","summary":"Create file","state_effect":"mutation"}))]);
-    if butler_platform::command_sandbox::folder_write_available() {
+    use butler_platform::command_sandbox;
+    if command_sandbox::project_write_mechanism() == "seatbelt"
+        || (command_sandbox::WINDOWS_SHELL && command_sandbox::project_write_available())
+        || command_sandbox::metadata_tier_available()
+        || command_sandbox::mount_tier_available()
+    {
+        assert!(command_sandbox::folder_write_available());
+    }
+    if command_sandbox::folder_write_available() {
         let turn = s.gw.say_turn(chat, prompt).await?;
         delivered(&s, chat, &turn).await?;
         assert_counts(&s, &turn, 0, 0)?;

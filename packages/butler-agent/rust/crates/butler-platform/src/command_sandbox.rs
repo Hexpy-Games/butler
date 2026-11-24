@@ -95,9 +95,17 @@ pub fn project_write_available() -> bool {
     capabilities().project_write_available()
 }
 
-/// Whether the write sandbox can contain several approved folder roots.
+/// Whether the write sandbox on this host and tier can contain approved folder roots.
 pub fn folder_write_available() -> bool {
-    cfg!(target_os = "macos") && project_write_available()
+    if !project_write_available() {
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    return linux::mount_tier_available();
+    #[cfg(any(target_os = "macos", windows))]
+    return true;
+    #[allow(unreachable_code)]
+    false
 }
 
 /// Whether the kernel can keep Butler's secrets and the user's credential
@@ -151,15 +159,29 @@ pub const fn project_write_mechanism() -> &'static str {
     }
 }
 
+/// Whether Linux mount masking is available.
+pub fn mount_tier_available() -> bool {
+    #[cfg(target_os = "linux")]
+    return linux::mount_tier_available();
+    #[cfg(not(target_os = "linux"))]
+    false
+}
+
+/// Whether Linux mount masking and metadata confinement are available.
+pub fn metadata_tier_available() -> bool {
+    #[cfg(target_os = "linux")]
+    return linux::metadata_tier_available();
+    #[cfg(not(target_os = "linux"))]
+    false
+}
+
 /// Host-specific limits reported after a failed contained command.
 pub fn project_write_limits() -> &'static str {
-    #[cfg(target_os = "linux")]
-    if linux::metadata_tier_available() {
+    if metadata_tier_available() {
         return "This command ran contained to the project and allowed folders: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
     }
-    #[cfg(target_os = "linux")]
-    if linux::mount_tier_available() {
-        return "This command ran contained to the project folder: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
+    if mount_tier_available() {
+        return "This command ran contained to the project and allowed folders: no writes elsewhere, no network, and existing secrets are masked. New secret names are swept after the run. Metadata changes are blocked. If it needs more access, run it again with sandbox \"none\"; the user will be asked.";
     }
     if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
         "This command ran contained to the project folder: no writes elsewhere (including .git and existing secrets) and no network. Creating, deleting or renaming top-level project entries is also blocked. If it needs those, run it again with sandbox \"none\"; the user will be asked."
@@ -309,10 +331,10 @@ pub struct ToolchainRoots {
     pub local_app_data: std::path::PathBuf,
 }
 
-/// The login shell of a mutating command contained to `root`: it may write
-/// only inside `root` and the `writable` scratch roots, never below `denied`
-/// or to project metadata and secrets, may not read credential stores, and
-/// has no network. Hosts without [`project_write_available`] refuse it.
+/// The login shell of a mutating command contained to `root`, `extra_roots`
+/// and the `writable` scratch roots, subject to `denied` and the platform's
+/// secret, credential and network policy. Include `root` in `extra_roots`
+/// when it is the sole grant requiring folder containment.
 /// `toolchain_roots` names installed tools independently of the command profile;
 /// when unavailable, discovery falls back to the supplied environment.
 pub fn project_write_shell(

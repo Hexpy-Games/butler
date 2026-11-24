@@ -109,6 +109,7 @@ pub(super) fn expand_views(policy: &mut Policy) -> Result<(), Error> {
     };
     let mut roots = policy.writable.clone();
     roots.push(project);
+    roots.extend(policy.extra.iter().cloned());
     policy.credentials = snapshot.withheld(&policy.credentials, Some(&roots))?;
     let views: BTreeSet<_> = snapshot
         .writable_views(&roots)?
@@ -181,7 +182,7 @@ pub(super) fn mask(policy: &Policy) -> Result<Option<Sealing>, Error> {
         {
             continue;
         }
-        if path == root || !path.exists() {
+        if path == root || policy.extra.contains(path) || !path.exists() {
             return Err("private root cannot be masked".into());
         }
         secrets.push(path.clone());
