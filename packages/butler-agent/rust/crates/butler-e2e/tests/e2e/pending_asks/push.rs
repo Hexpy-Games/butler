@@ -87,7 +87,7 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
             .put(&push_url)
             .bearer_auth(device)
             .json(&if token == b {
-                json!({"token":token,"lang":"en"})
+                json!({"token":token,"lang":"en","kinds":["needs_input","failed","schedule_blocked","later_kind"]})
             } else {
                 json!({"token":token})
             })
@@ -167,12 +167,24 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
             assert!(!serialized.contains(secret), "chat content in push");
         }
     }
+    let second_kind = if first_kind == "done" {
+        "needs_input"
+    } else {
+        "done"
+    };
+    let expected = |kind: &str, tokens: &[&'static str]| -> BTreeSet<&'static str> {
+        tokens
+            .iter()
+            .copied()
+            .filter(|token| kind != "done" || *token != b)
+            .collect()
+    };
     assert!(
-        first_tokens == BTreeSet::from([a, b, c]),
+        first_tokens == expected(first_kind, &[a, b, c]),
         "unexpected first push recipients"
     );
     assert!(
-        second_tokens == BTreeSet::from([b, c]),
+        second_tokens == expected(second_kind, &[b, c]),
         "unexpected second push recipients"
     );
     assert!(

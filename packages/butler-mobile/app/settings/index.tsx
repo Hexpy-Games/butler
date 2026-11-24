@@ -1,16 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
 import { useConversation } from "@/conversation/live";
-import { Button, icons, ListGroup, ListRow, Sheet, showToast, Surface, Switch, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
+import { Button, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { SETTINGS_GROUPS } from "@/settings/sections";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { pairingStore } from "@/connection/store";
-import { disablePush, enablePush } from "@/notifications/push";
 
 const SECTION_ICONS = {
   general: icons.SlidersHorizontal, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
@@ -24,26 +22,10 @@ export default function Settings() {
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
-  const { client, pairing, disconnect } = useConversation();
+  const { pairing, disconnect } = useConversation();
   const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
-  const [push, setPush] = useState(false);
-  const [available, setAvailable] = useState<boolean | null>(null);
   const leaving = useRef(false);
-  useEffect(() => {
-    void pairingStore.loadActive().then(active => setPush(active?.pushEnabled === true));
-  }, [pairing]);
-  useEffect(() => {
-    if (!client) return;
-    void client.request<{ available: boolean }>("/devices/self/push").then(v => setAvailable(v.available), () => setAvailable(null));
-  }, [client]);
-
-  async function toggle(on: boolean) {
-    if (!client || !pairing) return;
-    const ok = on ? await enablePush(client, pairing.butlerId) : await disablePush(client, pairing.butlerId);
-    if (ok) setPush(on);
-    else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
-  }
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
     ? copy.settings.version(Constants.expoConfig?.version ?? "")
     : copy.settings.version(Application.nativeApplicationVersion, Application.nativeBuildVersion);
@@ -56,12 +38,7 @@ export default function Settings() {
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
       </ListGroup> : null}
       {pairing ? <ListGroup>
-        {available === false ? <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
-          description={copy.settings.notificationsSignIn} disabled
-          trailing={<Switch value={false} label={copy.settings.notifications} disabled onValueChange={() => {}} />} />
-          : <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
-            trailing={<Switch value={push} label={copy.settings.notifications} disabled={!client}
-              onValueChange={on => void toggle(on)} />} />}
+        <ListRow icon={icons.Bell} title={copy.settings.notifications} navigates onPress={() => router.push("/settings/notifications")} />
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}

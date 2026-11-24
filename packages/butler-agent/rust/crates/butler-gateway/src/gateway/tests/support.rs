@@ -477,6 +477,7 @@ impl crate::gateway::GatewayDevices for TestApplication {
         _: String,
         _: Option<String>,
         _: Option<String>,
+        _: Option<String>,
     ) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }

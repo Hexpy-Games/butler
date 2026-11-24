@@ -104,15 +104,18 @@ fn push_of(event: &AppEventEnvelope) -> Option<Push> {
     })
 }
 
-fn tokens(db: &Connection) -> Result<Vec<(String, Option<String>)>, AppStorageError> {
+/// A live device's push token, language and event kinds (None = all).
+type PushTarget = (String, Option<String>, Option<String>);
+
+fn tokens(db: &Connection) -> Result<Vec<PushTarget>, AppStorageError> {
     let mut query = db
         .prepare(
-            "SELECT push_token, push_lang FROM paired_devices
+            "SELECT push_token, push_lang, push_kinds FROM paired_devices
              WHERE revoked_at IS NULL AND push_token IS NOT NULL ORDER BY created_at,id",
         )
         .map_err(AppStorageError::sqlite)?;
     query
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)
@@ -127,7 +130,7 @@ pub(super) async fn sync_tokens(storage: AppStorage, setup: Arc<dyn AppSetupPort
     else {
         return;
     };
-    let tokens = devices.into_iter().map(|(token, _)| token).collect();
+    let tokens = devices.into_iter().map(|(token, _, _)| token).collect();
     let _ = setup
         .butler_account(ButlerAccountRequest::PushTokens { tokens })
         .await
@@ -172,9 +175,14 @@ async fn deliver(
         Status::Failed => "failed",
         Status::ScheduleBlocked => "schedule_blocked",
     };
-    let messages = devices
+    let messages: Vec<Value> = devices
         .iter()
-        .map(|(token, device_lang)| {
+        .filter(|(_, _, kinds)| {
+            kinds
+                .as_deref()
+                .is_none_or(|kinds| kinds.split(',').any(|k| k == kind))
+        })
+        .map(|(token, device_lang, _)| {
             let lang = device_lang.as_deref().unwrap_or(lang);
             match &push.target {
                 Target::Session(id) => json!({"to":token,"kind":kind,"lang":lang,"session_id":id}),
@@ -184,7 +192,10 @@ async fn deliver(
             }
         })
         .collect();
-    let tokens = devices.into_iter().map(|(token, _)| token).collect();
+    if messages.is_empty() {
+        return;
+    }
+    let tokens = devices.into_iter().map(|(token, _, _)| token).collect();
     let Ok(value) = setup
         .butler_account(ButlerAccountRequest::Push { messages, tokens })
         .await
@@ -220,7 +231,7 @@ async fn clear_gone(storage: &AppStorage, setup: &Arc<dyn AppSetupPort>, value: 
             .execute(move |db| {
                 gone.into_iter().try_fold(0, |cleared, token| {
                     db.execute(
-                        "UPDATE paired_devices SET push_token=NULL, push_lang=NULL WHERE push_token=?1",
+                        "UPDATE paired_devices SET push_token=NULL, push_lang=NULL, push_kinds=NULL WHERE push_token=?1",
                         [token],
                     )
                     .map(|rows| cleared + rows)

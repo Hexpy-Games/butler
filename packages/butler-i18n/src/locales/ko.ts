@@ -616,6 +616,8 @@ export const koKrCopy: AppCopy = {
       notifications: "알림",
       notificationsFailed: "알림 설정을 바꾸지 못했습니다.",
       notificationsSignIn: "컴퓨터에서 버틀러 계정에 로그인하면 사용할 수 있습니다.",
+      notificationsReceive: "알림 받기",
+      notificationKinds: { needs_input: "확인 필요", done: "완료", failed: "실패", schedule_blocked: "예약 작업 멈춤" },
       disconnect: "연결 해제",
       disconnectTitle: "이 컴퓨터와 연결을 해제하시겠습니까?",
       disconnectBody: "버틀러를 쓰려면 다시 연결해야 합니다.",

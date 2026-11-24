@@ -17,5 +17,6 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         "TEXT NOT NULL DEFAULT 'browser'",
     )?;
     super::migration::ensure_column(db, "paired_devices", "push_token", "TEXT")?;
-    super::migration::ensure_column(db, "paired_devices", "push_lang", "TEXT")
+    super::migration::ensure_column(db, "paired_devices", "push_lang", "TEXT")?;
+    super::migration::ensure_column(db, "paired_devices", "push_kinds", "TEXT")
 }

@@ -3,7 +3,7 @@ import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { AppState } from "react-native";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
-import { stringField } from "@/connection/pairings";
+import { PUSH_KINDS, stringField, type PushKind } from "@/connection/pairings";
 import { pairingStore } from "@/connection/store";
 import { pushLang } from "@/i18n";
 import { openChat } from "./openChat";
@@ -30,9 +30,11 @@ export async function enablePush(client: GatewayClient, butlerId: string): Promi
     if (!(await Notifications.requestPermissionsAsync()).granted) return false;
     const token = await expoToken();
     if (token === null) return false;
+    const active = await pairingStore.loadActive();
+    const kinds = active?.butlerId === butlerId && active.pushKinds ? active.pushKinds : [...PUSH_KINDS];
     const lang = pushLang();
-    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang } });
-    await pairingStore.setPushEnabled(butlerId, true);
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang, kinds } });
+    await pairingStore.setPush(butlerId, { pushEnabled: true });
     return true;
   } catch {
     return false;
@@ -42,7 +44,7 @@ export async function enablePush(client: GatewayClient, butlerId: string): Promi
 export async function disablePush(client: GatewayClient, butlerId: string): Promise<boolean> {
   try {
     await client.request<void>("/devices/self/push", { method: "PUT", body: { token: null } });
-    await pairingStore.setPushEnabled(butlerId, false);
+    await pairingStore.setPush(butlerId, { pushEnabled: false });
     return true;
   } catch {
     return false;
@@ -57,9 +59,21 @@ export async function syncPush(client: GatewayClient, butlerId: string): Promise
     const token = await expoToken();
     if (token === null) return;
     const lang = pushLang();
-    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang } });
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang, kinds: pairing.pushKinds ?? [...PUSH_KINDS] } });
   } catch {
     // Registration is best-effort on startup.
+  }
+}
+
+export async function setPushKinds(client: GatewayClient, butlerId: string, kinds: PushKind[]): Promise<boolean> {
+  try {
+    const token = await expoToken();
+    if (token === null) return false;
+    await client.request<void>("/devices/self/push", { method: "PUT", body: { token, lang: pushLang(), kinds } });
+    await pairingStore.setPush(butlerId, { pushKinds: kinds });
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -2,7 +2,7 @@
 //! `connect` for browsers.
 use super::super::{HttpError, HttpState, error::json, read_body_with_limit};
 use crate::gateway::{
-    ButlerAccountRequest, DeviceKind, GatewayApplicationError,
+    ButlerAccountRequest, DeviceKind, GatewayApplicationError, PUSH_KINDS,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 use axum::{
@@ -23,6 +23,7 @@ pub(in crate::gateway::http) const DEVICE_PUSH_PATH: &str = "/devices/self/push"
 struct PushRequest {
     token: Option<String>,
     lang: Option<Value>,
+    kinds: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -166,7 +167,7 @@ pub(in crate::gateway::http) async fn set_push_request(
             )
         })?;
     let body = read_body_with_limit(request.into_body(), 1024).await?;
-    let PushRequest { token, lang } =
+    let PushRequest { token, lang, kinds } =
         serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
     if token.as_deref().is_some_and(|token| !expo_token(token)) {
         return Err(HttpError::public(
@@ -181,9 +182,21 @@ pub(in crate::gateway::http) async fn set_push_request(
         .and_then(Value::as_str)
         .filter(|lang| matches!(*lang, "ko" | "en"))
         .map(str::to_owned);
+    let kinds = token
+        .as_ref()
+        .and(kinds.as_ref())
+        .and_then(Value::as_array)
+        .map(|kinds| {
+            PUSH_KINDS
+                .iter()
+                .filter(|known| kinds.iter().any(|kind| kind.as_str() == Some(**known)))
+                .copied()
+                .collect::<Vec<_>>()
+                .join(",")
+        });
     state
         .application
-        .set_device_push_token(id, token, lang)
+        .set_device_push_token(id, token, lang, kinds)
         .await?;
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NO_CONTENT;
