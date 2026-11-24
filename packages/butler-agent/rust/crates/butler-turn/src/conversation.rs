@@ -310,6 +310,7 @@ fn run_connection_lane(
         connection
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(ConversationError::sqlite)?;
+        history_window::register_sql_functions(&connection)?;
         schema::ensure(&mut connection, clock.as_ref())?;
         Ok(connection)
     })();
