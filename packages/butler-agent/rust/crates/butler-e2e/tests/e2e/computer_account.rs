@@ -266,8 +266,13 @@ async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), H
             }
         }
     }
+    let path = format!("/computers/{id}");
+    let refused = api.send(Method::DELETE, &path, None, &[]).await?;
+    assert_eq!(refused.status, 409);
+    assert_eq!(refused.error_code(), Some("computer_unreachable"));
+
     let deleted = api
-        .send(Method::DELETE, &format!("/computers/{id}"), None, &[])
+        .send(Method::DELETE, &format!("{path}?force=true"), None, &[])
         .await?;
     assert_eq!(deleted.status, 200);
     let homes: Value = serde_json::from_slice(&fs::read(homes_path)?)?;
