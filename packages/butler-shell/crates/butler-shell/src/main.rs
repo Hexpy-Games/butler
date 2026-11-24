@@ -10,7 +10,7 @@ mod ui;
 
 use std::ffi::OsString;
 
-use gpui::App;
+use gpui::{App, QuitMode};
 use gpui_platform::application;
 
 use ui::shell::Quit;
@@ -83,7 +83,9 @@ fn main() {
         std::process::exit(code);
     }
     let launches = single_instance(&args);
-    let app = application().with_assets(ui::assets::Assets);
+    let app = application()
+        .with_assets(ui::assets::Assets)
+        .with_quit_mode(QuitMode::Explicit);
     let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
     app.on_open_urls(move |values| {
         let _ = urls.unbounded_send(values);
