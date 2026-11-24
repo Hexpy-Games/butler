@@ -3,6 +3,7 @@
 //! gateway's [`AppSetupPort`].
 
 mod butler_account;
+mod push_relay;
 pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
