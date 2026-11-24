@@ -289,7 +289,7 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn computer_session_turns(
         &self,
         _computer_id: String,
-        _chat_id: String,
+        _runtime_session_id: String,
     ) -> ApplicationFuture<Vec<butler_turn::conversation::TransferTurn>> {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }

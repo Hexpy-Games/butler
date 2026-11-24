@@ -460,7 +460,7 @@ async fn assert_removed_conversation(
     let path = format!("/session-view?session_id={chat}");
     let view = d.s.gw.get(&path).await?;
     assert_eq!(view.status, 200, "{view:?}");
-    assert_eq!(view.data()["latest_turn"]["state"], "delivered");
+    assert_eq!(view.data()["latest_turn"]["state"], "delivered", "{view:?}");
     let messages = &view.data()["messages"];
     assert_eq!(messages.as_array().map(Vec::len), Some(2));
     assert_eq!(messages[0]["text"], text);

@@ -263,11 +263,12 @@ impl AppSetupPort for AppSetup {
     fn computer_session_turns(
         &self,
         computer_id: String,
-        chat_id: String,
+        runtime_session_id: String,
     ) -> ApplicationFuture<Vec<butler_turn::conversation::TransferTurn>> {
         let this = self.0.clone();
         Box::pin(async move {
-            computer_memory::session_turns(this.validated_root()?, computer_id, chat_id).await
+            computer_memory::session_turns(this.validated_root()?, computer_id, runtime_session_id)
+                .await
         })
     }
 

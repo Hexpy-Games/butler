@@ -68,10 +68,11 @@ pub(super) async fn route(
                 "This computer was removed.",
             ));
         }
+        let runtime_session_id = state.application.runtime_session_hint(id.clone()).await?;
         let turns = state
             .application
             .setup()?
-            .computer_session_turns(computer, id.clone())
+            .computer_session_turns(computer, runtime_session_id)
             .await?;
         state.application.project_transferred(id, turns).await?;
         return Ok(Routed::Here(Request::from_parts(parts, Body::from(bytes))));
