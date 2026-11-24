@@ -24,7 +24,7 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     .await;
 
     let unauthorized = request(
-        server.local_addr(),
+        server.local_addr().unwrap(),
         "POST /messages HTTP/1.1\r\nhost: localhost\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}",
     )
     .await;
@@ -32,7 +32,7 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     assert!(unauthorized.contains("Butler App local auth is required."));
 
     let malformed = request(
-        server.local_addr(),
+        server.local_addr().unwrap(),
         "POST /messages HTTP/1.1\r\nhost: localhost\r\nauthorization: Bearer secret\r\ncontent-type: application/json\r\ncontent-length: 1\r\nconnection: close\r\n\r\n{",
     )
     .await;
@@ -40,7 +40,7 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     assert!(malformed.contains("\"code\":\"invalid_json\""));
 
     let oversized = request(
-        server.local_addr(),
+        server.local_addr().unwrap(),
         "POST /messages HTTP/1.1\r\nhost: localhost\r\ncontent-length: 134217729\r\nconnection: close\r\n\r\n",
     )
     .await;
@@ -48,24 +48,24 @@ async fn authenticated_message_route_preserves_validation_and_deferred_admission
     assert!(!oversized.contains("protocol_version"));
 
     let body = r#"{"chat_id":"  general  ","attachments":[{"file_id":"file-1"}],"authority_request_ref":"x"}"#;
-    let forbidden = authorized_json(server.local_addr(), body).await;
+    let forbidden = authorized_json(server.local_addr().unwrap(), body).await;
     assert!(forbidden.starts_with("HTTP/1.1 400 Bad Request"));
     assert!(forbidden.contains("Authority decisions must use the Allow endpoint."));
 
     let content = r#"{"content_parts":{"version":1.0,"parts":[{"type":"session_ref","sessionId":"session-1","titleSnapshot":"Session"}]}}"#;
-    let content_accepted = authorized_json(server.local_addr(), content).await;
+    let content_accepted = authorized_json(server.local_addr().unwrap(), content).await;
     assert!(content_accepted.starts_with("HTTP/1.1 202 Accepted"));
     let content_command = application.last_message.lock().unwrap().take().unwrap();
     assert!(content_command.request.content_parts.is_some());
     assert!(content_command.request.text.is_none());
 
     let blank_content = r#"{"content_parts":{"version":1,"parts":[{"type":"text","text":"   "}]}}"#;
-    let blank_rejected = authorized_json(server.local_addr(), blank_content).await;
+    let blank_rejected = authorized_json(server.local_addr().unwrap(), blank_content).await;
     assert!(blank_rejected.starts_with("HTTP/1.1 400 Bad Request"));
     assert!(blank_rejected.contains("Message text is required."));
 
     let body = r#"{"chat_id":"  general  ","text":"hello","plan_mode":"downstream-validates"}"#;
-    let accepted = authorized_json(server.local_addr(), body).await;
+    let accepted = authorized_json(server.local_addr().unwrap(), body).await;
     assert!(accepted.starts_with("HTTP/1.1 202 Accepted"));
     assert!(accepted.contains("\"protocol_version\":\"butler.app.v1\""));
     assert!(accepted.contains("\"accepted\":{\"id\":\"message-1\""));
@@ -87,7 +87,7 @@ async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     let application = Arc::new(TestApplication::default());
     let unconfigured = start(application.clone(), LocalAuthConfig::required(None)).await;
     let response = request(
-        unconfigured.local_addr(),
+        unconfigured.local_addr().unwrap(),
         "GET /health HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
     )
     .await;
@@ -102,11 +102,11 @@ async fn required_auth_without_token_and_rate_limit_keep_public_errors() {
     .await;
     let body = r#"{"text":"hello"}"#;
     assert!(
-        authorized_json(limited.local_addr(), body)
+        authorized_json(limited.local_addr().unwrap(), body)
             .await
             .starts_with("HTTP/1.1 202 Accepted")
     );
-    let second = authorized_json(limited.local_addr(), body).await;
+    let second = authorized_json(limited.local_addr().unwrap(), body).await;
     assert!(second.starts_with("HTTP/1.1 429 Too Many Requests"));
     assert!(second.contains("Too many messages. Please wait before sending again."));
     limited.close().await.unwrap();
@@ -119,8 +119,10 @@ async fn live_events_reconcile_overflow_and_unregister_on_disconnect() {
         .flood_on_subscribe
         .store(true, std::sync::atomic::Ordering::SeqCst);
     let server = start(application.clone(), LocalAuthConfig::default()).await;
-    let mut stream = TcpStream::connect(server.local_addr()).await.unwrap();
-    let port = server.local_addr().port();
+    let mut stream = TcpStream::connect(server.local_addr().unwrap())
+        .await
+        .unwrap();
+    let port = server.local_addr().unwrap().port();
     stream
         .write_all(
             format!("GET /events/live?cursor=0 HTTP/1.1\r\nhost: localhost:{port}\r\n\r\n")

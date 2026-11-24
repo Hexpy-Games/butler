@@ -270,6 +270,7 @@ fn apply_remote(config: &mut AppServiceConfiguration, data_root: &Path) {
     config.host = "127.0.0.1".to_owned();
     config.port = normalize_port(Some(0.0), true);
     config.gateway.headless_browser = None;
+    config.gateway.remote_access_enabled = false;
     config.gateway.remote_socket = Some(remote_socket(data_root));
 }
 

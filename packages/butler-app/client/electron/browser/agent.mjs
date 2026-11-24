@@ -243,7 +243,7 @@ async function openAgent(browser, { session, args, id: callId, turn_id: turn }, 
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
   // The turn's next page replaces a tab it already read and is not using, so its read tabs do not pile up.
-  const spent = !signedIn && !source && !args.preview_id && typeof turn === "string" ? [...browser.tabs.values()].find(tab => tab.wasRead && idleReadTab(browser, tab, session, turn)) : undefined;
+  const spent = !source && !args.preview_id && typeof turn === "string" ? [...browser.tabs.values()].find(tab => tab.wasRead && idleReadTab(browser, tab, session, turn)) : undefined;
   if (spent) browser.close(spent.id);
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
   return openTab(browser, { session, args, callId, signedIn, source, turn });

@@ -75,13 +75,9 @@ async fn start(
     id: &str,
     args: &Value,
 ) -> Result<Value, &'static str> {
+    let content_port = super::super::content::port(state).ok_or("no_browser")?;
     let port = args["port"].as_u64().unwrap_or(0);
-    if [
-        u64::from(state.remote.primary().port()),
-        u64::from(super::super::content::port(state)),
-    ]
-    .contains(&port)
-    {
+    if state.security.port().map(u64::from) == Some(port) || u64::from(content_port) == port {
         return Err("invalid_port");
     }
     // Subscribe before reading admission state so concurrent archive/delete
@@ -96,7 +92,7 @@ async fn start(
         return Err("session_closed");
     }
     let mut result = state.previews.start(session, agent, id, args).await?;
-    let origin = format!("http://127.0.0.1:{}", super::super::content::port(state));
+    let origin = format!("http://127.0.0.1:{content_port}");
     let url = super::super::content::preview::url(state, &origin, id)
         .map_err(|_| "preview_unavailable")?;
     result["url"] = json!(url);

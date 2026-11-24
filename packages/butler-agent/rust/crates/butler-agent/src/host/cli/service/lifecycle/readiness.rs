@@ -158,6 +158,37 @@ async fn app_health_ready(
     if !record.app_enabled {
         return true;
     }
+    if let Some(socket) = config.app.remote_socket() {
+        let tokens = probe_tokens(config);
+        if tokens.is_empty() {
+            return true;
+        }
+        for token in &tokens {
+            let request = crate::host::cli::remote_relay::socket_request(
+                &socket.path,
+                "GET",
+                "/runtime-readiness",
+                token,
+                None,
+                &[],
+            );
+            if let Ok(Ok(reply)) = tokio::time::timeout(Duration::from_secs(2), request).await
+                && reply["status"]
+                    .as_u64()
+                    .is_some_and(|status| (200..300).contains(&status))
+                && serde_json::from_value::<ReadinessEnvelope>(reply["body"].clone()).is_ok_and(
+                    |envelope| {
+                        envelope.data.authenticated_gateway_ready
+                            && envelope.data.btcc_executor_ready
+                            && !envelope.data.raw_text_included
+                    },
+                )
+            {
+                return true;
+            }
+        }
+        return false;
+    }
     let Some(endpoint) = &record.app_endpoint else {
         return false;
     };

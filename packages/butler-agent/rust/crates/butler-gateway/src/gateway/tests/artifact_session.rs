@@ -30,7 +30,7 @@ async fn artifacts_route_projects_deliverable_only_and_survives_app_reopen() {
     .unwrap();
 
     let server = start_real(application.clone()).await;
-    let first = artifact_request(server.local_addr()).await;
+    let first = artifact_request(server.local_addr().unwrap()).await;
     assert!(first.starts_with("HTTP/1.1 200 OK"));
     assert!(first.contains("\"protocol_version\":\"butler.app.v1\""));
     assert!(first.contains("\"artifacts\":[{"));
@@ -47,7 +47,7 @@ async fn artifacts_route_projects_deliverable_only_and_survives_app_reopen() {
 
     let reopened = Arc::new(open_app(&path).await);
     let server = start_real(reopened.clone()).await;
-    let second = artifact_request(server.local_addr()).await;
+    let second = artifact_request(server.local_addr().unwrap()).await;
     assert!(second.starts_with("HTTP/1.1 200 OK"));
     assert!(second.contains("\"id\":\"artifact-file-artifact\""));
     assert!(second.contains("\"file_id\":\"file-artifact\""));
@@ -65,7 +65,7 @@ async fn provider_usage_reaches_public_context_details_route() {
     let application = Arc::new(open_app(&path).await);
     let server = start_real(application.clone()).await;
     let response = request(
-        server.local_addr(),
+        server.local_addr().unwrap(),
         "GET /context-details?session_id=general HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n",
     ).await;
     assert!(response.starts_with("HTTP/1.1 200 OK"));
@@ -74,7 +74,7 @@ async fn provider_usage_reaches_public_context_details_route() {
     assert!(response.contains("\"source_kind\":\"output_reserve\""));
     for path in ["/session-view", "/session-summary"] {
         let response = request(
-            server.local_addr(),
+            server.local_addr().unwrap(),
             &format!(
                 "GET {path}?session_id=general HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n"
             ),

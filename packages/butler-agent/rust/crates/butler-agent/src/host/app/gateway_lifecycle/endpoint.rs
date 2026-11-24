@@ -16,7 +16,7 @@ pub(crate) struct ActiveAppEndpoint {
 
 #[derive(Clone)]
 pub(crate) struct ActiveAppEndpointSnapshot {
-    pub(crate) base_url: String,
+    pub(crate) base_url: Option<String>,
     pub(crate) in_process: Option<InProcessGateway>,
     pub(crate) local_auth: LocalAuthConfig,
     pub(crate) configured_host: String,
@@ -52,17 +52,17 @@ impl ActiveAppEndpoint {
     /// (shared, so a rotated connection code reaches every caller).
     pub(crate) fn publish(
         &self,
-        address: SocketAddr,
+        address: Option<SocketAddr>,
         configuration: &AppServiceConfiguration,
         local_auth: LocalAuthConfig,
         in_process: Option<InProcessGateway>,
     ) {
         let snapshot = ActiveAppEndpointSnapshot {
-            base_url: format!("http://{address}"),
+            base_url: address.map(|address| format!("http://{address}")),
             local_auth,
             in_process,
             configured_host: configuration.host.clone(),
-            configured_port: address.port(),
+            configured_port: address.map_or(0, |address| address.port()),
             database_path: configuration.db_path.clone(),
         };
         *self.current.write() = Some(snapshot);

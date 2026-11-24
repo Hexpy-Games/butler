@@ -4,8 +4,11 @@ use axum::http::{HeaderMap, HeaderValue};
 pub(super) fn build(state: &HttpState) -> HeaderMap {
     let remote = state.remote.snapshot();
     let mut ancestors = vec!["app://butler".to_owned()];
-    for host in std::iter::once(state.remote.primary().to_string())
-        .chain([format!("localhost:{}", state.remote.primary().port())])
+    for host in state
+        .remote
+        .primary()
+        .into_iter()
+        .flat_map(|address| [address.to_string(), format!("localhost:{}", address.port())])
         .chain(remote.lan_authorities)
         .chain(remote.exposure.allowed_hosts)
     {
@@ -35,8 +38,10 @@ pub(super) fn build(state: &HttpState) -> HeaderMap {
 
 /// The UI document must admit its separate output origin, never an API frame.
 pub(super) fn ui_frames(state: &HttpState) -> String {
+    let Some(port) = super::port(state) else {
+        return "frame-src 'self'".to_owned();
+    };
     let remote = state.remote.snapshot();
-    let port = super::port(state);
     let mut origins = vec![
         format!("http://127.0.0.1:{port}"),
         format!("http://localhost:{port}"),

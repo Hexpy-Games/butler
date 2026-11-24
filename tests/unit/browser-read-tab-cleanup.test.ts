@@ -33,7 +33,7 @@ test("a delegated turn's end closes only the agent tabs it opened and read", () 
   ]);
   browser.holds.set("held", new Map([["other-turn", "chat"]]));
   finishUse(browser, "chat", "steward-turn", true);
-  expect(closed).toEqual(["read"]);
+  expect(closed).toEqual(["read", "signed"]);
 });
 
 test("a turn that answers the user keeps the tabs it opened", () => {

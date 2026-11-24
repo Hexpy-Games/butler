@@ -56,10 +56,7 @@ async fn changed_parent(mode: &str) -> Result<(), HarnessError> {
     loop {
         let cards = s.gw.approval_requests("general").await?;
         if !cards.is_empty() {
-            assert_eq!(
-                cards[0]["approval"]["operation"]["command"],
-                "printf reviewed"
-            );
+            assert_eq!(cards[0]["approval"]["operation"]["command"], stub::MUTATION);
             crate::access_tiers::approve(&s, "general", "deny", None).await?;
             break;
         }
