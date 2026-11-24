@@ -12,14 +12,7 @@ impl ButlerAccount {
         tokens: Vec<String>,
     ) -> Result<Value, GatewayApplicationError> {
         let stored = self.read().await?.ok_or_else(signed_out)?;
-        self.call(
-            &stored,
-            Method::PUT,
-            "/v1/push/tokens",
-            json!({"tokens": tokens}),
-            204,
-        )
-        .await?;
+        self.register(&stored, &tokens).await?;
         Ok(json!({}))
     }
 
@@ -29,70 +22,48 @@ impl ButlerAccount {
         tokens: Vec<String>,
     ) -> Result<Value, GatewayApplicationError> {
         let stored = self.read().await?.ok_or_else(signed_out)?;
-        let response: Value = self
-            .call(
-                &stored,
-                Method::POST,
-                "/v1/push/send",
-                json!({"messages": messages}),
-                200,
-            )
-            .await?
-            .json()
-            .await
-            .map_err(|_| unavailable())?;
-        let mut gone: Vec<_> = response["gone"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect();
-        let not_registered: BTreeSet<_> = response["not_registered"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        if !not_registered.is_empty() {
-            self.call(
-                &stored,
-                Method::PUT,
-                "/v1/push/tokens",
-                json!({"tokens": tokens}),
-                204,
-            )
-            .await?;
-            let messages: Vec<_> = messages
-                .into_iter()
+        let first = self.send_messages(&stored, &messages).await?;
+        let mut gone: Vec<String> = strs(&first["gone"]).map(str::to_owned).collect();
+        let missing: BTreeSet<&str> = strs(&first["not_registered"]).collect();
+        if !missing.is_empty() {
+            self.register(&stored, &tokens).await?;
+            let retry: Vec<Value> = messages
+                .iter()
                 .filter(|message| {
                     message["to"]
                         .as_str()
-                        .is_some_and(|token| not_registered.contains(token))
+                        .is_some_and(|to| missing.contains(to))
                 })
+                .cloned()
                 .collect();
-            let response: Value = self
-                .call(
-                    &stored,
-                    Method::POST,
-                    "/v1/push/send",
-                    json!({"messages": messages}),
-                    200,
-                )
-                .await?
-                .json()
-                .await
-                .map_err(|_| unavailable())?;
-            gone.extend(
-                response["gone"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned),
-            );
+            let second = self.send_messages(&stored, &retry).await?;
+            gone.extend(strs(&second["gone"]).map(str::to_owned));
         }
         Ok(json!({"gone": gone}))
+    }
+
+    async fn register(
+        &self,
+        stored: &StoredAccount,
+        tokens: &[String],
+    ) -> Result<(), GatewayApplicationError> {
+        let body = json!({"tokens": tokens});
+        self.call(stored, Method::PUT, "/v1/push/tokens", body, 204)
+            .await
+            .map(drop)
+    }
+
+    async fn send_messages(
+        &self,
+        stored: &StoredAccount,
+        messages: &[Value],
+    ) -> Result<Value, GatewayApplicationError> {
+        let body = json!({"messages": messages});
+        self.call(stored, Method::POST, "/v1/push/send", body, 200)
+            .await?
+            .json()
+            .await
+            .map_err(|_| unavailable())
     }
 
     async fn call(
@@ -112,4 +83,12 @@ impl ButlerAccount {
         }
         check(response, expected).await
     }
+}
+
+fn strs(value: &Value) -> impl Iterator<Item = &str> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
 }
