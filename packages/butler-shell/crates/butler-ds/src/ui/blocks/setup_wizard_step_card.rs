@@ -12,6 +12,7 @@ use gpui::{
     ParentElement, RenderOnce, SharedString, Styled, Window, div,
 };
 
+use super::setup_wizard_shell::{SetupWizardMorph, rise_row, settle_rows};
 use crate::tokens::{Duration, Easing, Length};
 use crate::ui::Icon;
 use crate::ui::button::{self, Button, Size, Variant};
@@ -106,6 +107,7 @@ pub struct SetupWizardStepCard {
     on_back: Option<Handler>,
     back_label: Option<SharedString>,
     content_key: Option<SharedString>,
+    rows: Option<SetupWizardMorph>,
     footer_start: Option<AnyElement>,
     actions: Vec<AnyElement>,
     children: Vec<AnyElement>,
@@ -124,13 +126,15 @@ impl SetupWizardStepCard {
             on_back: None,
             back_label: None,
             content_key: None,
+            rows: None,
             footer_start: None,
             actions: Vec::new(),
             children: Vec::new(),
         }
     }
 
-    /// Tracks the title heading (`titleId`, tabIndex -1): focus it when the step changes.
+    /// The title takes focus when the card mounts and whenever `content_key` changes
+    /// (FirstRunStepCard.tsx:17-21).
     pub fn title_focus(mut self, handle: FocusHandle) -> Self {
         self.title_focus = Some(handle);
         self
@@ -163,6 +167,13 @@ impl SetupWizardStepCard {
     /// A new key fades in the title, body and footer; the header stays.
     pub fn content_key(mut self, key: impl Into<SharedString>) -> Self {
         self.content_key = Some(key.into());
+        self
+    }
+
+    /// The card's rows arrive in order after a card morph: the header, the titles, each child,
+    /// and the footer.
+    pub fn rows(mut self, morph: &SetupWizardMorph) -> Self {
+        self.rows = Some(morph.clone());
         self
     }
 
@@ -256,6 +267,14 @@ impl RenderOnce for SetupWizardStepCard {
         let mut heading = div().child(Typo::h4(self.title.clone()));
         if let Some(handle) = &self.title_focus {
             heading = heading.track_focus(handle);
+            let shown = window.use_keyed_state((self.id.clone(), "title-key"), cx, |_, _| {
+                None::<SharedString>
+            });
+            let key = self.content_key.clone().unwrap_or_default();
+            if shown.read(cx).as_ref() != Some(&key) {
+                shown.update(cx, |shown, _| *shown = Some(key));
+                handle.focus(window, cx);
+            }
         }
         let mut titles = Stack::new()
             .gap(Space::Xs)
@@ -264,11 +283,26 @@ impl RenderOnce for SetupWizardStepCard {
         if let Some(description) = self.description.take() {
             titles = titles.child(Typo::body(description).tone(Tone::Secondary));
         }
-        let body = Stack::new()
-            .gap(Space::Lg)
-            .child(titles)
-            .children(std::mem::take(&mut self.children))
-            .children(footer);
+        let rows = std::iter::once(titles.into_any_element())
+            .chain(std::mem::take(&mut self.children))
+            .chain(footer);
+        let mut body = Stack::new().gap(Space::Lg);
+        let mut card = Stack::new().gap(Space::Lg);
+        if let Some(since) = self.rows.as_ref().and_then(SetupWizardMorph::since) {
+            let ds = Ds::get(cx);
+            let mut count = 0;
+            let mut row = |element| {
+                let element = rise_row(element, count, since, ds);
+                count += 1;
+                element
+            };
+            card = card.children(header.map(&mut row));
+            body = body.children(rows.map(row));
+            settle_rows(count, since, window, cx);
+        } else {
+            card = card.children(header);
+            body = body.children(rows);
+        }
         // The next step's content fades in over `--motion-base` decelerate (`.bodyEnter`).
         let body = if fade {
             let ds = Ds::get(cx);
@@ -287,6 +321,6 @@ impl RenderOnce for SetupWizardStepCard {
         } else {
             body.into_any_element()
         };
-        Stack::new().gap(Space::Lg).children(header).child(body)
+        card.child(body)
     }
 }

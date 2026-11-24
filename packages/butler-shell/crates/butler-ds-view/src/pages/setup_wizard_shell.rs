@@ -1,10 +1,11 @@
 //! SetupWizardShell.showcase.tsx. The backdrop is the riso print poster (the live wallpaper is
-//! P6). The flow's step cards are SetupWizardStepCard. The morph and the ink intro are not reproduced: "Card morph", "Re-run entrance"
-//! and the ink intro stories show the card swap (old card fades out, new card rises in), and the
-//! `full` stories the re-run entrance. Frame height is the DS View's.
+//! P6). The flow's step cards are SetupWizardStepCard. The "Card morph" stories morph between
+//! steps. The ink intro stories show the dried print with the re-run entrance. Frame height is
+//! the DS View's.
 use butler_ds::ui::blocks::setup_wizard_shell::{
     ContentWidth, SetupWizardAnchor, SetupWizardContent, SetupWizardIntro, SetupWizardList,
-    SetupWizardMark, SetupWizardProgress, SetupWizardShell, SetupWizardStep, SetupWizardVariant,
+    SetupWizardMark, SetupWizardMorph, SetupWizardProgress, SetupWizardShell, SetupWizardStep,
+    SetupWizardVariant,
 };
 use butler_ds::ui::blocks::setup_wizard_step_card::{SetupWizardStepAction, SetupWizardStepCard};
 use butler_ds::ui::blocks::wallpaper::WallpaperTone;
@@ -190,11 +191,17 @@ fn wizard(lang: Lang, id: &'static str, tone: WallpaperTone) -> AnyElement {
     )
 }
 
-fn welcome(c: &Copy, id: &'static str, state: &Entity<(usize, usize)>) -> AnyElement {
+fn welcome(
+    c: &Copy,
+    id: &'static str,
+    state: &Entity<usize>,
+    morph: &SetupWizardMorph,
+) -> AnyElement {
     let go = step_to(state, 1);
     SetupWizardContent::new()
         .variant(SetupWizardVariant::Focus)
         .solid()
+        .rows(morph)
         .child(
             Stack::new()
                 .cross(Cross::Center)
@@ -227,7 +234,12 @@ fn wide(card: SetupWizardStepCard) -> AnyElement {
         .into_any_element()
 }
 
-fn safety(c: &Copy, id: &'static str, state: &Entity<(usize, usize)>) -> AnyElement {
+fn safety(
+    c: &Copy,
+    id: &'static str,
+    state: &Entity<usize>,
+    morph: &SetupWizardMorph,
+) -> AnyElement {
     let (back, accept) = (step_to(state, 0), step_to(state, 2));
     let list = SetupWizardList::new().children(
         c.items
@@ -236,6 +248,7 @@ fn safety(c: &Copy, id: &'static str, state: &Entity<(usize, usize)>) -> AnyElem
     );
     wide(
         SetupWizardStepCard::new(sub(id, "safety"), c.title)
+            .rows(morph)
             .progress(SetupWizardProgress::new(steps(c), 1))
             .on_back(c.back, move |_, _, cx| back(cx))
             .action(
@@ -248,36 +261,48 @@ fn safety(c: &Copy, id: &'static str, state: &Entity<(usize, usize)>) -> AnyElem
     )
 }
 
-fn install(c: &Copy, id: &'static str, state: &Entity<(usize, usize)>) -> AnyElement {
+fn install(
+    c: &Copy,
+    id: &'static str,
+    state: &Entity<usize>,
+    morph: &SetupWizardMorph,
+) -> AnyElement {
     let back = step_to(state, 1);
     wide(
         SetupWizardStepCard::new(sub(id, "install"), c.steps[2])
+            .rows(morph)
             .progress(SetupWizardProgress::new(steps(c), 2))
             .on_back(c.back, move |_, _, cx| back(cx)),
     )
 }
 
-/// Moves the flow to `next`, remembering the step it leaves.
-fn step_to(state: &Entity<(usize, usize)>, next: usize) -> impl Fn(&mut App) + 'static {
+/// Moves the flow to `next`.
+fn step_to(state: &Entity<usize>, next: usize) -> impl Fn(&mut App) + 'static {
     let state = state.clone();
     move |cx| {
         state.update(cx, |state, cx| {
-            *state = (state.1, next);
+            *state = next;
             cx.notify();
         });
     }
 }
 
-fn card(c: &Copy, id: &'static str, step: usize, state: &Entity<(usize, usize)>) -> AnyElement {
+fn card(
+    c: &Copy,
+    id: &'static str,
+    step: usize,
+    state: &Entity<usize>,
+    morph: &SetupWizardMorph,
+) -> AnyElement {
     match step {
-        1 => safety(c, id, state),
-        2 => install(c, id, state),
-        _ => welcome(c, id, state),
+        1 => safety(c, id, state, morph),
+        2 => install(c, id, state, morph),
+        _ => welcome(c, id, state, morph),
     }
 }
 
 /// The first-run flow: the 420px welcome card, the 520px safety step and a shorter install step.
-/// Every Start, Accept and Back changes the step key, so the card swaps each time.
+/// Every Start, Accept and Back changes the step key, so the card morphs each time.
 fn flow(
     lang: Lang,
     id: &'static str,
@@ -287,18 +312,18 @@ fn flow(
     cx: &mut App,
 ) -> AnyElement {
     let c = copy(lang);
-    let state = window.use_keyed_state(sub(id, "step"), cx, |_, _| (0_usize, 0_usize));
-    let (before, now) = *state.read(cx);
+    let state = window.use_keyed_state(sub(id, "step"), cx, |_, _| 0_usize);
+    let now = *state.read(cx);
+    let morph = window.use_keyed_state(sub(id, "morph"), cx, |_, _| SetupWizardMorph::new());
+    let morph = morph.read(cx);
     let mut shell = SetupWizardShell::new(id, "Butler")
         .variant(SetupWizardVariant::Focus)
         .anchor(SetupWizardAnchor::Top)
         .embedded()
         .tone(tone)
         .step_key(format!("step-{now}"))
-        .child(card(&c, id, now, &state));
-    if before != now {
-        shell = shell.leaving(card(&c, id, before, &state));
-    }
+        .morph(morph, true)
+        .child(card(&c, id, now, &state, morph));
     if let Some(intro) = intro {
         shell = shell.intro(intro);
     }

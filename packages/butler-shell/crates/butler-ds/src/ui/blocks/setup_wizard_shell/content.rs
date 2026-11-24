@@ -3,14 +3,17 @@
 //! `Wide` width fills the body); in the focus variant 420px (`Wide`: 520px). `solid` puts it on
 //! an opaque card over the wallpaper with one shared token inset.
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled as _, Window, canvas, div, px,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Styled as _,
+    Window, canvas, div, px,
 };
 
-use super::{SetupWizardVariant, record_card};
-use crate::tokens::Length;
+use super::{SetupWizardMorph, SetupWizardVariant, record_card, rise_row, settle_rows};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Shadow};
 use crate::ui::blocks::measure;
 use crate::ui::context::Ds;
-use crate::ui::layout::{Border, Box as LayoutBox, Elevation, Radius, Space, Stack, Surface};
+use crate::ui::convert;
+use crate::ui::layout::{Box as LayoutBox, Radius, Space, Stack};
+use crate::ui::motion::Timing;
 
 /// The focus column widths. // DS: SetupWizardShell.module.css:247-253
 const FOCUS_WIDTH: f32 = 420.;
@@ -30,6 +33,7 @@ pub struct SetupWizardContent {
     width: ContentWidth,
     solid: bool,
     variant: SetupWizardVariant,
+    rows: Option<SetupWizardMorph>,
     children: Vec<AnyElement>,
 }
 
@@ -39,6 +43,7 @@ impl SetupWizardContent {
             width: ContentWidth::Default,
             solid: false,
             variant: SetupWizardVariant::Wizard,
+            rows: None,
             children: Vec::new(),
         }
     }
@@ -51,6 +56,13 @@ impl SetupWizardContent {
     /// `surface="solid"`: the opaque raised card (hairline, card shadow, panel radius, lg inset).
     pub fn solid(mut self) -> Self {
         self.solid = true;
+        self
+    }
+
+    /// Each child is a row that arrives in order after a card morph. A `SetupWizardStepCard`
+    /// child owns its rows.
+    pub fn rows(mut self, morph: &SetupWizardMorph) -> Self {
+        self.rows = Some(morph.clone());
         self
     }
 
@@ -84,25 +96,63 @@ impl RenderOnce for SetupWizardContent {
             }
             (SetupWizardVariant::Wizard, ContentWidth::Wide) => None,
         };
-        let column = Stack::new().gap(Space::Lg).children(self.children);
-        let body: AnyElement = if self.solid {
-            LayoutBox::new()
-                .surface(Surface::RaisedOpaque)
-                .elevation(Elevation::Card)
-                .border(Border::Hairline)
-                .radius(Radius::Panel)
-                .padding(Space::Lg)
-                .child(column)
-                .into_any_element()
+        let mut column = Stack::new().gap(Space::Lg);
+        if let Some(since) = self.rows.as_ref().and_then(SetupWizardMorph::since) {
+            let ds = Ds::get(cx);
+            let mut count = 0;
+            column = column.children(self.children.into_iter().map(|row| {
+                let row = rise_row(row, count, since, ds);
+                count += 1;
+                row
+            }));
+            settle_rows(count, since, window, cx);
         } else {
-            column.into_any_element()
-        };
+            column = column.children(self.children);
+        }
         let frame = div().relative().w_full().min_w_0();
         let frame = match max {
             Some(max) => frame.max_w(px(max)),
             None => frame,
         };
-        frame.child(body).children(self.solid.then(card_probe))
+        if !self.solid {
+            return frame.child(column);
+        }
+        let ds = Ds::get(cx);
+        let deliberate = Timing::token(
+            ds,
+            DsDuration::MotionDeliberate,
+            Easing::MotionEaseEmphasized,
+        );
+        let hairline = ds.len(Length::BorderHairline);
+        let surface = div()
+            .id("setup-card-surface")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .bg(ds.color(Color::ColorSurfaceRaisedOpaque))
+            .border(hairline)
+            .border_color(ds.color(Color::Line))
+            .rounded(Radius::Panel.px(ds))
+            .shadow(convert::box_shadows(
+                ds.tokens().shadow(Shadow::ShadowCard),
+                ds.tokens(),
+            ))
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if ds.reduced_motion() {
+                    0
+                } else {
+                    deliberate.ms()
+                },
+                easing: deliberate.easing(),
+            });
+        let content = div().relative().min_w_0().p(hairline).child(
+            LayoutBox::new()
+                .radius(Radius::Panel)
+                .padding(Space::Lg)
+                .child(column),
+        );
+        frame.child(surface).child(content).child(card_probe())
     }
 }
 

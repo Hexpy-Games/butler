@@ -6,13 +6,15 @@
 //!
 //! Parts: [`SetupWizardProgress`] (the stepper), [`SetupWizardContent`] and [`SetupWizardList`]
 //! (a step's column), [`SetupWizardMark`] (the logo slot) and [`SetupWizardStage`] (the card
-//! swap). Not reproduced: the card morph between two solid cards, the first-install ink intro
-//! (`SetupWizardIntro::Full` shares the re-run entrance) and its still wash, and the region's
-//! accessible name.
+//! swap and the morph between solid cards, with staggered row arrivals). The old content drops
+//! away during a morph, and the larger card has no content clip: its rows are invisible until
+//! the surface has nearly arrived. The first-install ink intro and its still wash are pending
+//! (`SetupWizardIntro::Full` shares the re-run entrance), as is the region's accessible name.
 mod content;
 mod focus;
 mod mark;
 mod progress;
+mod rows;
 mod stage;
 mod wizard;
 
@@ -25,7 +27,8 @@ use gpui::{
 pub use content::{ContentWidth, SetupWizardContent, SetupWizardList};
 pub use mark::SetupWizardMark;
 pub use progress::{SetupWizardProgress, SetupWizardStep};
-pub use stage::{SetupWizardIntro, SetupWizardStage};
+pub(in crate::ui::blocks) use rows::{rise_row, settle_rows};
+pub use stage::{SetupWizardIntro, SetupWizardMorph, SetupWizardStage};
 
 use super::prompt_suggestion_list::ContentRect;
 use super::wallpaper::{Wallpaper, WallpaperSource, WallpaperTone, intro_print};
@@ -91,6 +94,7 @@ pub struct SetupWizardShell {
     anchor: SetupWizardAnchor,
     step_key: Option<SharedString>,
     leaving: Option<AnyElement>,
+    morph: Option<(SetupWizardMorph, bool)>,
     intro: Option<SetupWizardIntro>,
     intro_held: bool,
     day_phase: Option<f32>,
@@ -113,6 +117,7 @@ impl SetupWizardShell {
             anchor: SetupWizardAnchor::Center,
             step_key: None,
             leaving: None,
+            morph: None,
             intro: None,
             intro_held: false,
             day_phase: None,
@@ -160,7 +165,7 @@ impl SetupWizardShell {
         self
     }
 
-    /// Focus only: a new key replaces the card (the old one fades out, the new one rises in).
+    /// Focus only: a new key replaces the card.
     pub fn step_key(mut self, step_key: impl Into<SharedString>) -> Self {
         self.step_key = Some(step_key.into());
         self
@@ -169,6 +174,14 @@ impl SetupWizardShell {
     /// Focus only: the previous step's card, which fades out when `step_key` changes.
     pub fn leaving(mut self, leaving: impl IntoElement) -> Self {
         self.leaving = Some(leaving.into_any_element());
+        self
+    }
+
+    /// Focus only: the stage's morph handle, and whether this step's card is a solid card
+    /// (`SetupWizardContent::solid`, which a step card sits in). A step change between two solid
+    /// cards morphs the card; any other change swaps it.
+    pub fn morph(mut self, morph: &SetupWizardMorph, solid: bool) -> Self {
+        self.morph = Some((morph.clone(), solid));
         self
     }
 
@@ -224,6 +237,7 @@ impl SetupWizardShell {
             .intro(self.intro)
             .held(held)
             .leaving(self.leaving.take())
+            .morph(self.morph.take())
             .children(children)
             .into_any_element()
     }
