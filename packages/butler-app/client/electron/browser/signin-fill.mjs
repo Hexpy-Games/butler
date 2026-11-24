@@ -1,4 +1,5 @@
 import { dispatchKey, parseChord } from "./keyboard.mjs";
+import { nativeWorldOf } from "./native-worlds.mjs";
 import { signedInPlace } from "./signed-in.mjs";
 
 /** Sign-in fill (spec §9.3). Main checks the top-level origin against the
@@ -38,18 +39,21 @@ const focusSource = (id, password) => `(()=>{const e=globalThis.__butlerSignIn?.
 const filledSource = id => `(()=>{const e=globalThis.__butlerSignIn?.get(${JSON.stringify(id)})?.deref();return Boolean(e?.isConnected&&e.value.length>0)})()`;
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-export async function evaluate(tab, code) { return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]); }
+export async function evaluate(tab, code, frame) {
+  if (frame) return nativeWorldOf(tab, frame)?.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]) ?? null;
+  return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]);
+}
 async function settled(tab, maxMs) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   await pause(150);
   while (contents.isLoading() && Date.now() < deadline) await pause(100);
   await pause(250);
 }
-export async function type(tab, id, text, password) {
-  if (!await evaluate(tab, focusSource(id, password))) return false;
+export async function type(tab, id, text, password, frame) {
+  if (!await evaluate(tab, focusSource(id, password), frame)) return false;
   tab.expectedInputs = [];
   await tab.view.webContents.insertText(text);
-  return evaluate(tab, filledSource(id));
+  return evaluate(tab, filledSource(id), frame);
 }
 function humanStep(state) {
   if (state.keypad) return "secure_keypad";
@@ -104,11 +108,11 @@ async function typeSecret(browser, tab, field, args, origin) {
   return await evaluate(tab, filledSource(field)) ? true : { status: "user_required", reason: "unknown_form", tab: tab.id };
 }
 /** The password's only reference in main lives in this frame and ends with it. */
-export async function typePulled(browser, tab, field, token, origin) {
+export async function typePulled(browser, tab, field, token, origin, frame) {
   const pulled = await browser.pullCredential?.(token, origin);
   if (pulled?.error === "origin_mismatch") return { status: "origin_mismatch", tab: tab.id };
   if (typeof pulled?.password !== "string") return { status: "not_dispatched", reason: "credential_unavailable", tab: tab.id };
-  if (new URL(tab.view.webContents.getURL()).origin !== origin || !await evaluate(tab, focusSource(field, true))) return { status: "origin_mismatch", tab: tab.id };
+  if (new URL(tab.view.webContents.getURL()).origin !== origin || !await evaluate(tab, focusSource(field, true), frame)) return { status: "origin_mismatch", tab: tab.id };
   tab.expectedInputs = [];
   tab.readsClosed ??= { inPage: tab.view.webContents.getURL() };
   await tab.view.webContents.insertText(pulled.password);

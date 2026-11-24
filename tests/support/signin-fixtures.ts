@@ -3,10 +3,14 @@
  * card fields, hop pages to an ungranted site, a same-site look-alike login and
  * a security-keypad bank page. No real accounts; nothing leaves 127.0.0.1. */
 export const HOSTS = ["login.fixture-shop.test", "www.fixture-shop.test", "files.fixture-shop.test", "www.fixture-evil.test",
-  "ads.fixture-ads.test", "bank.fixture-bank.test", "postcode.map.daum.net", "js.tosspayments.com"];
+  "ads.fixture-ads.test", "bank.fixture-bank.test", "postcode.map.daum.net", "js.tosspayments.com",
+  "accounts.fixture-id.test", "www.fixture-frame.test", "login.fixture-frame.test", "login.fixture-pane.test"];
 
 const page = (title: string, body: string) => new Response(`<!doctype html><meta charset="utf-8"><title>${title}</title>
 <style>body{font:16px system-ui;padding:24px}iframe{width:420px;height:120px;border:1px solid #ccc}</style>${body}`, { headers: { "content-type": "text/html; charset=utf-8" } });
+
+const loginPage = () => page("Sign in", `<form method="post" action="/session"><label>Email <input name="username" type="email" autocomplete="username"></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password"></label><button type="submit">Sign in</button></form>`);
 
 export interface SignInFixture { url: (host: string, path: string) => string; posts: string[]; stop: () => void; }
 
@@ -31,12 +35,30 @@ export function startSignInFixtures(password: string): SignInFixture {
       if (host === "login.fixture-shop.test" && path === "/mfa") {
         return new Response(null, { status: 302, headers: { location: url("www.fixture-shop.test", "/account"), "set-cookie": "sid=owner; Domain=fixture-shop.test; Path=/" } });
       }
+      if (host === "accounts.fixture-id.test" && path === "/id") {
+        return new Response(null, { status: 302, headers: { location: "/pw", "set-cookie": `id=${encodeURIComponent(form.get("identifier") ?? "")}; Path=/` } });
+      }
+      if (host === "accounts.fixture-id.test" && path === "/pw") {
+        const ok = cookie.split("; ").includes(`id=${encodeURIComponent("owner@fixture.test")}`) && form.get("password") === password;
+        return ok ? page("Done", "<h1>Signed in</h1>") : page("Wrong", "<h1>Wrong password</h1>");
+      }
+      if ((host === "login.fixture-frame.test" || host === "login.fixture-pane.test") && path === "/session") {
+        const ok = form.get("username") === "owner@fixture.test" && form.get("password") === password;
+        return ok ? page("Done", "<h1>Signed in</h1>") : page("Wrong", "<h1>Wrong password</h1>");
+      }
       return page("Posted", "<h1>Posted</h1>");
     }
-    if (host === "login.fixture-shop.test" && path === "/login") {
-      return page("Sign in", `<form method="post" action="/session"><label>Email <input name="username" type="email" autocomplete="username"></label>
-        <label>Password <input name="password" type="password" autocomplete="current-password"></label><button type="submit">Sign in</button></form>`);
+    if ((host === "login.fixture-shop.test" || host === "login.fixture-pane.test") && path === "/login") return loginPage();
+    if (host === "accounts.fixture-id.test" && path === "/id") {
+      return page("Username", `<form method="post" action="/id"><input name="identifier" type="email" autocomplete="username"><button type="submit">Next</button></form>`);
     }
+    if (host === "accounts.fixture-id.test" && path === "/pw") {
+      return page("Password", `<form method="post" action="/pw"><input name="password" type="password" autocomplete="current-password"><button type="submit">Sign in</button></form>`);
+    }
+    if (host === "www.fixture-frame.test" && path === "/signin") {
+      return page("Sign in", `<iframe id="login" style="height:220px" src="${url("login.fixture-frame.test", "/frame")}"></iframe>`);
+    }
+    if (host === "login.fixture-frame.test" && path === "/frame") return loginPage();
     if (host === "login.fixture-shop.test" && path === "/mfa") {
       return page("Verify", `<form method="post" action="/mfa"><label>인증번호 <input name="code" autocomplete="one-time-code" inputmode="numeric"></label><button>Verify</button></form>`);
     }
