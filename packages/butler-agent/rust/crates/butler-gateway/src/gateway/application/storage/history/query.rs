@@ -1,4 +1,6 @@
 //! Script15 prefix/term search and keyset pages; no App event/transcript scans.
+use std::collections::BTreeSet;
+
 use super::{AppHistoryQuery, AppStorageError};
 use butler_core::search_text::analyze_search_query;
 use rusqlite::{Connection, params, types::Value as Sql};
@@ -80,6 +82,24 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         "butlerDriven":r.get::<_,bool>(8)?,"source":r.get::<_,String>(9)?}),
     )
 }
+pub(super) fn origins(db: &Connection) -> Result<Value, AppStorageError> {
+    let mut statement = db
+        .prepare("SELECT url FROM browser_history_url")
+        .map_err(SQL)?;
+    let urls = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(SQL)?;
+    let mut origins = BTreeSet::new();
+    for url in urls {
+        if let Ok(url) = url::Url::parse(&url.map_err(SQL)?)
+            && matches!(url.scheme(), "http" | "https")
+        {
+            origins.insert(url.origin().ascii_serialization());
+        }
+    }
+    Ok(json!({"origins": origins}))
+}
+
 pub(super) fn suggestions(db: &Connection, search: &str) -> Result<Value, AppStorageError> {
     let search = terms(search);
     if search.is_empty() {

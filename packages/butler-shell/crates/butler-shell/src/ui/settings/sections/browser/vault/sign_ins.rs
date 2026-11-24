@@ -10,7 +10,7 @@ use butler_ds::ui::segmented_control::{Choice, SegmentedControl};
 use butler_ds::ui::switch::Switch;
 use butler_ds::ui::tag::{Size as TagSize, Tag, Tone as TagTone};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, Context, Entity, ParentElement as _, SharedString};
+use gpui::{AnyElement, Context, Entity, ParentElement as _, SharedString, Styled as _, div};
 
 use super::BrowserVault;
 use super::actions::ask;
@@ -18,7 +18,9 @@ use super::copy::{Words, words};
 use super::form::{self, Form, FormId, secret_input, with_extra};
 use super::model::{SignInSite, since};
 use crate::ui::Icon;
+use crate::ui::browser::model::BrowserState;
 use crate::ui::settings::state::Load;
+use crate::ui::widgets::control_anchor;
 
 const POLICIES: [&str; 3] = ["always", "ask", "never"];
 
@@ -114,6 +116,10 @@ impl BrowserVault {
             .entry
             .as_ref()
             .map_or(copy.no_password, |entry| entry.username.as_str());
+        let supported = cx
+            .try_global::<BrowserState>()
+            .is_some_and(BrowserState::site_data_supported);
+        let menu = self.sign_in_menu(row, this, copy, supported);
         let item = CardListItem::new(
             SharedString::from(format!("sign-in-{}", row.site)),
             row.site.clone(),
@@ -121,7 +127,9 @@ impl BrowserVault {
         .icon(icon(Icon::Globe2, IconSize::Md, ds))
         .meta(SharedString::from(meta))
         .description(username.to_owned())
-        .actions(self.sign_in_menu(row, this, copy));
+        .actions(
+            control_anchor(div().flex(), &format!("sign-in-menu-{}", row.site), !busy).child(menu),
+        );
         let mut extra = Stack::new().gap(Space::Sm);
         if row.conversations > 0 {
             extra = extra.child(
@@ -142,15 +150,13 @@ impl BrowserVault {
         with_extra(item, extra)
     }
 
-    /// The row's menu: delete the password, remove Butler's access.
-    // CARVE-OUT(G-native): "Sign out of this site" clears the site from the App's signed-in
-    // browser profile (`butlerBrowser` bridge, `canSignOut()`); the browser is not ported, so
-    // React hides it too when the bridge is missing.
+    /// Delete the password, sign out of the site or remove Butler's access.
     fn sign_in_menu(
         &self,
         row: &SignInSite,
         this: &Entity<Self>,
         copy: &'static Words,
+        supported: bool,
     ) -> OverflowActionMenu {
         let mut menu =
             OverflowActionMenu::new(format!("sign-in-menu-{}", row.site), row.site.clone());
@@ -171,6 +177,12 @@ impl BrowserVault {
                     );
                 }),
             );
+        }
+        if supported {
+            let (this, site) = (this.clone(), site.clone());
+            menu = menu.item(OverflowItem::new(copy.sign_out).on_select(move |_, cx| {
+                this.update(cx, |t, cx| t.sign_out_site(site.clone(), cx));
+            }));
         }
         let this = this.clone();
         menu.item(OverflowItem::new(copy.revoke).on_select(move |_, cx| {

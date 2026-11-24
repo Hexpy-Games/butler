@@ -259,7 +259,10 @@ pub(crate) fn dialog(
                     take(&cancel, cx);
                 }),
         )
-        .child(accept_control);
+        .child(crate::ui::widgets::anchored(
+            accept_control,
+            "settings-confirm-accept",
+        ));
     let dialog = Dialog::new("settings-confirm", window, cx)
         .open(true)
         .on_open_change(move |open, _, cx| {

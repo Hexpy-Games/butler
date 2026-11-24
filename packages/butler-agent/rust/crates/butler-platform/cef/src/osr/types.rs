@@ -213,6 +213,8 @@ impl fmt::Display for OsrError {
 }
 impl std::error::Error for OsrError {}
 
+pub type SiteDataDone = Box<dyn FnOnce(Result<usize, OsrError>)>;
+
 /// Synchronous UI-thread popup policy. No UI toolkit state crosses this boundary.
 pub type PopupPolicy = std::rc::Rc<dyn Fn(&PopupRequest) -> PopupDecision>;
 pub struct PopupRequest {

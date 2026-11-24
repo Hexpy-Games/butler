@@ -33,6 +33,7 @@ mod popups;
 pub(crate) mod print;
 pub(crate) mod restore;
 pub(crate) mod shell_state;
+mod site_data;
 pub(crate) mod split_width;
 mod suggestions;
 mod tabs;

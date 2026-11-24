@@ -7,13 +7,14 @@ use std::time::Duration;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::{Error, ShellClient};
-use gpui::{App, Context, Entity, SharedString};
+use gpui::{App, BorrowAppContext as _, Context, Entity, SharedString};
 use serde_json::{Value, json};
 
 use super::copy::{Words, words};
 use super::form::{DETAILS, Form, FormId};
 use super::model::{Revealed, SignInsView, VaultView};
 use super::{BrowserVault, Kind, Reveal, Target};
+use crate::ui::browser::{engine::site_data_unavailable, model::BrowserState};
 use crate::ui::settings::SectionCtx;
 use crate::ui::settings::confirm::Request;
 use crate::ui::settings::state::{Load, fetch};
@@ -64,6 +65,38 @@ impl BrowserVault {
             Scope::SignIns => self.sign_in_busy = key,
             Scope::Vault => self.vault_busy = key,
         }
+    }
+
+    pub(super) fn sign_out_site(&mut self, site: String, cx: &mut Context<Self>) {
+        if self.busy(Scope::SignIns).is_some() {
+            return;
+        }
+        let reply = if cx.has_global::<BrowserState>() {
+            cx.update_global::<BrowserState, _>(|b, cx| b.sign_out_site(&site, cx))
+        } else {
+            site_data_unavailable()
+        };
+        self.set_busy(Scope::SignIns, Some(site.into()));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let ok = matches!(reply.await, Ok(Ok(_)));
+            cx.update(|cx| {
+                let copy = words(Ds::get(cx).lang());
+                if ok {
+                    toast::show(cx, Toast::success(copy.signed_out));
+                } else {
+                    toast::show(cx, Toast::error(copy.sign_in_failed));
+                }
+            });
+            let _ = this.update(cx, |this, cx| {
+                if ok {
+                    Self::reload_sign_ins(cx);
+                }
+                this.set_busy(Scope::SignIns, None);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// `reload` of `useSignIns`. Also what an import calls when it is done.

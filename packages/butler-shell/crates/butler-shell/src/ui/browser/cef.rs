@@ -6,13 +6,15 @@ mod ime;
 mod input;
 mod surface;
 
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
+use super::engine::{
+    PageChange, PageCommand, PageEngine, PageEvent, Profile, SiteDataReply, TabId,
+};
 use super::page_dialog::{DialogAnswer, EngineChild};
 use super::popup_policy::{PopupGate, PopupSites, policy};
 use butler_cef_host::osr::{OsrAnswer, OsrEvent, OsrProfile, OsrRuntime, OsrSink};
 use futures::{
     StreamExt as _,
-    channel::mpsc,
+    channel::{mpsc, oneshot},
     future::{Either, select},
 };
 use gpui::{AnyElement, App, Window};
@@ -440,5 +442,29 @@ impl PageEngine for CefEngine {
         }
         let state = self.pages.borrow().get(&id)?.1.clone();
         Some(surface::thumbnail(id, &self.runtime, state, window, cx))
+    }
+
+    fn site_data(&self) -> bool {
+        true
+    }
+    fn clear_site_data(&mut self, origins: &[String]) -> SiteDataReply {
+        let (tx, rx) = oneshot::channel();
+        self.runtime.clear_site_data(
+            origins,
+            Box::new(move |r| {
+                let _ = tx.send(r.map_err(anyhow::Error::from));
+            }),
+        );
+        rx
+    }
+    fn sign_out_site(&mut self, site: &str) -> SiteDataReply {
+        let (tx, rx) = oneshot::channel();
+        self.runtime.sign_out_site(
+            site,
+            Box::new(move |r| {
+                let _ = tx.send(r.map_err(anyhow::Error::from));
+            }),
+        );
+        rx
     }
 }

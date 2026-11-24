@@ -5,6 +5,10 @@
 #[cfg(cef_osr)]
 mod devtools;
 mod ime_state;
+#[cfg(cef_osr)]
+mod site_data;
+#[cfg(cef_osr)]
+mod site_match;
 mod types;
 #[cfg(not(cef_osr))]
 mod unsupported;
@@ -220,6 +224,12 @@ impl OsrRuntime {
                 .borrow()
                 .values()
                 .any(|p| p.borrow().loading)
+            || self
+                .state
+                .pages
+                .borrow()
+                .keys()
+                .any(|&id| site_data::is_internal(id))
         {
             (self.schedule)(FALLBACK);
         }

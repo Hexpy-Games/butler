@@ -20,6 +20,7 @@ pub enum AppHistoryCommand {
     Record(Vec<Value>),
     UndoImport(String),
     Page(AppHistoryQuery),
+    Origins,
     Suggestions(String),
     Delete(Vec<i64>),
     DeleteUrl(String),
@@ -40,6 +41,7 @@ impl AppApplication {
                 AppHistoryCommand::Page(q) => {
                     this.storage.read(move |db| query::page(db, &q)).await
                 }
+                AppHistoryCommand::Origins => this.storage.read(query::origins).await,
                 AppHistoryCommand::Suggestions(q) => {
                     this.storage
                         .read(move |db| query::suggestions(db, &q))
@@ -62,6 +64,7 @@ impl AppApplication {
                                     butler_only,
                                 } => records::clear(&tx, since, until, butler_only),
                                 AppHistoryCommand::Page(q) => query::page(&tx, &q),
+                                AppHistoryCommand::Origins => query::origins(&tx),
                                 AppHistoryCommand::Suggestions(q) => query::suggestions(&tx, &q),
                             }?;
                             tx.commit().map_err(AppStorageError::sqlite)?;

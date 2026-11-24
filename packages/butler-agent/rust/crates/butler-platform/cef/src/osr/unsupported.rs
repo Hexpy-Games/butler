@@ -1,7 +1,7 @@
 //! Uninhabited seam for platforms without an OSR implementation.
 use super::{
     DownloadPolicy, OsrAnswer, OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink,
-    OsrWheel, PopupPolicy, PumpScheduler,
+    OsrWheel, PopupPolicy, PumpScheduler, SiteDataDone,
 };
 use std::{convert::Infallible, ops::Range, rc::Rc};
 
@@ -20,6 +20,12 @@ impl OsrFrame {
     }
 }
 impl OsrRuntime {
+    pub fn clear_site_data(&self, _: &[String], _: SiteDataDone) {
+        match self.never {}
+    }
+    pub fn sign_out_site(&self, _: &str, _: SiteDataDone) {
+        match self.never {}
+    }
     pub fn start(
         _: OsrConfig,
         _: Rc<dyn OsrSink>,
