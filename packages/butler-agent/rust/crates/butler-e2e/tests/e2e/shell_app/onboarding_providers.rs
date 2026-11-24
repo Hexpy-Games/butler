@@ -1,13 +1,13 @@
 use super::*;
 
-/// SHELL-APP-XX — First run: the API key cards are the catalog's hosted providers; a key the provider refuses shows the field error with no spinner, and Back returns to the list with no spinner.
+/// SHELL-APP-30 — First run: the API key cards are the catalog's hosted providers; a key the provider refuses shows the field error with no spinner, and Back returns to the list with no spinner.
 #[tokio::test]
-async fn shell_app_xx_onboarding_providers() -> Result<(), HarnessError> {
+async fn shell_app_30_onboarding_providers() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     let _serial = SERIAL.lock().await;
     let provider = FakeServer::provider_models().await?;
-    let mut sandbox = Sandbox::new("SHELL-APP-XX")?;
+    let mut sandbox = Sandbox::new("SHELL-APP-30")?;
     let api = format!("{}/v1", provider.base_url);
     let env = [("BUTLER_ANTHROPIC_BASE_URL", api)];
     let mut shell = Shell::start(&sandbox, &env).await?;
@@ -34,7 +34,7 @@ async fn shell_app_xx_onboarding_providers() -> Result<(), HarnessError> {
         .as_array()
         .expect("catalog providers")
         .iter()
-        .map(|provider| provider["provider_id"].as_str().expect("provider id"))
+        .map(|p| p["provider_id"].as_str().expect("provider id"))
         .filter(|id| *id != "local")
         .collect::<Vec<_>>();
     assert!(!hosted.is_empty());
