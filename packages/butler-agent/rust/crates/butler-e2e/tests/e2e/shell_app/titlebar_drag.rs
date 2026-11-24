@@ -6,6 +6,8 @@ use super::*;
 /// take the press. Presses on a grid over the band (the harness's `titlebar-grid`) are checked
 /// against the controls' bounds: every press inside a control is stopped, and the band itself drags
 /// (the band above the open sidebar too; a press counts as drag only if it armed the move).
+/// The window's own controls stay over Settings, where they are the same buttons in the same
+/// place and take their presses.
 #[tokio::test]
 async fn shell_app_12_the_title_band_drags_except_its_controls() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -43,7 +45,21 @@ async fn shell_app_12_the_title_band_drags_except_its_controls() -> Result<(), H
             "titlebar-grid 8",
         ])
         .await?;
-    check(&shell.report("titlebar-grid")?);
+    let chat = shell.report("titlebar-grid")?;
+    check(&chat);
+    shell
+        .run(&[
+            // Settings fills the window; its entry is in the sidebar footer.
+            "click sidebar-toggle",
+            "wait 500",
+            "click sidebar-settings",
+            "wait-anchor settings-nav-appearance",
+            "titlebar-grid 8 settings",
+        ])
+        .await?;
+    let settings = shell.report("titlebar-grid-settings")?;
+    check(&settings);
+    same_window_controls(&chat, &settings);
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())
@@ -89,4 +105,32 @@ fn check(grid: &serde_json::Value) {
         "presses outside the controls move nothing: {dead:?}\n{grid}"
     );
     assert!(!drag.is_empty(), "no press arms the window drag\n{grid}");
+}
+
+/// The window's own controls (Windows and Linux draw them, macOS has native lights): Settings
+/// shows the same ones in the same place as the chat, and every one takes presses over it.
+fn same_window_controls(chat: &serde_json::Value, settings: &serde_json::Value) {
+    for id in ["wc-min", "wc-max", "wc-close"] {
+        let bounds = &chat["controls"][id];
+        assert_eq!(
+            bounds, &settings["controls"][id],
+            "{id} over Settings\n{settings}"
+        );
+        let Some(edges) = bounds.as_array() else {
+            continue;
+        };
+        let b: Vec<f64> = edges.iter().map(|e| e.as_f64().expect("edge")).collect();
+        let taken = settings["control"]
+            .as_array()
+            .expect("points")
+            .iter()
+            .any(|p| {
+                let (x, y) = (p[0].as_f64().expect("x"), p[1].as_f64().expect("y"));
+                x >= b[0] && x < b[2] && y >= b[1] && y < b[3]
+            });
+        assert!(
+            taken,
+            "no press on {id} is taken by it over Settings\n{settings}"
+        );
+    }
 }

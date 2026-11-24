@@ -12,7 +12,6 @@ use butler_ds::ui::typo::{TextAlign, Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use crate::lifecycle::runtime;
-use crate::ui::theme::Platform;
 
 struct Words {
     title: &'static str,
@@ -97,11 +96,8 @@ pub(crate) fn screen(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElemen
                 .child(select),
         )
         .child(button::container(Size::Lg).child(folder).child(restart));
-    let mut shell = SetupWizardShell::new("legacy-data-recovery", "Butler")
+    SetupWizardShell::new("legacy-data-recovery", "Butler")
         .variant(SetupWizardVariant::Focus)
-        .child(content);
-    if !matches!(Platform::host(), Platform::Mac) {
-        shell = shell.window_controls(crate::ui::shell::window_controls(language));
-    }
-    shell.into_any_element()
+        .child(content)
+        .into_any_element()
 }
