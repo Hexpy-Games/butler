@@ -4,9 +4,11 @@ use butler_models::models::{
     ModelConfiguration,
     chatgpt::{self, SignInAttempt, SignInKind, SignInOutcome},
 };
-use std::sync::Arc;
+use butler_platform::local_socket::{self, LocalListener};
+use std::{path::PathBuf, sync::Arc};
 use tokio::{
-    net::{TcpListener, TcpStream},
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
@@ -22,55 +24,51 @@ pub(crate) const SPEC: CallbackSpec = CallbackSpec {
         not_pending: "This is not the pending sign-in.",
     },
 };
+enum Listener {
+    Tcp(TcpListener),
+    Local(LocalListener),
+}
+
+trait CallbackIo: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> CallbackIo for T {}
+
+type CallbackStream = Box<dyn CallbackIo>;
+
 pub(crate) struct Attempt {
-    listener: TcpListener,
+    listener: Listener,
     secrets: SignInAttempt,
     pub redirect_uri: String,
     pub auth_url: String,
     pub callback_port: Option<u16>,
+    pub callback_socket: bool,
 }
 impl Attempt {
     pub(crate) async fn start(
         configuration: &ModelConfiguration,
         kind: SignInKind,
         redirect_port: Option<u16>,
+        socket_path: Option<PathBuf>,
     ) -> Result<Self, String> {
         let secrets = configuration
             .chatgpt_prepare(kind)
             .await
             .map_err(flow_error)?;
-        let (port, host) = configuration.chatgpt_callback_environment();
-        let bound = if redirect_port.is_some() || butler_models::models::sealed::is_enabled() {
-            oauth_callback::bind_with_environment(
-                SPEC,
-                if redirect_port.is_some() { None } else { port },
-                Some("127.0.0.1"),
+        let callback_socket = socket_path.is_some();
+        let (listener, redirect_uri, callback_port) = if let Some(path) = socket_path {
+            let port = redirect_port.ok_or("invalid_request")?;
+            let listener = tokio::task::spawn_blocking(move || local_socket::bind(&path))
+                .await
+                .map_err(|_| "oauth_callback_unavailable".to_owned())?
+                .map_err(|error| error.to_string())?;
+            (
+                Listener::Local(listener),
+                format!("http://127.0.0.1:{port}{}", SPEC.path),
+                None,
             )
-            .await
-        } else if port.is_none() && host.is_none() {
-            oauth_callback::bind(SPEC).await
         } else {
-            oauth_callback::bind_with_environment(SPEC, port, host).await
+            let (listener, uri, port) = bind_tcp(configuration, redirect_port).await?;
+            (Listener::Tcp(listener), uri, port)
         };
-        let (listener, bound_uri) = bound.map_err(|error| match error {
-            oauth_callback::CallbackBindError::PortInvalid => {
-                "oauth_callback_port_invalid".to_owned()
-            }
-            oauth_callback::CallbackBindError::PortUnavailable => {
-                "oauth_callback_port_unavailable".to_owned()
-            }
-        })?;
-        let callback_port = match redirect_port {
-            Some(_) => Some(
-                listener
-                    .local_addr()
-                    .map_err(|_| "oauth_callback_port_unavailable".to_owned())?
-                    .port(),
-            ),
-            None => None,
-        };
-        let redirect_uri =
-            redirect_port.map_or(bound_uri, |p| format!("http://127.0.0.1:{p}{}", SPEC.path));
         let auth_url = chatgpt::authorize::url(&secrets, &redirect_uri)
             .map_err(str::to_owned)?
             .to_string();
@@ -80,6 +78,7 @@ impl Attempt {
             redirect_uri,
             auth_url,
             callback_port,
+            callback_socket,
         })
     }
     pub(crate) async fn run(
@@ -117,7 +116,7 @@ impl Attempt {
     async fn exchange(
         &self,
         configuration: &ModelConfiguration,
-    ) -> Result<(serde_json::Value, TcpStream), String> {
+    ) -> Result<(serde_json::Value, CallbackStream), String> {
         let (code, params, mut stream) = self.wait_for_code().await?;
         match configuration
             .chatgpt_exchange(&self.secrets, &params, &code, &self.redirect_uri)
@@ -136,15 +135,20 @@ impl Attempt {
         (
             String,
             std::collections::BTreeMap<String, String>,
-            TcpStream,
+            CallbackStream,
         ),
         String,
     > {
         let mut reads = JoinSet::new();
         loop {
             tokio::select! {
-                accepted = self.listener.accept() => {
-                    let (stream, _) = accepted.map_err(|_| "oauth_callback_unavailable".to_owned())?;
+                accepted = async {
+                    match &self.listener {
+                        Listener::Tcp(listener) => listener.accept().await.map(|(stream, _)| Box::new(stream) as CallbackStream),
+                        Listener::Local(listener) => local_socket::accept(listener).await.map(|stream| Box::new(stream) as CallbackStream),
+                    }
+                } => {
+                    let stream = accepted.map_err(|_| "oauth_callback_unavailable".to_owned())?;
                     if reads.len() < 16 { reads.spawn(read_one(stream, self.redirect_uri.clone(), self.secrets.state.clone())); }
                 }
                 Some(read) = reads.join_next() => match read {
@@ -156,9 +160,50 @@ impl Attempt {
         }
     }
 }
-async fn read_one(mut stream: TcpStream, redirect: String, state: String) -> (Callback, TcpStream) {
+async fn read_one<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
+    redirect: String,
+    state: String,
+) -> (Callback, S) {
     let callback = oauth_callback::read_callback(&mut stream, &redirect, SPEC, &state).await;
     (callback, stream)
+}
+
+async fn bind_tcp(
+    configuration: &ModelConfiguration,
+    redirect_port: Option<u16>,
+) -> Result<(TcpListener, String, Option<u16>), String> {
+    let (port, host) = configuration.chatgpt_callback_environment();
+    let bound = if redirect_port.is_some() || butler_models::models::sealed::is_enabled() {
+        oauth_callback::bind_with_environment(
+            SPEC,
+            if redirect_port.is_some() { None } else { port },
+            Some("127.0.0.1"),
+        )
+        .await
+    } else if port.is_none() && host.is_none() {
+        oauth_callback::bind(SPEC).await
+    } else {
+        oauth_callback::bind_with_environment(SPEC, port, host).await
+    };
+    let (listener, bound_uri) = bound.map_err(|error| match error {
+        oauth_callback::CallbackBindError::PortInvalid => "oauth_callback_port_invalid".to_owned(),
+        oauth_callback::CallbackBindError::PortUnavailable => {
+            "oauth_callback_port_unavailable".to_owned()
+        }
+    })?;
+    let callback_port = match redirect_port {
+        Some(_) => Some(
+            listener
+                .local_addr()
+                .map_err(|_| "oauth_callback_port_unavailable".to_owned())?
+                .port(),
+        ),
+        None => None,
+    };
+    let redirect_uri =
+        redirect_port.map_or(bound_uri, |p| format!("http://127.0.0.1:{p}{}", SPEC.path));
+    Ok((listener, redirect_uri, callback_port))
 }
 
 fn flow_error(code: &str) -> String {
