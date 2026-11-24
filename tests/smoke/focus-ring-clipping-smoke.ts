@@ -21,6 +21,8 @@
 import { historyFixture } from "../support/usage-insights-fixtures";
 import { auditSessionOrderFocus } from "../support/session-order-focus.ts";
 import { sessionOrderFocusResponse } from "../support/session-order-fixtures.ts";
+import { computersFocusResponse } from "../support/computers-fixtures.ts";
+import { auditComputersFocus } from "../support/computers-focus.ts";
 import { canonFocusResponse } from "../support/canon-sidebar-fixture.ts";
 import { auditInlinePanes } from "../support/session-pane-focus.ts";
 import assert from "node:assert/strict";
@@ -373,6 +375,9 @@ async function auditCell(page: Page, cell: Cell) {
   await page.locator(`${aside} [data-slot="clickable"]`).first().waitFor();
   await auditScope(page, cell, "conversation-aside-floating", aside, 20);
   await auditCardListControls(page, cell);
+  await open(page, cell);
+  await openSidebar(page);
+  await auditComputersFocus(page, (screen, scope) => auditScope(page, cell, screen, scope, 40));
 }
 
 /** Settings › 브라우저: controls inside a CardList description (the sign-in switch, the payment site field), keyboard-focused. */
@@ -441,7 +446,7 @@ try {
     }
     const file = distFile(url.pathname);
     if (file) return route.fulfill({ contentType: types[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
-    const canon = canonFocusResponse(url.pathname) ?? sessionOrderFocusResponse(url.pathname);
+    const canon = canonFocusResponse(url.pathname) ?? sessionOrderFocusResponse(url.pathname) ?? computersFocusResponse(url.pathname);
     if (canon !== undefined) return route.fulfill({ json: { ok: true, data: canon } });
     // The gateway: just what the harness reads, offline.
     if (/^\/sessions\/[^/]+\/controls$/u.test(url.pathname)) return route.fulfill({ json: { ok: true, data: { session_id: "butler-client",

@@ -88,7 +88,7 @@ async function runLocale(locale: "ko" | "en") {
           responses.always = responses.always.filter(grant => !revoked.has(grant.grant_ref));
         }
       }
-      const headers = path === "/settings" || path.startsWith("/security") && !responses.refusal ? adminHeaders : server.authHeaders;
+      const headers = path === "/settings" || (path.startsWith("/security") || path.startsWith("/computers")) && !responses.refusal ? adminHeaders : server.authHeaders;
       await route.continue({ headers: { ...route.request().headers(), ...headers } });
     };
     async function configurePage() {
@@ -147,7 +147,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           await section(page, "grants").getByText(appCopy.settings.grants.targetUnknown, { exact: true }).waitFor();
           assert.equal(await rows(page).count(), 12, "dedupe across same-title conversations");
-          assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
+          assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "computers", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
           assert.equal(await section(page, "grants").getByText(appCopy.settings.grants.conversations(2), { exact: false }).count(), 1);
           await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
           const overflow = await section(page, "grants").evaluate(node => node.scrollWidth > node.clientWidth + 1);
@@ -208,7 +208,7 @@ async function runLocale(locale: "ko" | "en") {
             await advanced.getByText(host, { exact: true }).waitFor({ state: "hidden" });
           }
         }
-        if (!before) assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "device-pairing", "paired-devices", "computers", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();

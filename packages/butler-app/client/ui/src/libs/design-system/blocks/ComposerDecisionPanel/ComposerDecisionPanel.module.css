@@ -42,6 +42,13 @@
   mask-image: none;
 }
 
+.code > .quoteText {
+  padding-inline: var(--space-md);
+  overflow-wrap: anywhere;
+  font: var(--typo-body-size) / var(--typo-body-line-height) var(--font-body);
+  white-space: pre-wrap;
+}
+
 .error {
   padding-block: var(--space-sm);
   padding-inline: var(--composer-panel-inset);

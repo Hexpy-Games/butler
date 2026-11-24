@@ -227,7 +227,7 @@ fn disposition(name: &str) -> String {
     format!("inline; filename=\"{fallback}\"; filename*=UTF-8''{encoded}")
 }
 
-fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
+pub(super) fn decode_percent_encoded(encoded: &str) -> Result<String, HttpError> {
     let mut decoded = Vec::with_capacity(encoded.len());
     let mut input = encoded.bytes();
     while let Some(byte) = input.next() {
@@ -243,7 +243,11 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
             decoded.push(byte);
         }
     }
-    let value = String::from_utf8(decoded).map_err(|_| HttpError::Internal)?;
+    String::from_utf8(decoded).map_err(|_| HttpError::Internal)
+}
+
+pub(super) fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
+    let value = decode_percent_encoded(encoded)?;
     if value.len() != 41
         || value
             .get(..5)

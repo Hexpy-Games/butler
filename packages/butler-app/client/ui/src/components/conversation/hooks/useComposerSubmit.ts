@@ -12,6 +12,7 @@ import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 import { useComposerStore } from "../composerStore";
 import { useButlerStore } from "@/app/store.ts";
+import { activeComputerUnreachable } from "./useActiveComputerUnreachable";
 import { recordSendOrigin } from "@/butler-ds";
 import { readLocalComposerDraft, writeCachedComposerDraft } from "@/app/composerDraftCache";
 
@@ -56,6 +57,7 @@ export function useComposerSubmit({
     (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
       event.preventDefault();
       if (useButlerStore.getState().liveConnectionLost) return;
+      if (activeComputerUnreachable()) return;
       const draftText = readText?.() ?? text;
       const value = draftText.trim();
       const elementDraft = useElementDraft.getState();
@@ -84,7 +86,7 @@ export function useComposerSubmit({
         controlsTouched,
         activeTurn,
         attachments: [...attachments, ...elements.map(item => ({ file: item.file }))],
-      }), contentParts, workspaceMode: submitted.workspaceMode, onRejected: (targetSessionId) => {
+      }), contentParts, workspaceMode: submitted.workspaceMode, computerId: submitted.computerId, onRejected: (targetSessionId) => {
         const current = useComposerStore.getState();
         if (targetSessionId === sessionId || current.draftSessionId !== targetSessionId || current.text) return;
         if (contentParts) current.setContentParts(contentParts);
@@ -95,6 +97,7 @@ export function useComposerSubmit({
         const current = useComposerStore.getState();
         if (current.draftSessionId === sessionId && current.draftRevision === revision) {
           current.setWorkspaceMode("local");
+          current.setComputerId("");
           setText("");
           if (current.attachments === attachments) setAttachments([]);
         } else if (current.draftSessionId !== sessionId) {

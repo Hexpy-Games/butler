@@ -4,7 +4,7 @@ import { SpaceRowLabel } from "./SpaceRowLabel";
 import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
 import {
-  NavRow,
+  NavRow, Typo,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -46,6 +46,7 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
     <SpaceRowActions row={row} collapsible={row.node.kind !== "session" && !shortcut}
       menuOpen={menuOpen} onMenuChange={setMenuOpen} nested={subtasks.length > 0} />
   );
+  const computerName = row.session?.computer_name;
   const label = <SpaceRowLabel row={row} flat={flat} />;
   return (
     <>
@@ -69,10 +70,10 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
           <NavRow
             dataTestClass="tree-row"
             iconInteractive
-            multiline={flat}
+            multiline={flat || Boolean(computerName)}
             icon={<SpaceIdentity row={row} />}
             label={label}
-            meta={flat ? <SpaceRowMeta row={row} /> : undefined}
+            meta={flat ? <SpaceRowMeta row={row} /> : computerName ? <Typo.Caption tone="secondary" truncate title={computerName}>{computerName}</Typo.Caption> : undefined}
             active={active}
             ariaLabel={row.title}
             ariaDescription={sessionUnread ? appCopy.space.unread : undefined}

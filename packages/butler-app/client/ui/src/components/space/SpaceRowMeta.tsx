@@ -17,11 +17,13 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
     interface_label_key: row.session?.safe_status_label_key,
     interface_label_parameters: row.session?.safe_status_label_parameters,
   }) || (spaceActivity(row.session) === "working" ? appCopy.space.working : appCopy.space.attention);
+  const computerName = row.session?.computer_name;
+  const location = computerName ? `${row.location} · ${computerName}` : row.location;
   const progress = row.session?.work_progress;
   const progressText = progress ? ` · ${Math.min(progress.total, progress.completed + 1)}/${progress.total}` : "";
   return (
     <Stack as="span" align="row" cross="baseline" justify="between" gap="sm">
-      <Typo.Caption title={row.location} tone="secondary" grow basis="0" minWidth="0" truncate>{row.location}</Typo.Caption>
+      <Typo.Caption title={location} tone="secondary" grow basis="0" minWidth="0" truncate>{location}</Typo.Caption>
       {tab === "recent" ? (
         <Typo.Caption as="time" dateTime={row.updatedAt} numeric="tabular" tone="secondary" title={new Date(row.updatedAt).toLocaleString(locale)} wrap="nowrap">
           {relativeAge(row.updatedAt)}

@@ -16,7 +16,7 @@ import {
 } from "@/app/appUiStateCache.ts";
 import { readCachedSettings } from "@/app/settingsCache.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { isDraftChatId } from "@/app/utils.ts";
+import { isDraftChatId, sessionFromNavigation } from "@/app/utils.ts";
 import { turnProgressOf } from "@/app/turnProgress.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { settleSessionViewLoad, startSessionViewLoad } from "@/app/sessionViewLoad.ts";
@@ -34,6 +34,7 @@ import type {
 import { userWallpaperModules } from "@/app/userWallpaperModules.ts";
 import { recoverBootstrapResource } from "./bootstrapResource.ts";
 import { noteSettingsSnapshotRequest } from "./live-session/liveSettingsSync.ts";
+import { markComputerUnreachable } from "@/app/computerEvents";
 import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 
 export function useAppBootstrap() {
@@ -254,6 +255,7 @@ export function useAppBootstrap() {
         }
       } catch (error) {
         if (!cancelled) {
+          markComputerUnreachable(sessionFromNavigation(useButlerStore.getState().navigation, activeChatId)?.computer_id, error);
           settleSessionViewLoad(activeChatId);
           if (!cached) {
             notifyError(error, "Message load failed", {

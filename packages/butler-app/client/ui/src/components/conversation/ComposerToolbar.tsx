@@ -16,6 +16,9 @@ import { ComposerContextControl } from "./ComposerContextControl";
 import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
+import { useComputerConnections } from "@/app/computerEvents";
+import { sessionFromNavigation } from "@/app/utils";
+import { ComposerLocationSelect } from "./ComposerLocationSelect";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
@@ -29,6 +32,8 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
   const onStop = useComposerStore((store) => store.onStop);
   const reconnecting = useButlerStore((store) => store.liveConnectionLost);
   const agentNotice = useButlerStore((store) => store.agentNotice);
+  const computerId = useButlerStore((store) => sessionFromNavigation(store.navigation, store.activeChatId)?.computer_id);
+  const computerUnreachable = useComputerConnections((store) => computerId && store.states[computerId] === "unreachable");
 
   return (
     <ComposerCardToolbar>
@@ -37,6 +42,7 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
       <ComposerCardExpandedControls>
         <AccessModeMenu />
         <ComposerWorkspaceSelect />
+        <ComposerLocationSelect />
         <ComposerPlanModeBadge />
         <ComposerCardToolbarSpacer />
         <ComposerContextControl />
@@ -48,6 +54,9 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
       ) : reconnecting ? (
         <ComposerSendButton busy aria-label={appCopy.feedback.reconnectingShort}
           title={appCopy.feedback.reconnectingShort} />
+      ) : computerUnreachable ? (
+        <ComposerSendButton disabled aria-label={appCopy.computers.status.disconnected}
+          disabledReason={appCopy.computers.status.disconnected} />
       ) : (isSending || activeTurn) && canStop && !canSend ? (
         <ComposerSendButton
           mode="stop"

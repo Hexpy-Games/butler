@@ -1,4 +1,5 @@
 import { workFailureLine } from "../work-failure.ts";
+import { COMPUTERS_COPY } from "./computers.ts";
 import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
@@ -478,6 +479,7 @@ export const koKrCopy: AppCopy = {
   canon: CANON_COPY["ko-KR"],
   publishing: PUBLISHING_COPY["ko-KR"],
   sessionInfo: SESSION_INFO_COPY["ko-KR"],
+  computers: COMPUTERS_COPY["ko-KR"],
   fileViewer: FILE_VIEWER_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,

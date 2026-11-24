@@ -92,14 +92,14 @@ export function OpenInAppButton({ artifact }: { artifact: SessionArtifactSummary
     <Tooltip label={blocked ? appCopy.artifacts.openInAppBlocked : undefined}>
       <Button size="sm" variant="outline" iconStart={<Popup size="sm" />} text={label} disabled={blocked}
         aria-label={blocked ? `${label}. ${appCopy.artifacts.openInAppBlocked}` : `${label}: ${name}`}
-        onClick={() => { void openInApp(fileId); }} />
+        onClick={() => { void openInApp(fileId, artifact.session_id); }} />
     </Tooltip>
   );
 }
 
-export async function openInApp(fileId: string): Promise<void> {
+export async function openInApp(fileId: string, sessionId?: string): Promise<void> {
   try {
-    const result = await window.butlerApp?.openMessageFile?.({ fileId }) as { opened?: boolean; code?: unknown } | undefined;
+    const result = await window.butlerApp?.openMessageFile?.({ fileId, ...(sessionId ? { sessionId } : {}) }) as { opened?: boolean; code?: unknown } | undefined;
     if (result?.opened) return;
     notifyStatus(result?.code === "original_not_found" ? appCopy.fileViewer.originalNotFound : appCopy.artifacts.openInAppFailed, { tone: "error" });
   } catch (error) {

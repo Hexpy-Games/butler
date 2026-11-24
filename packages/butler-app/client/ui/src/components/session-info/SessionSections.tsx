@@ -17,7 +17,7 @@ import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules } = useSessionSectionsModel();
+  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, computerName, artifacts, attachments, schedules } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -37,6 +37,7 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
       ? <PreviewSection key="browser" layout={layout} previews={previews} />
       : <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />)}
     {sections.has("environment") && <SessionSection id="environment" layout={layout} title={c.environment}>
+      {computerName && <KeyValueRow label={c.runLocation} value={computerName} valueTextSize="caption" />}
       {folder && <KeyValueRow label={c.folder} value={folder} valueTextSize="caption" />}
       {branch?.branch_name && <KeyValueRow label={c.branch} value={branch.branch_name} valueTextSize="caption" />}
     </SessionSection>}
