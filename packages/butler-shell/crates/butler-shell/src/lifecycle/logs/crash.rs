@@ -73,6 +73,7 @@ pub(super) fn from_panic(info: &PanicHookInfo<'_>) -> Value {
     json!({
         "message": "Panic: [redacted]",
         "stack": frames.join("\n"),
+        "thread": std::thread::current().name().unwrap_or("unnamed"),
         "componentStack": "",
         "page": "app",
         "scope": "app",
