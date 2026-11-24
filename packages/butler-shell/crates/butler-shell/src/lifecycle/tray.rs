@@ -207,7 +207,12 @@ impl TrayModel {
             }
             Err(error) => {
                 self.failed = true;
-                eprintln!("butler-shell: no tray icon ({error:?})");
+                super::logs::app_log(
+                    "WARN",
+                    "lifecycle",
+                    "tray.unavailable",
+                    serde_json::json!({ "error": format!("{error:?}") }),
+                );
             }
         }
     }
