@@ -302,6 +302,9 @@ async fn canon_online_02_ops_stay_in_their_project() -> Result<(), HarnessError>
     let ty = a
         .create(&py, "tags", json!({"name": "TY", "color": "red"}))
         .await;
+    let ty2 = a
+        .create(&py, "tags", json!({"name": "TY2", "color": "blue"}))
+        .await;
     let ey = a
         .create(&py, "epics", json!({"title": "y0", "tags": [ty]}))
         .await;
@@ -344,7 +347,7 @@ async fn canon_online_02_ops_stay_in_their_project() -> Result<(), HarnessError>
             json!(format!("et_{:026}", 1)),
             "epic_tag",
             "create",
-            json!({"epic_id": ey, "tag_id": ty}),
+            json!({"epic_id": ey, "tag_id": ty2}),
         ),
     ] {
         fake.inject_op(

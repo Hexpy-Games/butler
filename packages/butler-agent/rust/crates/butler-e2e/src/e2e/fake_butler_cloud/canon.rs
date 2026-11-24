@@ -6,13 +6,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{Days, SecondsFormat, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::{MutexGuard, PoisonError},
 };
 use tokio::sync::mpsc::UnboundedSender;
+
+mod ops;
+use ops::{StoredEntity, decide};
 
 #[derive(Default)]
 pub(super) struct Canon {
@@ -34,57 +36,6 @@ pub(super) struct Space {
     head: u64,
     frozen: HashMap<String, u64>,
     pub(super) sockets: Vec<(String, UnboundedSender<Message>)>,
-}
-
-#[derive(Clone, Copy, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Kind {
-    Plan,
-    Epic,
-    Tag,
-    EpicTag,
-    Comment,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Action {
-    Create,
-    Set,
-    Move,
-    Delete,
-    Append,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Op {
-    op_id: String,
-    entity_id: String,
-    kind: Kind,
-    action: Action,
-    base_revision: u64,
-    fields: Map<String, Value>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Ops {
-    ops: Vec<Op>,
-}
-
-#[derive(Serialize)]
-struct Entity {
-    entity_id: String,
-    kind: Kind,
-    revision: u64,
-    deleted: bool,
-    data: Map<String, Value>,
-}
-
-struct StoredEntity {
-    entity: Entity,
-    field_rev: HashMap<String, u64>,
 }
 
 impl FakeButlerCloud {
@@ -361,15 +312,10 @@ impl Space {
     }
 
     fn apply_ops(&mut self, account: &Value, device: &Value, body: &[u8]) -> Response {
-        if body.len() > 1024 * 1024 {
-            return failure(StatusCode::PAYLOAD_TOO_LARGE, "too_large");
-        }
-        let Ok(Ops { ops }) = serde_json::from_slice(body) else {
-            return failure(StatusCode::BAD_REQUEST, "invalid_request");
+        let ops = match ops::validate(body) {
+            Ok(ops) => ops,
+            Err((status, code)) => return failure(status, code),
         };
-        if !(1..=100).contains(&ops.len()) {
-            return failure(StatusCode::BAD_REQUEST, "invalid_request");
-        }
         let now = Utc::now().timestamp_millis();
         let mut records = Vec::new();
         let mut results = Vec::new();
@@ -445,55 +391,4 @@ impl Space {
             }
         });
     }
-}
-
-fn decide(
-    entities: &mut HashMap<String, StoredEntity>,
-    op: &Op,
-) -> Option<(u64, Map<String, Value>)> {
-    if matches!(op.action, Action::Create | Action::Append) {
-        if entities.contains_key(&op.entity_id) {
-            return None;
-        }
-        let mut data = match op.kind {
-            Kind::Plan => json!({"description": "", "status": "open", "due_on": null}),
-            Kind::Epic => json!({"plan_id": null, "plan_rank": null, "description": "", "canon_status": "planned", "assignee": null}),
-            _ => json!({}),
-        }.as_object().cloned().unwrap_or_default();
-        data.extend(op.fields.clone());
-        let field_rev = data.keys().map(|field| (field.clone(), 1)).collect();
-        let entity = Entity {
-            entity_id: op.entity_id.clone(),
-            kind: op.kind,
-            revision: 1,
-            deleted: false,
-            data: data.clone(),
-        };
-        entities.insert(op.entity_id.clone(), StoredEntity { entity, field_rev });
-        return Some((1, data));
-    }
-    let row = entities.get_mut(&op.entity_id)?;
-    if row.entity.kind != op.kind || row.entity.deleted {
-        return None;
-    }
-    let revision = row.entity.revision + 1;
-    if matches!(op.action, Action::Delete) {
-        row.entity.deleted = true;
-        row.entity.revision = revision;
-        return Some((revision, Map::new()));
-    }
-    if op.base_revision > row.entity.revision
-        || (op.base_revision < row.entity.revision
-            && op.fields.keys().any(|field| {
-                row.field_rev.get(field).copied().unwrap_or_default() > op.base_revision
-            }))
-    {
-        return None;
-    }
-    row.entity.revision = revision;
-    row.entity.data.extend(op.fields.clone());
-    for field in op.fields.keys() {
-        row.field_rev.insert(field.clone(), revision);
-    }
-    Some((revision, op.fields.clone()))
 }
