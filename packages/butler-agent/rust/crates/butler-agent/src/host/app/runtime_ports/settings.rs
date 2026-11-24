@@ -21,7 +21,7 @@ pub(crate) struct AppSettingsFactsAdapter {
     configuration: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
     data_root: PathBuf,
-    server_url: String,
+    server_url: Option<String>,
     bridge_mode: String,
     app_version: Option<String>,
     current: Arc<RwLock<Arc<AppSettingsFacts>>>,
@@ -32,7 +32,7 @@ impl AppSettingsFactsAdapter {
         configuration: Arc<ModelConfiguration>,
         profile: Arc<ProfileService>,
         data_root: PathBuf,
-        server_url: String,
+        server_url: Option<String>,
         bridge_mode: String,
         app_version: Option<String>,
     ) -> Result<Self, GatewayApplicationError> {
@@ -40,7 +40,7 @@ impl AppSettingsFactsAdapter {
             &configuration,
             &profile,
             &data_root,
-            &server_url,
+            server_url.as_deref(),
             &bridge_mode,
             app_version.as_deref(),
         )
@@ -63,7 +63,7 @@ impl AppSettingsFactsAdapter {
             &self.configuration,
             &self.profile,
             &self.data_root,
-            &self.server_url,
+            self.server_url.as_deref(),
             &self.bridge_mode,
             self.app_version.as_deref(),
         )
@@ -102,7 +102,7 @@ async fn load(
     configuration: &ModelConfiguration,
     profile: &ProfileService,
     data_root: &std::path::Path,
-    server_url: &str,
+    server_url: Option<&str>,
     bridge_mode: &str,
     app_version: Option<&str>,
 ) -> Result<Arc<AppSettingsFacts>, GatewayApplicationError> {

@@ -250,6 +250,9 @@ async fn attach(
     rotated: tokio_util::sync::CancellationToken,
     headers: &axum::http::HeaderMap,
 ) -> Result<Response, HttpError> {
+    if super::content::port(&state).is_none() {
+        return Err(error(403, "browser_host_forbidden"));
+    }
     let launch = hidden::launch_of(headers);
     let launch = launch.as_deref();
     let (sender, receiver) = mpsc::channel(channel_frames());
@@ -327,6 +330,12 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     if args.get("op").is_some() {
         return agent_calls::call(state, args).await;
     }
+    let Some(origin) = signed_in::content_origin(&state) else {
+        return super::json(
+            StatusCode::OK,
+            json!({"status":"unavailable","reason":"no_browser"}),
+        );
+    };
     let view = super::content::check_view(&state, &args).await?;
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
@@ -340,7 +349,6 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
         .is_some();
     if !attached && let Some(headless) = state.headless.clone().filter(|h| h.enabled()) {
         // No App: Butler's own browser checks the output, same policy and shape.
-        let origin = format!("http://127.0.0.1:{}", super::content::port(&state));
         let value = headless.output_check(&args, &origin).await;
         return super::json(StatusCode::OK, checked(&value, &args));
     }

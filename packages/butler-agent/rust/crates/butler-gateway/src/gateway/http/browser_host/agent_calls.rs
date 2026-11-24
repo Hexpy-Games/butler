@@ -201,7 +201,8 @@ fn dispatch(
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"].as_str().is_some_and(|url| {
+            let url = tab["url"].as_str();
+            if url.is_some_and(|url| {
                 !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
             }) {
                 return response(
@@ -210,11 +211,11 @@ fn dispatch(
                 )
                 .map(Some);
             }
-            if frame["args"]["policy"]["mode"] != "signed_in" {
-                frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
-                    &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-                    tab["url"].as_str().unwrap_or(""),
-                );
+            if frame["args"]["policy"]["mode"] != "signed_in"
+                && let Some(origin) = super::signed_in::content_origin(state)
+            {
+                frame["args"]["policy"] =
+                    butler_runtime::browser::navigation_policy(&origin, url.unwrap_or(""));
             }
             if state
                 .previews
@@ -269,7 +270,7 @@ pub(super) fn permitted_url(state: &HttpState, session: &str, raw: &str) -> bool
                 && u.username().is_empty()
                 && u.password().is_none()
                 && u.host_str() == Some("127.0.0.1")
-                && u.port() == Some(super::super::content::port(state))
+                && super::super::content::port(state).is_some_and(|port| u.port() == Some(port))
                 && (u.path().starts_with("/__o/")
                     || u.path().starts_with("/__p/")
                     || state.previews.has_active(session))

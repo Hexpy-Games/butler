@@ -46,7 +46,9 @@
 mod fixture_identity;
 
 mod locale;
+mod tcp_listeners;
 pub use locale::system_locale;
+pub use tcp_listeners::listening_tcp_ports;
 
 use std::fs::{File, TryLockError};
 use std::io;

@@ -52,7 +52,7 @@ async fn on_host(
     wait: Duration,
 ) -> Result<Rendered, &'static str> {
     // The headless browser's rule: public pages, and Butler's own outputs.
-    let port = super::super::content::port(state);
+    let port = super::super::content::port(state).ok_or("browser_unavailable")?;
     let content = Some(ContentOrigin(port));
     if !guard_url(url, content).await {
         return Err("navigation_denied");

@@ -22,7 +22,7 @@ pub(in crate::gateway::tests) async fn serve_on_free_pair(
         if listener.local_addr().unwrap().port() == u16::MAX {
             continue;
         }
-        match serve_gateway(listener, application.clone(), config()).await {
+        match serve_gateway(Some(listener), application.clone(), config()).await {
             Ok(server) => return server,
             Err(error) if error.kind() == ErrorKind::AddrInUse => {}
             Err(error) => panic!("test gateway failed to start: {error}"),
