@@ -2,7 +2,7 @@
 //! `connect` for browsers.
 use super::super::{HttpError, HttpState, error::json, read_body_with_limit};
 use crate::gateway::{
-    DeviceKind,
+    ButlerAccountRequest, DeviceKind, GatewayApplicationError,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 use axum::{
@@ -178,6 +178,34 @@ pub(in crate::gateway::http) async fn set_push_request(
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NO_CONTENT;
     Ok(response)
+}
+
+pub(in crate::gateway::http) async fn push_status_request(
+    state: &Arc<HttpState>,
+    access: super::Access,
+) -> Result<Response, HttpError> {
+    if access != super::Access::DeviceToken {
+        return Err(HttpError::public(
+            403,
+            "device_token_required",
+            "Only a paired device can view notification availability.",
+        ));
+    }
+    let data = match state
+        .application
+        .setup()?
+        .butler_account(ButlerAccountRequest::PushAvailable)
+        .await
+    {
+        Ok(value) => value,
+        Err(GatewayApplicationError::Public {
+            status: 404, code, ..
+        }) if code == "butler_account_disabled" => {
+            serde_json::json!({"available": false})
+        }
+        Err(error) => return Err(error.into()),
+    };
+    super::super::setup::envelope(StatusCode::OK, data)
 }
 
 fn expo_token(value: &str) -> bool {

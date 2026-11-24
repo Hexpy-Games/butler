@@ -282,6 +282,9 @@ async fn authorized_route(
     if request.method() == Method::PUT && request.uri().path() == security::DEVICE_PUSH_PATH {
         return security::set_push_request(&state, grant.access, request).await;
     }
+    if request.method() == Method::GET && request.uri().path() == security::DEVICE_PUSH_PATH {
+        return security::push_status_request(&state, grant.access).await;
+    }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

@@ -520,6 +520,7 @@ export interface MobileCopy {
     computer: string;
     notifications: string;
     notificationsFailed: string;
+    notificationsSignIn: string;
     disconnect: string;
     disconnectTitle: string;
     disconnectBody: string;

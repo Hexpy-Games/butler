@@ -617,6 +617,7 @@ export const enUsCopy: AppCopy = {
       computer: "Computer",
       notifications: "Notifications",
       notificationsFailed: "Couldn't change notifications.",
+      notificationsSignIn: "Sign in to your Butler account on your computer to use this.",
       disconnect: "Disconnect",
       disconnectTitle: "Disconnect from this computer?",
       disconnectBody: "You'll need to pair again to use Butler.",

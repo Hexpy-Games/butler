@@ -37,26 +37,43 @@ impl GatewayDevices for AppApplication {
     }
     fn set_device_push_token(&self, id: String, token: Option<String>) -> ApplicationFuture<()> {
         let storage = self.storage.clone();
+        let push_sync = self.push_sync.clone();
         Box::pin(async move {
-            storage.execute(move |db| {
-                if let Some(token) = &token {
+            let changed = storage.execute(move |db| {
+                let cleared = if let Some(token) = &token {
                     db.execute("UPDATE paired_devices SET push_token=NULL WHERE push_token=?1 AND id<>?2",
-                        rusqlite::params![token,id]).map_err(AppStorageError::sqlite)?;
-                }
-                db.execute("UPDATE paired_devices SET push_token=?1 WHERE id=?2 AND revoked_at IS NULL",
+                        rusqlite::params![token,id]).map_err(AppStorageError::sqlite)?
+                } else {
+                    0
+                };
+                let updated = db.execute(
+                    "UPDATE paired_devices SET push_token=?1 WHERE id=?2 AND revoked_at IS NULL AND push_token IS NOT ?1",
                     rusqlite::params![token,id]).map_err(AppStorageError::sqlite)?;
-                Ok(())
-            }).await.map_err(app_error)
+                Ok(cleared + updated > 0)
+            }).await.map_err(app_error)?;
+            if changed {
+                push_sync.notify_one();
+            }
+            Ok(())
         })
     }
     fn revoke_devices(&self, id: Option<String>, now: u64) -> ApplicationFuture<()> {
         let storage = self.storage.clone();
+        let push_sync = self.push_sync.clone();
         Box::pin(async move {
-            storage.execute(move |db| {
+            let changed = storage.execute(move |db| {
+                let changed = db.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM paired_devices WHERE revoked_at IS NULL AND (?1 IS NULL OR id=?1) AND push_token IS NOT NULL)",
+                    [&id], |row| row.get::<_, bool>(0),
+                ).map_err(AppStorageError::sqlite)?;
                 db.execute("UPDATE paired_devices SET revoked_at=?1, push_token=NULL WHERE revoked_at IS NULL AND (?2 IS NULL OR id=?2)",
                     rusqlite::params![now,id]).map_err(AppStorageError::sqlite)?;
-                Ok(())
-            }).await.map_err(app_error)
+                Ok(changed)
+            }).await.map_err(app_error)?;
+            if changed {
+                push_sync.notify_one();
+            }
+            Ok(())
         })
     }
     fn touch_device(&self, id: String, now: u64) -> ApplicationFuture<()> {

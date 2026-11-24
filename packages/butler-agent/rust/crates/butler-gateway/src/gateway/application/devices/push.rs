@@ -1,15 +1,11 @@
-mod expo;
-
-use crate::gateway::AppSettingsFactsProvider;
 use crate::gateway::{
-    AppEventEnvelope,
+    AppEventEnvelope, AppSettingsFactsProvider, AppSetupPort, ButlerAccountRequest,
+    GatewayApplicationError,
     application::{AppApplication, AppStorage, AppStorageError, settings},
-    ui_language::UiLanguage,
 };
-use butler_log::http::{self, Client};
-use rusqlite::params;
+use rusqlite::Connection;
 use serde_json::{Value, json};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 enum Status {
@@ -32,37 +28,32 @@ struct Push {
 
 impl AppApplication {
     /// Sends status notifications for newly published app events.
-    pub fn start_push(&self, url: String) {
+    pub fn start_push(&self) {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Push>();
         let subscription = self.subscribers.subscribe(Arc::new(move |event| {
             if let Some(push) = push_of(event.envelope()) {
                 let _ = tx.send(push);
             }
         }));
-        let Ok(client) = http::external(http::Purpose::new("push"))
-            .timeout(Duration::from_secs(10))
-            .build()
-        else {
-            tracing::warn!(code = "push_client_build_failed");
-            return;
-        };
         let storage = self.storage.clone();
         let settings_facts = self.dependencies.settings_facts.clone();
         let shutdown = self.dependencies.service_shutdown.clone();
+        let setup = self.dependencies.setup.clone();
+        let sync = self.push_sync.clone();
         tokio::spawn(async move {
             let _subscription = subscription;
             loop {
-                let next = tokio::select! {
+                tokio::select! {
+                    biased;
                     () = shutdown.cancelled() => return,
-                    next = rx.recv() => next,
-                };
-                let Some(push) = next else { return };
-                let result = tokio::select! {
-                    () = shutdown.cancelled() => return,
-                    result = deliver(&storage, settings_facts.as_ref(), &client, &url, push) => result,
-                };
-                if let Err(code) = result {
-                    tracing::warn!(code, "push delivery failed");
+                    () = sync.notified() => sync_tokens(&storage, setup.as_ref()).await,
+                    next = rx.recv() => {
+                        let Some(push) = next else { return };
+                        tokio::select! {
+                            () = shutdown.cancelled() => return,
+                            () = deliver(&storage, settings_facts.as_ref(), setup.as_ref(), push) => {}
+                        }
+                    }
                 }
             }
         });
@@ -115,89 +106,108 @@ fn push_of(event: &AppEventEnvelope) -> Option<Push> {
     })
 }
 
+fn tokens(db: &Connection) -> Result<Vec<String>, AppStorageError> {
+    let mut query = db
+        .prepare(
+            "SELECT push_token FROM paired_devices
+             WHERE revoked_at IS NULL AND push_token IS NOT NULL ORDER BY created_at,id",
+        )
+        .map_err(AppStorageError::sqlite)?;
+    query
+        .query_map([], |row| row.get(0))
+        .map_err(AppStorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppStorageError::sqlite)
+}
+
+async fn sync_tokens(storage: &AppStorage, setup: &dyn AppSetupPort) {
+    match storage.read(tokens).await {
+        Ok(tokens) => {
+            let _ = setup
+                .butler_account(ButlerAccountRequest::PushTokens { tokens })
+                .await;
+        }
+        Err(error) => tracing::debug!(code = error.code(), "push token sync dropped"),
+    }
+}
+
 async fn deliver(
     storage: &AppStorage,
     settings_facts: &dyn AppSettingsFactsProvider,
-    client: &Client,
-    url: &str,
+    setup: &dyn AppSetupPort,
     push: Push,
-) -> Result<(), &'static str> {
-    let facts = settings_facts.snapshot().map_err(|_| "internal")?;
-    let (language, skip, targets) = storage
+) {
+    let Ok(facts) = settings_facts.snapshot() else {
+        tracing::warn!(code = "internal", "push dropped");
+        return;
+    };
+    let Ok((lang, skip, tokens)) = storage
         .read(move |db| {
-            let language = settings::ui_language(db, &facts)?;
+            let lang = settings::ui_language(db, &facts)?.as_str();
             let skip = if let Some(id) = push.turn_id {
-                db.query_row(
-                    "SELECT COALESCE(json_type(execution_controls_json,'$.subsession_result')='object'
+                db.query_row("SELECT COALESCE(json_type(execution_controls_json,'$.subsession_result')='object'
                                   OR json_type(execution_controls_json,'$.schedule_run')='object'
                                   OR fresh_retry_queue_id IS NOT NULL,0)
                      FROM turns WHERE id=?1",
-                    [id],
-                    |row| row.get::<_, bool>(0),
-                )
-                .map_err(AppStorageError::sqlite)?
+                    [id], |row| row.get::<_, bool>(0)).map_err(AppStorageError::sqlite)?
             } else {
                 false
             };
-            let mut query = db.prepare(
-                "SELECT id,push_token FROM paired_devices
-                 WHERE revoked_at IS NULL AND push_token IS NOT NULL ORDER BY created_at,id",
-            ).map_err(AppStorageError::sqlite)?;
-            let targets = query
-                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
-                .map_err(AppStorageError::sqlite)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(AppStorageError::sqlite)?;
-            Ok((language, skip, targets))
+            Ok((lang, skip, tokens(db)?))
         })
         .await
-        .map_err(|error| error.code())?;
-    if skip || targets.is_empty() {
-        return Ok(());
+        .inspect_err(|error| tracing::warn!(code = error.code(), "push dropped"))
+    else {
+        return;
+    };
+    if skip || tokens.is_empty() {
+        return;
     }
-    let (title, body) = copy(push.status, language);
     let kind = match push.status {
         Status::NeedsInput => "needs_input",
         Status::Done => "done",
         Status::Failed => "failed",
         Status::ScheduleBlocked => "schedule_blocked",
     };
-    let data = match push.target {
-        Target::Session(id) => json!({"kind":kind,"session_id":id}),
-        Target::Automation(id) => json!({"kind":kind,"automation_id":id}),
-    };
-    let messages: Vec<_> = targets.iter().map(|(_, token)| {
-        json!({"to":token,"title":title,"body":body,"sound":"default","data":data})
-    }).collect();
-    let unregistered = expo::send(client, url, &messages)
+    let messages = tokens
+        .iter()
+        .map(|token| match &push.target {
+            Target::Session(id) => json!({"to":token,"kind":kind,"lang":lang,"session_id":id}),
+            Target::Automation(id) => json!({"to":token,"kind":kind,"lang":lang,"automation_id":id}),
+        })
+        .collect();
+    let Ok(value) = setup
+        .butler_account(ButlerAccountRequest::Push { messages, tokens })
         .await
-        .map_err(|error| error.code)?;
-    for index in unregistered {
-        let (id, token) = targets[index].clone();
-        storage
-            .execute(move |db| {
-                db.execute(
-                    "UPDATE paired_devices SET push_token=NULL WHERE id=?1 AND push_token=?2",
-                    params![id, token],
-                )
-                .map_err(AppStorageError::sqlite)?;
-                Ok(())
+        .inspect_err(|error| {
+            let code = match error {
+                GatewayApplicationError::Public { code, .. } => code.as_str(),
+                _ => "internal",
+            };
+            match code {
+                "butler_account_disabled" | "butler_account_signed_out" => {
+                    tracing::debug!(code, "push dropped");
+                }
+                _ => tracing::warn!(code, "push dropped"),
+            }
+        })
+    else {
+        return;
+    };
+    let gone: Vec<_> = value["gone"].as_array().into_iter().flatten()
+        .filter_map(|token| token.as_str().map(str::to_owned))
+        .collect();
+    if !gone.is_empty() {
+        match storage.execute(move |db| {
+            gone.into_iter().try_fold(0, |cleared, token| {
+                db.execute("UPDATE paired_devices SET push_token=NULL WHERE push_token=?1", [token])
+                    .map(|rows| cleared + rows)
+                    .map_err(AppStorageError::sqlite)
             })
-            .await
-            .map_err(|error| error.code())?;
-    }
-    Ok(())
-}
-
-fn copy(status: Status, language: UiLanguage) -> (&'static str, &'static str) {
-    match (status, language) {
-        (Status::NeedsInput, UiLanguage::English) => ("Butler", "Needs your input"),
-        (Status::Done, UiLanguage::English) => ("Butler", "Done"),
-        (Status::Failed, UiLanguage::English) => ("Butler", "Failed"),
-        (Status::ScheduleBlocked, UiLanguage::English) => ("Butler", "Schedule stopped"),
-        (Status::NeedsInput, UiLanguage::Korean) => ("버틀러", "확인 필요"),
-        (Status::Done, UiLanguage::Korean) => ("버틀러", "완료"),
-        (Status::Failed, UiLanguage::Korean) => ("버틀러", "실패"),
-        (Status::ScheduleBlocked, UiLanguage::Korean) => ("버틀러", "예약 작업 멈춤"),
+        }).await {
+            Ok(cleared) if cleared > 0 => sync_tokens(storage, setup).await,
+            Ok(_) => {}
+            Err(error) => tracing::warn!(code = error.code(), "push dropped"),
+        }
     }
 }

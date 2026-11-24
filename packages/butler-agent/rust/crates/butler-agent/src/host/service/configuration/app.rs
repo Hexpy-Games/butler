@@ -25,7 +25,6 @@ pub(crate) struct AppServiceConfiguration {
     pub(crate) db_configured: bool,
     pub(crate) enabled: bool,
     pub(crate) folder_selection_secret: Option<String>,
-    pub(crate) push_url: String,
     gateway: GatewayConfig,
     butler_account_enabled: bool,
     content_port: Result<Option<u16>, String>,
@@ -179,8 +178,6 @@ impl AppServiceConfiguration {
             db_configured,
             enabled,
             folder_selection_secret: folder_secret,
-            push_url: env::var("BUTLER_PUSH_URL")
-                .unwrap_or_else(|_| "https://exp.host/--/api/v2/push/send".into()),
             gateway: {
                 let headless =
                     super::headless_browser::headless_browser(data_root, settings.headless_browser);

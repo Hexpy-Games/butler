@@ -28,10 +28,15 @@ export default function Settings() {
   const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
   const [push, setPush] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
   const leaving = useRef(false);
   useEffect(() => {
     void pairingStore.loadActive().then(active => setPush(active?.pushEnabled === true));
   }, [pairing]);
+  useEffect(() => {
+    if (!client) return;
+    void client.request<{ available: boolean }>("/devices/self/push").then(v => setAvailable(v.available), () => setAvailable(null));
+  }, [client]);
 
   async function toggle(on: boolean) {
     if (!client || !pairing) return;
@@ -51,9 +56,12 @@ export default function Settings() {
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
       </ListGroup> : null}
       {pairing ? <ListGroup>
-        <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
-          trailing={<Switch value={push} label={copy.settings.notifications} disabled={!client}
-            onValueChange={on => void toggle(on)} />} />
+        {available === false ? <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
+          description={copy.settings.notificationsSignIn} disabled
+          trailing={<Switch value={false} label={copy.settings.notifications} disabled onValueChange={() => {}} />} />
+          : <ListRow icon={icons.MessageSquare} title={copy.settings.notifications}
+            trailing={<Switch value={push} label={copy.settings.notifications} disabled={!client}
+              onValueChange={on => void toggle(on)} />} />}
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}

@@ -27,7 +27,6 @@ mod event_outbox;
 mod events;
 mod thinking;
 use crate::gateway::shutdown_trace::measure as measure_shutdown;
-
 use errors::{app_error, public};
 mod browser_stills;
 mod devices;
@@ -112,7 +111,6 @@ mod wallpapers;
 
 use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
-
 use super::{
     AppEventEnvelope, ApplicationFuture, EventSubscription, GatewayApplication,
     GatewayApplicationError, MessageContent, MessageSendResult, PublishedEvent,
@@ -223,6 +221,7 @@ pub struct AppApplication {
     queue_wake: queue_dispatcher::QueueWake,
     automation_scheduler: Option<automations::AutomationScheduler>,
     automation_wake: Arc<tokio::sync::Notify>,
+    push_sync: Arc<tokio::sync::Notify>,
     automation_queued: Arc<std::sync::atomic::AtomicBool>,
     automation_runs: automations::AutomationRunOwner,
     composing: initiated::Composing,
@@ -309,6 +308,7 @@ impl AppApplication {
             composing: Default::default(),
             initiated_decisions: Default::default(),
             automation_wake: automation_wake.clone(),
+            push_sync: Arc::default(),
             automation_queued,
             automation_runs,
             queue_mutations: SessionQueueMutationOwner::new(),
