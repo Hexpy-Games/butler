@@ -148,6 +148,7 @@ fn draw(
                     frame,
                     live_print::REST.flow,
                     module,
+                    None,
                     window,
                 );
             } else if paint(bounds, key, module, params, input.clone(), frame, window) {
