@@ -140,16 +140,14 @@ async fn allowed_folder_is_in_scope() -> Result<(), HarnessError> {
     let listed = s.gw.get("/allowed-folders").await?;
     let id = listed.data()["folders"][0]["rule_id"].clone();
     let chat = "general";
+    let allowed_read = call(
+        "cat",
+        "run_command",
+        &json!({"command":"cat ~/work/a.txt","cwd":"~/work","summary":"Read file","state_effect":"read_only"}),
+    );
     for (prompt, step) in [
         ("Read allowed file.", read("read", "~/work/a.txt")),
-        (
-            "Run allowed read.",
-            call(
-                "cat",
-                "run_command",
-                &json!({"command":"cat ~/work/a.txt","cwd":"~/work","summary":"Read file","state_effect":"read_only"}),
-            ),
-        ),
+        ("Run allowed read.", allowed_read.clone()),
     ] {
         script
             .rounds
@@ -194,7 +192,13 @@ async fn allowed_folder_is_in_scope() -> Result<(), HarnessError> {
         s.gw.post("/allowed-folders/remove", json!({"rule_id":id}))
             .await?;
     assert_eq!(removed.status, 200, "{}", removed.text);
-    paused(&s, chat, "Run allowed read.").await?;
+    let prompt = "Read after removing the folder.";
+    script
+        .rounds
+        .lock()
+        .unwrap()
+        .insert(prompt.into(), vec![allowed_read]);
+    paused(&s, chat, prompt).await?;
     s.finish().await?;
     server.abort();
     Ok(())

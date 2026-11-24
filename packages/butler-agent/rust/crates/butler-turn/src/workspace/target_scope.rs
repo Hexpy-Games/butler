@@ -113,7 +113,10 @@ fn classify(
     {
         return TargetScope::Protected;
     }
-    if path_is_within(&real, data)
+    let project = project.filter(|root| path_is_within(&real, root));
+    // Butler-managed workspaces can live under the data directory. Only
+    // the already-consented workspace carries that scope into the data tree.
+    if (project.is_none() && path_is_within(&real, data))
         || roots
             .installation_root
             .is_some_and(|root| path_is_within(&real, &realpath_or_nearest(root)))
@@ -124,8 +127,7 @@ fn classify(
     {
         return TargetScope::Protected;
     }
-    let (project, scope) = if let Some(project) = project.filter(|root| path_is_within(&real, root))
-    {
+    let (project, scope) = if let Some(project) = project {
         (project, TargetScope::ProjectFolder)
     } else if let Some(folder) = allowed.iter().find(|root| path_is_within(&real, root)) {
         (folder.as_path(), TargetScope::AllowedFolder)

@@ -91,7 +91,7 @@ fn commit_decision(
         None
     };
     let allow_scope = if action == AuthorityAction::Allow {
-        input.allow_scope.as_deref().unwrap_or("once")
+        execution_allow_scope(input)
     } else {
         "once"
     };
@@ -133,10 +133,17 @@ fn same(
         AuthorityAction::parse(&input.action)
     };
     record.decision == action.decision()
-        && (action != AuthorityAction::Allow
-            || record.allow_scope == input.allow_scope.as_deref().unwrap_or("once"))
+        && (action != AuthorityAction::Allow || record.allow_scope == execution_allow_scope(input))
         && (action != AuthorityAction::Modify
             || record.private_alternative_input.as_deref() == alternative)
+}
+
+fn execution_allow_scope(input: &AuthorityDecisionInput) -> &str {
+    // The global scope belongs to the rule. The approved operation runs once.
+    match input.allow_scope.as_deref() {
+        None | Some("always") => "once",
+        Some(scope) => scope,
+    }
 }
 
 fn question_decision(
