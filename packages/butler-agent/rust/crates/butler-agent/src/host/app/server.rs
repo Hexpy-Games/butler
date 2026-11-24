@@ -46,7 +46,7 @@ mod startup_hold;
 pub(crate) struct AppServer {
     listener: Option<GatewayServer>,
     /// Bound address, kept after the listener stops.
-    address: SocketAddr,
+    address: Option<SocketAddr>,
     listener_ready: Arc<AtomicBool>,
     pub(super) application: Arc<AppApplication>,
     artifacts: Arc<AppMessageFiles>,
@@ -78,7 +78,7 @@ impl AppServer {
             })
     }
 
-    pub(crate) fn local_addr(&self) -> SocketAddr {
+    pub(crate) fn local_addr(&self) -> Option<SocketAddr> {
         self.address
     }
 
@@ -87,13 +87,23 @@ impl AppServer {
     }
 
     /// Reserve the address before any startup persistence or runtime DB opens.
-    pub(crate) async fn bind(host: &str, port: u16) -> Result<TcpListener, BtccError> {
-        TcpListener::bind((host, port)).await.map_err(|error| {
-            BtccError::relayed(
-                "app_listener_bind_failed",
-                format!("{host}:{port}: {error}"),
-            )
-        })
+    pub(crate) async fn bind(
+        config: &AppServiceConfiguration,
+        port: u16,
+    ) -> Result<Option<TcpListener>, BtccError> {
+        if config.remote_socket().is_some() {
+            return Ok(None);
+        }
+        let host = &config.host;
+        TcpListener::bind((host.as_str(), port))
+            .await
+            .map(Some)
+            .map_err(|error| {
+                BtccError::relayed(
+                    "app_listener_bind_failed",
+                    format!("{host}:{port}: {error}"),
+                )
+            })
     }
 
     pub(crate) async fn open(
@@ -102,7 +112,7 @@ impl AppServer {
         installation: &ResolvedInstallation,
         app_config: &AppServiceConfiguration,
         owners: AppServerOwners,
-        listener: TcpListener,
+        listener: Option<TcpListener>,
     ) -> Result<Self, BtccError> {
         app_config.validate()?;
         let artifacts = Arc::new(AppMessageFiles::new(
@@ -132,13 +142,11 @@ impl AppServer {
         app_config: &AppServiceConfiguration,
         owners: AppServerOwners,
         artifacts: Arc<AppMessageFiles>,
-        listener: TcpListener,
+        listener: Option<TcpListener>,
     ) -> Result<Self, BtccError> {
         let listener_ready = Arc::new(AtomicBool::new(false));
-        let address = listener.local_addr().map_err(|error| {
-            BtccError::relayed("app_listener_address_failed", error.to_string())
-        })?;
-        let settings = Arc::new(open_settings(runtime, data_root, address, installation).await?);
+        let settings =
+            Arc::new(open_settings(runtime, data_root, listener.as_ref(), installation).await?);
         let setup = owners
             .start_setup(
                 runtime,
@@ -204,7 +212,7 @@ impl AppServer {
     }
 
     async fn activate_listener(
-        listener: TcpListener,
+        listener: Option<TcpListener>,
         application: Arc<AppApplication>,
         gateway_config: GatewayConfig,
         setup: AppSetup,
@@ -335,14 +343,18 @@ fn gateway_config(
 async fn open_settings(
     runtime: &AgentRuntime,
     data_root: &std::path::Path,
-    address: SocketAddr,
+    listener: Option<&TcpListener>,
     installation: &ResolvedInstallation,
 ) -> Result<AppSettingsFactsAdapter, BtccError> {
+    let address = listener
+        .map(TcpListener::local_addr)
+        .transpose()
+        .map_err(|error| BtccError::relayed("app_listener_address_failed", error.to_string()))?;
     AppSettingsFactsAdapter::open(
         runtime.models.configuration.clone(),
         runtime.profile.clone(),
         data_root.to_path_buf(),
-        format!("http://{address}"),
+        address.map(|address| format!("http://{address}")),
         "local".into(),
         installation.app_version(),
     )

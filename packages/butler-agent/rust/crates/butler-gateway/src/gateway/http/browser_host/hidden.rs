@@ -186,7 +186,11 @@ pub(super) fn refusal(state: &HttpState, frame: &Value, op: &str) -> Option<Valu
 /// Chrome. The App's engine is available independently of the operator's
 /// Chrome fallback setting.
 pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
-    let (Some(app_host), Some(headless)) = (state.app_host.clone(), state.headless.as_ref()) else {
+    let (Some(app_host), Some(headless), Some(port)) = (
+        state.app_host.clone(),
+        state.headless.as_ref(),
+        state.security.port(),
+    ) else {
         return;
     };
     if app_alive(state) {
@@ -217,7 +221,7 @@ pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
             return;
         };
         butler_runtime::browser::HostCredentials {
-            url: format!("http://127.0.0.1:{}", state.security.port()),
+            url: format!("http://127.0.0.1:{port}"),
             token: token.to_string(),
             admin: admin.to_string(),
         }

@@ -16,16 +16,11 @@ pub(in crate::gateway::http) fn view(
     if !is_html(file) {
         return Err(refused());
     }
-    let origin = view_origin(state, request.headers())?;
+    let port = super::port(state).ok_or_else(refused)?;
+    let origin = view_origin(state, request.headers(), port)?;
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
-    let cap = capability::sign(
-        &token,
-        super::port(state),
-        &format!("message-file-{id}"),
-        0,
-        issued,
-    );
+    let cap = capability::sign(&token, port, &format!("message-file-{id}"), 0, issued);
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {

@@ -87,20 +87,20 @@ impl TabRegistry {
     pub fn get(&self, id: &str) -> Option<&Value> {
         self.tabs.get(id)
     }
-    /// Signed-in tabs the user dragged from their own tabs into a conversation
-    /// in this snapshot, as `(session, url)`: the drag is that conversation's grant.
+    /// A site the user brings into a conversation by dragging a signed-in tab
+    /// in or by going there in one of its signed-in tabs is granted to that
+    /// conversation. Returns the new grants as `(session, url)`.
     pub fn handovers(&self, next: &[Value]) -> Vec<(String, String)> {
         next.iter()
             .filter(|tab| tab["profile"] == "signed_in")
             .filter_map(|tab| {
                 let previous = self.tabs.get(tab["id"].as_str()?)?;
                 let session = tab["owner"].as_str()?.strip_prefix("conversation:")?;
-                (previous["owner"] == "mine").then(|| {
-                    (
-                        session.to_owned(),
-                        tab["url"].as_str().unwrap_or("").to_owned(),
-                    )
-                })
+                let url = tab["url"].as_str().unwrap_or("");
+                let user_visit = tab["holder"] == "user"
+                    && site_of(url) != previous["url"].as_str().and_then(site_of);
+                (previous["owner"] == "mine" || user_visit)
+                    .then(|| (session.to_owned(), url.to_owned()))
             })
             .collect()
     }

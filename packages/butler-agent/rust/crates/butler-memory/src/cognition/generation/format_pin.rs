@@ -273,6 +273,12 @@ fn pin_vacuum_snapshot() {
         .map(Result::unwrap)
         .collect();
     assert_eq!(rows, vec![(1, "one".into()), (2, "two".into())]);
+    assert_eq!(
+        copied
+            .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+            .unwrap(),
+        "wal"
+    );
     assert_eq!(fs::read(&source).unwrap(), before);
     assert!(super::swap::vacuum_snapshot(&source, &target).is_err());
     assert_eq!(

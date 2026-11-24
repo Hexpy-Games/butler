@@ -233,6 +233,12 @@ pub(super) fn vacuum_snapshot_cancellable(
     db.execute("VACUUM INTO ?1", params![path])
         .map_err(snapshot_changed)?;
     db.close().map_err(|(_, source)| snapshot_changed(source))?;
+    // VACUUM INTO writes a rollback-journal file; graphs run in WAL mode.
+    let copy = sqlite::open(target).map_err(snapshot_changed)?;
+    copy.pragma_update(None, "journal_mode", "WAL")
+        .map_err(snapshot_changed)?;
+    copy.close()
+        .map_err(|(_, source)| snapshot_changed(source))?;
     sync(target)?;
     sync(parent)
 }

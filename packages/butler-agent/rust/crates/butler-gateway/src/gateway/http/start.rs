@@ -7,8 +7,8 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 pub(in crate::gateway) struct Listeners {
-    pub main: TcpListener,
-    pub content: TcpListener,
+    pub main: Option<TcpListener>,
+    pub content: Option<TcpListener>,
     pub local: Option<(LocalListener, RemoteSocket)>,
 }
 
@@ -16,8 +16,8 @@ pub(in crate::gateway) async fn prepare(
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
-    local_addr: SocketAddr,
-    content_addr: SocketAddr,
+    local_addr: Option<SocketAddr>,
+    content_addr: Option<SocketAddr>,
 ) -> std::io::Result<Arc<HttpState>> {
     let devices = prepare_devices(application.clone(), shutdown.clone(), local_addr).await?;
     let exposure = GatewayExposure {
@@ -81,14 +81,25 @@ pub(in crate::gateway) fn serve(
     in_process: super::InProcessGateway,
 ) -> JoinHandle<std::io::Result<()>> {
     tokio::spawn(async move {
-        super::content::spawn(listeners.content, state.clone(), shutdown.clone());
-        let local = listeners.local.map(|(listener, socket)| {
+        if let Some(content) = listeners.content {
+            super::content::spawn(content, state.clone(), shutdown.clone());
+        }
+        let mut local = listeners.local.map(|(listener, socket)| {
             listeners::spawn_local(listener, socket, state.clone(), shutdown.clone())
         });
-        let main = listeners::spawn(listeners.main, state.clone(), shutdown.clone());
+        let main = listeners
+            .main
+            .map(|listener| listeners::spawn(listener, state.clone(), shutdown.clone()))
+            .or_else(|| local.take());
         let (result, local_result, ()) = tokio::join!(
             async {
-                let result = main.await.map_err(std::io::Error::other);
+                let result = match main {
+                    Some(main) => main.await.map_err(std::io::Error::other),
+                    None => {
+                        shutdown.cancelled().await;
+                        Ok(Ok(()))
+                    }
+                };
                 shutdown.cancel();
                 result
             },
@@ -155,9 +166,9 @@ fn headless(
         butler_runtime::browser::HeadlessConfig {
             root: browser.root,
             install: browser.install,
-            content: Some(butler_runtime::browser::ContentOrigin(
-                remote.content_addr().port(),
-            )),
+            content: remote
+                .content_addr()
+                .map(|address| butler_runtime::browser::ContentOrigin(address.port())),
             enabled: browser.enabled,
         },
         shutdown.clone(),
@@ -188,12 +199,16 @@ fn app_host(
 async fn prepare_devices(
     application: Arc<dyn GatewayApplication>,
     shutdown: CancellationToken,
-    local_addr: SocketAddr,
+    local_addr: Option<SocketAddr>,
 ) -> std::io::Result<security::DeviceRegistry> {
     super::logs::initialize(application.clone(), shutdown.clone())
         .await
         .map_err(|_| std::io::Error::other("log configuration unavailable"))?;
-    security::DeviceRegistry::load(application, local_addr.port(), shutdown)
-        .await
-        .map_err(|_| std::io::Error::other("device registry unavailable"))
+    security::DeviceRegistry::load(
+        application,
+        local_addr.map(|address| address.port()),
+        shutdown,
+    )
+    .await
+    .map_err(|_| std::io::Error::other("device registry unavailable"))
 }

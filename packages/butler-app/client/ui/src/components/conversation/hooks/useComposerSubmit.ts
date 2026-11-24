@@ -8,6 +8,9 @@ import type {
 } from "@/app/types.ts";
 import type { KeyboardEventLike } from "./composerEventTypes";
 import { captureContent } from "../../browser/captureContent";
+import { useBrowserState } from "../../browser/browserBridge";
+import { useRightSlot } from "../../file-viewer/useRightSlot";
+import type { MessageContent } from "@/app/messageContent";
 import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 import { useComposerStore } from "../composerStore";
@@ -53,6 +56,8 @@ export function useComposerSubmit({
   setAccessMenuOpen,
   onSend,
 }: UseComposerSubmitProps) {
+  const slotSessionId = useComposerStore((state) => state.draftSessionId);
+  const rightSlot = useRightSlot(slotSessionId);
   return useCallback(
     (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
       event.preventDefault();
@@ -74,6 +79,17 @@ export function useComposerSubmit({
       const revision = submitted.draftRevision;
       const sessionId = submitted.draftSessionId;
       const contentParts = captureContent(submitted.contentParts, draftText, elements);
+      let messageContent: MessageContent | undefined = contentParts;
+      if (rightSlot === "browser" && slotSessionId === sessionId) {
+        const { activeId, tabs } = useBrowserState.getState();
+        const tab = tabs.find((tab) => tab.id === activeId && tab.owner === `conversation:${sessionId}`);
+        if (tab?.url) {
+          messageContent = {
+            ...(contentParts ?? { version: 1, parts: [{ type: "text", text: draftText }] }),
+            browser_view: { tab: tab.id, url: tab.url, title: tab.title },
+          };
+        }
+      }
       setModelMenuOpen(false);
       setAccessMenuOpen(false);
       // The sent bubble flies from where the text sat (DS send flight).
@@ -86,7 +102,7 @@ export function useComposerSubmit({
         controlsTouched,
         activeTurn,
         attachments: [...attachments, ...elements.map(item => ({ file: item.file }))],
-      }), contentParts, workspaceMode: submitted.workspaceMode, computerId: submitted.computerId, onRejected: (targetSessionId) => {
+      }), contentParts: messageContent, workspaceMode: submitted.workspaceMode, computerId: submitted.computerId, onRejected: (targetSessionId) => {
         const current = useComposerStore.getState();
         if (targetSessionId === sessionId || current.draftSessionId !== targetSessionId || current.text) return;
         if (contentParts) current.setContentParts(contentParts);
@@ -112,6 +128,8 @@ export function useComposerSubmit({
     },
     [
       readText,
+      rightSlot,
+      slotSessionId,
       text,
       attachments,
       isSending,
