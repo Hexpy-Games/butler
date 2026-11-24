@@ -196,6 +196,10 @@ async fn deliver(
     else {
         return;
     };
+    clear_gone(storage, setup, &value).await;
+}
+
+async fn clear_gone(storage: &AppStorage, setup: &dyn AppSetupPort, value: &Value) {
     let gone: Vec<_> = value["gone"]
         .as_array()
         .into_iter()
