@@ -8,10 +8,14 @@ mod copy;
 mod options;
 mod screen;
 
+use std::{iter, rc::Rc};
+
+use butler_ds::ui::context::Lang;
 use gpui::{Context, SharedString};
 use serde_json::Value;
 
 use crate::lifecycle::network;
+use crate::ui::settings::sections::models::manage::Catalog;
 use crate::ui::source::agent::Jobs;
 use copy::local_model_count;
 use options::{Server, model_options, parse_servers};
@@ -19,20 +23,37 @@ use options::{Server, model_options, parse_servers};
 pub(crate) use options::{LocalModelOption, custom_model_options};
 pub(crate) use screen::screen;
 
-/// `FirstRunProviderCardId`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// `FirstRunProviderCardId`: ChatGPT sign-in, Other, or one catalog provider's API key.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CardId {
     Chatgpt,
-    Claude,
-    Gemini,
-    Openai,
-    Grok,
-    Qwen,
-    Kimi,
-    ZaiCoding,
-    ZaiApi,
-    OpencodeGo,
     Other,
+    Key(SharedString),
+}
+
+/// The API key picks on top, in order: (provider, harness slug).
+const TOP_PICKS: [(&str, &str); 2] = [("anthropic", "claude"), ("google", "gemini")];
+
+/// One hosted provider of the catalog, in catalog order (parsed once, when the catalog is set).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProviderEntry {
+    pub(crate) id: SharedString,
+    pub(crate) label: SharedString,
+}
+
+/// The catalog's hosted providers (`Catalog::hosted_providers`); empty when `raw` is no catalog.
+pub(crate) fn hosted_entries(raw: &Value) -> Rc<[ProviderEntry]> {
+    Catalog::parse(raw)
+        .map(|catalog| {
+            catalog
+                .hosted_providers()
+                .map(|provider| ProviderEntry {
+                    id: provider.provider_id.clone().into(),
+                    label: provider.provider_label.clone().into(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// How a card connects: browser sign-in, one API key, or Other.
@@ -43,103 +64,89 @@ pub(crate) enum CardKind {
     Custom,
 }
 
-/// `ProviderCardSpec`.
-#[derive(Debug)]
-pub(crate) struct ProviderCard {
-    pub(crate) id: CardId,
-    pub(crate) kind: CardKind,
-    /// The catalog provider the card connects.
-    pub(crate) provider_id: Option<&'static str>,
-    /// The service's own API key page.
-    pub(crate) key_url: Option<&'static str>,
-}
+impl CardId {
+    pub(crate) fn kind(&self) -> CardKind {
+        match self {
+            Self::Chatgpt => CardKind::SignIn,
+            Self::Other => CardKind::Custom,
+            Self::Key(_) => CardKind::Key,
+        }
+    }
 
-const fn spec(
-    id: CardId,
-    kind: CardKind,
-    provider_id: &'static str,
-    key_url: Option<&'static str>,
-) -> ProviderCard {
-    ProviderCard {
-        id,
-        kind,
-        provider_id: Some(provider_id),
-        key_url,
+    /// The catalog provider the card connects.
+    pub(crate) fn provider_id(&self) -> &str {
+        match self {
+            Self::Chatgpt => "openai",
+            Self::Other => "local",
+            Self::Key(id) => id.as_ref(),
+        }
+    }
+
+    /// `first-run-card-<slug>` / element ids: the top picks keep their harness names, a key card its provider.
+    pub(crate) fn slug(&self) -> &str {
+        match self {
+            Self::Chatgpt => "chatgpt",
+            Self::Other => "other",
+            Self::Key(id) => TOP_PICKS
+                .iter()
+                .find(|pick| pick.0 == &**id)
+                .map_or(id.as_ref(), |pick| pick.1),
+        }
     }
 }
 
-/// `PROVIDER_CARDS`, in `CardId` order.
-static CARDS: [ProviderCard; 11] = [
-    spec(CardId::Chatgpt, CardKind::SignIn, "openai", None),
-    spec(
-        CardId::Claude,
-        CardKind::Key,
-        "anthropic",
-        Some("https://console.anthropic.com/settings/keys"),
-    ),
-    spec(
-        CardId::Gemini,
-        CardKind::Key,
-        "google",
-        Some("https://aistudio.google.com/apikey"),
-    ),
-    spec(
-        CardId::Openai,
-        CardKind::Key,
-        "openai",
-        Some("https://platform.openai.com/api-keys"),
-    ),
-    spec(
-        CardId::Grok,
-        CardKind::Key,
-        "xai",
-        Some("https://console.x.ai"),
-    ),
-    spec(CardId::Qwen, CardKind::Key, "qwen", None),
-    spec(
-        CardId::Kimi,
-        CardKind::Key,
-        "kimi",
-        Some("https://platform.moonshot.ai/console/api-keys"),
-    ),
-    spec(
-        CardId::ZaiCoding,
-        CardKind::Key,
-        "zai",
-        Some("https://z.ai/manage-apikey/apikey-list"),
-    ),
-    spec(
-        CardId::ZaiApi,
-        CardKind::Key,
-        "zai-api",
-        Some("https://z.ai/manage-apikey/apikey-list"),
-    ),
-    spec(CardId::OpencodeGo, CardKind::Key, "opencode-go", None),
-    spec(CardId::Other, CardKind::Custom, "local", None),
-];
+/// ChatGPT, then the API key picks on top.
+pub(crate) fn top_cards() -> Vec<CardId> {
+    iter::once(CardId::Chatgpt)
+        .chain(TOP_PICKS.iter().map(|pick| CardId::Key(pick.0.into())))
+        .collect()
+}
 
-pub(crate) fn card(id: CardId) -> &'static ProviderCard {
-    &CARDS[id as usize]
+/// The service's own API key page; a provider without one shows no link (as Electron, FirstRunKeyForm.tsx:59).
+pub(crate) fn key_url(provider_id: &str) -> Option<&'static str> {
+    match provider_id {
+        "anthropic" => Some("https://console.anthropic.com/settings/keys"),
+        "google" => Some("https://aistudio.google.com/apikey"),
+        "openai" => Some("https://platform.openai.com/api-keys"),
+        "xai" => Some("https://console.x.ai"),
+        "kimi" => Some("https://platform.moonshot.ai/console/api-keys"),
+        "zai" | "zai-api" => Some("https://z.ai/manage-apikey/apikey-list"),
+        _ => None,
+    }
+}
+
+/// The card's name: its own copy where the list always had one, else its catalog label, else its id.
+pub(crate) fn card_name(card: &CardId, lang: Lang, hosted: &[ProviderEntry]) -> SharedString {
+    copy::known_name(lang, card)
+        .map(SharedString::from)
+        .or_else(|| {
+            hosted
+                .iter()
+                .find(|entry| entry.id == card.provider_id())
+                .filter(|entry| !entry.label.is_empty())
+                .map(|entry| entry.label.clone())
+        })
+        .unwrap_or_else(|| card.provider_id().to_owned().into())
 }
 
 /// `connectionCardId`: the card a connected model came from. Models on this computer and typed
 /// servers both come from Other; ChatGPT sign-in and an OpenAI API key are separate cards for one
 /// provider.
 pub(crate) fn connection_card_id(model: &Value) -> Option<CardId> {
-    let provider = model.get("provider_id").and_then(Value::as_str)?;
+    let provider = model
+        .get("provider_id")
+        .and_then(Value::as_str)
+        .filter(|provider| !provider.is_empty())?;
     if provider == "local" {
         return Some(CardId::Other);
     }
     if model.get("auth_type").and_then(Value::as_str) == Some("chatgpt_oauth") {
         return Some(CardId::Chatgpt);
     }
-    CARDS
-        .iter()
-        .find(|card| card.kind == CardKind::Key && card.provider_id == Some(provider))
-        .map(|card| card.id)
+    Some(CardId::Key(provider.to_owned().into()))
 }
 
-/// `useLocalModelServers` and the online status.
+/// The local model servers, the online status and the catalog's hosted providers.
 #[derive(Default)]
 pub(crate) struct LocalServers {
     servers: Vec<Server>,
@@ -149,6 +156,7 @@ pub(crate) struct LocalServers {
     request: u64,
     /// The OS network status.
     online: bool,
+    hosted: Rc<[ProviderEntry]>,
     /// The Agent-ready value of the last lookup while the AI step shows; unset off the step.
     seen: Option<bool>,
 }
@@ -167,6 +175,16 @@ impl LocalServers {
             online,
             ..Self::default()
         }
+    }
+
+    /// The catalog's hosted providers, parsed once when the onboarding's catalog is set.
+    pub(crate) fn set_catalog(&mut self, raw: &Value, cx: &mut Context<Self>) {
+        self.hosted = hosted_entries(raw);
+        cx.notify();
+    }
+
+    pub(crate) fn hosted(&self) -> Rc<[ProviderEntry]> {
+        self.hosted.clone()
     }
 
     /// The frame calls it on every flow change; it looks the servers up again each time the AI

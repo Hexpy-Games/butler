@@ -99,6 +99,7 @@ impl Shell {
     ) -> bool {
         if let Some(catalog) = &catalog {
             self.catalog_raw = Some(catalog.clone());
+            self.onboarding.catalog_loaded(catalog, cx);
         }
         match (settings, catalog) {
             (Some(raw), Some(_)) => {

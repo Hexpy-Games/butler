@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use super::card::step_card;
 use super::copy::words as shared_words;
-use super::providers::CardId;
+use super::providers::{CardId, card_name};
 use super::readiness::prep_status;
 use super::sign_in::SignIn;
 use super::{Mode, Onboarding};
@@ -90,14 +90,14 @@ fn rows(
     copy: &Words,
     cx: &App,
 ) -> AnyElement {
-    let name = copy.providers[card as usize];
+    let name = card_name(&card, view.lang, &view.providers.read(cx).hosted());
     let email = account
         .and_then(|account| account.get("label"))
         .and_then(Value::as_str)
         .filter(|label| label.contains('@'));
-    let ai = match (card, email) {
-        (CardId::Chatgpt, Some(email)) => format!("{name} · {email}"),
-        _ => name.to_owned(),
+    let ai = match (&card, email) {
+        (CardId::Chatgpt, Some(email)) => format!("{name} · {email}").into(),
+        _ => name,
     };
     // `SUPPORTED_UI_LANGUAGES` label of the saved reply language.
     let reply = match view.reply.read(cx).value() {

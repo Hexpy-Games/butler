@@ -2,8 +2,6 @@
 use butler_ds::ui::context::Lang;
 
 pub(super) struct Words {
-    /// firstRun.providerNames, in `CardId` order
-    pub(super) names: [&'static str; 11],
     /// firstRun.keyTitle
     pub(super) key_title: fn(&str) -> String,
     /// firstRun.keyLabel
@@ -56,19 +54,6 @@ pub(super) struct Words {
 }
 
 const KO: Words = Words {
-    names: [
-        "ChatGPT",
-        "Claude",
-        "Gemini",
-        "OpenAI API",
-        "Grok",
-        "Qwen",
-        "Kimi",
-        "Z.AI 코딩 플랜",
-        "Z.AI API",
-        "OpenCode Go",
-        "기타 (OpenAI 호환)",
-    ],
     key_title: |name| format!("{name} 연결"),
     key_label: "API 키",
     key_hint: "붙여 넣으면 바로 확인합니다.",
@@ -105,19 +90,6 @@ const KO: Words = Words {
 };
 
 const EN: Words = Words {
-    names: [
-        "ChatGPT",
-        "Claude",
-        "Gemini",
-        "OpenAI API",
-        "Grok",
-        "Qwen",
-        "Kimi",
-        "Z.AI Coding Plan",
-        "Z.AI API",
-        "OpenCode Go",
-        "Other (OpenAI-compatible)",
-    ],
     key_title: |name| format!("Connect {name}"),
     key_label: "API key",
     key_hint: "Checked as soon as you paste it.",
