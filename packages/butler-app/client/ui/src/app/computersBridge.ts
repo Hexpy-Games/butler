@@ -1,5 +1,7 @@
+import type { DeleteComputerInput } from "../../../electron/app-security-admin.mjs";
+
 /** Settings → Security → Other computers: main adds the admin credential. */
-export function computerBridgeCall(method: string, path: string, body: unknown): { action: string; input?: unknown } | null {
+export function computerBridgeCall(method: string, path: string, body: unknown, query?: URLSearchParams): { action: string; input?: unknown } | null {
   const payload = () => typeof body === "string" ? JSON.parse(body) : (body ?? {});
   if (path === "/computers") {
     if (method === "GET") return { action: "listComputers" };
@@ -11,7 +13,10 @@ export function computerBridgeCall(method: string, path: string, body: unknown):
   const entry = path.match(/^\/computers\/([0-9a-f-]{36})(\/.*)?$/u);
   if (!entry) return null;
   const [, id, suffix] = entry;
-  if (method === "DELETE" && !suffix) return { action: "deleteComputer", input: { id } };
+  if (method === "DELETE" && !suffix && id) {
+    const input: DeleteComputerInput = query?.get("force") === "true" ? { id, force: true } : { id };
+    return { action: "deleteComputer", input };
+  }
   if (method === "GET" && suffix === "/connection") return { action: "getComputerConnection", input: { id } };
   if (method === "POST") {
     if (suffix === "/reconnect") return { action: "reconnectComputer", input: { id } };

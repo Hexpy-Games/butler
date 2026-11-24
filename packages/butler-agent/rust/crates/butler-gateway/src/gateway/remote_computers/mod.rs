@@ -223,9 +223,55 @@ pub(super) async fn delete(
     setup: &Arc<dyn AppSetupPort>,
     data: &Path,
     computer: &Computer,
+    version: &str,
+    force: bool,
     cancel: CancellationToken,
 ) -> Result<bool, HttpError> {
-    let cleaned = deploy::remove(computer, cancel).await.is_ok();
+    let reach = async {
+        let installed = deploy::installed(computer, cancel.clone()).await?;
+        if installed {
+            deploy::ensure_running((data, version), computer, cancel.clone()).await?;
+            let identity = setup.computer_key(computer.id.clone()).await?;
+            relay::unlock(computer, &identity, cancel.clone()).await?;
+        }
+        Ok::<_, HttpError>(installed)
+    }
+    .await;
+    let cleaned = match reach {
+        Ok(installed) => {
+            if installed {
+                let link = Link {
+                    setup: setup.clone(),
+                    root: data.to_path_buf(),
+                    version: version.to_owned(),
+                    cancel: cancel.clone(),
+                    relays: None,
+                };
+                transcripts::final_pull(&link, computer)
+                    .await
+                    .map_err(|reason| {
+                        butler_core::diagnostic!(
+                            "[remote-transcripts] final pull failed computer={} reason={reason}",
+                            computer.id
+                        );
+                        HttpError::public(
+                            409,
+                            "computer_not_synced",
+                            "Couldn't bring back this computer's conversations. Try again.",
+                        )
+                    })?;
+            }
+            deploy::remove(computer, cancel).await.is_ok()
+        }
+        Err(_) if force => false,
+        Err(_) => {
+            return Err(HttpError::public(
+                409,
+                "computer_unreachable",
+                "Couldn't reach Butler on this computer.",
+            ));
+        }
+    };
     store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
     setup.delete_computer_key(computer.id.clone()).await?;
     if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
@@ -245,6 +291,7 @@ pub(super) async fn change(
     root: &std::path::Path,
     path: &str,
     start: bool,
+    force: bool,
     version: &str,
     cancel: CancellationToken,
 ) -> Result<serde_json::Value, HttpError> {
@@ -266,7 +313,7 @@ pub(super) async fn change(
             serde_json::json!({"state": if remote.started { "ready" } else { "busy" }, "version": remote.version}),
         )
     } else {
-        let cleaned = delete(setup, root, &computer, cancel).await?;
+        let cleaned = delete(setup, root, &computer, version, force, cancel).await?;
         Ok(serde_json::json!({"deleted": true, "remote_cleaned": cleaned}))
     }
 }

@@ -1461,7 +1461,7 @@ const butlerApp = Object.freeze({
   listComputers: () => requestSecurity("listComputers"),
   checkComputerHostKey: (payload) => requestSecurity("checkComputerHostKey", { payload }),
   addComputer: (payload) => requestSecurity("addComputer", { payload }),
-  deleteComputer: ({ id } = {}) => requestSecurity("deleteComputer", { id }),
+  deleteComputer: ({ id, force } = {}) => requestSecurity("deleteComputer", { id, force }),
   startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
   getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
   reconnectComputer: ({ id } = {}) => requestSecurity("reconnectComputer", { id }),

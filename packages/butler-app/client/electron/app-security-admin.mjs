@@ -184,7 +184,9 @@ export async function requestSecurityRoute(
   try {
     await ensureReady();
     const bearer = await authHeaders();
-    const response = await fetch(new URL(path, serverUrl), {
+    const url = new URL(path, serverUrl);
+    if (input?.route === "deleteComputer" && input.body.force === true) url.searchParams.set("force", "true");
+    const response = await fetch(url, {
       method: route.method,
       headers: {
         ...(needsBody ? { "content-type": "application/json" } : {}),

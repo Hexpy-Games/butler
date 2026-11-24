@@ -143,6 +143,13 @@ async function captureStates(page: Page, output: string, variant: string) {
   await screenshot("A8-delete", deleteDialog);
   await deleteDialog.getByRole("checkbox", { name: copy.removeDialog.forget }).click();
   await screenshot("A8-delete-forget", deleteDialog);
+  await button(deleteDialog, common.cancel).click();
+  await button(row(page, unreachable!.name), copy.removeComputer(unreachable!.name)).click();
+  await deleteDialog.getByRole("checkbox", { name: copy.removeDialog.forget }).click();
+  fake.failNext("delete", "computer_unreachable");
+  await button(deleteDialog, copy.removeDialog.confirm).click();
+  await assertVisible(deleteDialog, copy.removeDialog.unreachableTitle);
+  await screenshot("A9-delete-unreachable", deleteDialog);
   return captures;
 }
 
@@ -166,10 +173,11 @@ try {
     });
     await page.route(`${server.url}**`, async (route) => {
       const request = route.request();
-      const path = new URL(request.url()).pathname;
+      const url = new URL(request.url());
+      const path = url.pathname;
       const method = request.method();
       if (path.startsWith("/computers") || (method === "GET" && path === "/credentials")) {
-        await route.fulfill(await fake.respond({ method, path, body: request.postDataJSON() }));
+        await route.fulfill(await fake.respond({ method, path: path + url.search, body: request.postDataJSON() }));
         return;
       }
       const headers = { ...request.headers(), ...(path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders) };
@@ -329,10 +337,16 @@ try {
   await button(row(page, unreachable!.name), copy.removeComputer(unreachable!.name)).click();
   await forget.click();
   assert.equal(await forget.getAttribute("aria-checked"), "true");
-  const reset = page.waitForResponse((response) => new URL(response.url()).pathname === resetPath);
+  fake.failNext("delete", "computer_unreachable");
   await button(deleteDialog, removal.confirm).click();
+  await assertVisible(deleteDialog, removal.unreachableTitle);
+  await assertVisible(deleteDialog, removal.unreachableBody);
+  assert.equal(await forget.count(), 0);
+  assert(!fake.calls.some(({ path }) => path === resetPath));
+  const reset = page.waitForResponse((response) => new URL(response.url()).pathname === resetPath);
+  await button(deleteDialog, removal.forceConfirm).click();
   assert.equal((await reset).status(), 202);
-  const deleted = fake.calls.findIndex(({ method, path }) => method === "DELETE" && path === `/computers/${unreachable!.id}`);
+  const deleted = fake.calls.findIndex(({ method, path }) => method === "DELETE" && path === `/computers/${unreachable!.id}?force=true`);
   const resetCall = fake.calls.findIndex(({ method, path }) => method === "POST" && path === resetPath);
   assert(deleted >= 0 && resetCall > deleted);
   const resetBody = fake.calls[resetCall]!.body as { operation_id: string; inventory_revision: number };
@@ -343,7 +357,7 @@ try {
   await verifyLayouts(page);
   assert.equal(server.stubModelCalls.length, 0);
   console.log(JSON.stringify({
-    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
+    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "delete-unreachable", "forget-memories", "layouts"], widths,
   }));
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
