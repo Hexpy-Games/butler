@@ -23,10 +23,7 @@ export function useCanonOnlineDialog(projectId: string, onClose: () => void) {
       setMembers(await postCanonOnline<CanonSpaceMembers>({ action: "members", project_id: projectId }));
     } catch (error) {
       if (apiErrorCode(error) === "butler_account_signed_out") setSignedOut();
-      else {
-        setLoadFailed(true);
-        notifyError(error, appCopy.butlerAccount.failed);
-      }
+      else setLoadFailed(true);
     }
   }, [projectId, setSignedOut]);
   useEffect(() => {
@@ -54,8 +51,9 @@ export function useCanonOnlineDialog(projectId: string, onClose: () => void) {
   return {
     account, link, members, loadFailed, busy, reload,
     linkProject: () => {
-      const name = useButlerStore.getState().navigation.projects.find(project => project.id === projectId)!.display_name;
-      return run({ action: "link", project_id, name }, "link", copy.linked);
+      const project = useButlerStore.getState().navigation.projects.find(project => project.id === projectId);
+      if (!project) return;
+      return run({ action: "link", project_id, name: project.display_name }, "link", copy.linked);
     },
     unlink: async () => {
       if (linked && !await confirmAction(copy.turnOffConfirm, { title: copy.turnOffTitle, confirmLabel: copy.turnOff, destructive: true })) return;

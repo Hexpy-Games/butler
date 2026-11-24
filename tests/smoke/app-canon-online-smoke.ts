@@ -18,7 +18,7 @@ const editor = { account_id: "acc_editor", email: "b@example.com", role: "editor
 const viewer = { account_id: "acc_viewer", email: "d@example.com", role: "viewer" as const, added_at: "" };
 
 async function installGatewayRoutes(page: Page, server: NativeAppServerHandle, projectId: string, epicId: string) {
-  const requests: (CanonOnlineAction | { action: "create"; source: string })[] = [];
+  const requests: (CanonOnlineAction | { action: "create"; source: string } | { action: "delete"; path: string })[] = [];
   const members: CanonSpaceMembers = {
     members: [owner, editor, viewer], invites: [{ id: "pending", email: "e@example.com", role: "viewer", expires_at: "" }],
   };
@@ -30,7 +30,7 @@ async function installGatewayRoutes(page: Page, server: NativeAppServerHandle, p
     body: JSON.stringify({ conflict: true, fields: { title: "tA", canon_status: "done" } }),
   };
   await page.route(`${server.url}**`, async route => {
-    const { pathname } = new URL(route.request().url());
+    const { pathname, search } = new URL(route.request().url());
     const method = route.request().method();
     const headers = { ...route.request().headers(), ...server.authHeaders };
     const respond = (data: unknown) => route.fulfill({ json: { protocol_version: "butler.app.v1", data } });
@@ -76,6 +76,9 @@ async function installGatewayRoutes(page: Page, server: NativeAppServerHandle, p
     if (pathname === "/projects" && method === "POST") {
       requests.push({ action: "create", source: route.request().postDataJSON().source });
     }
+    if (pathname.startsWith("/projects/") && method === "DELETE") {
+      requests.push({ action: "delete", path: pathname + search });
+    }
     if (pathname === `/canon/epics/${epicId}` && method === "GET") {
       const response = await route.fetch({ headers });
       const payload = await response.json() as { data: EpicDetail };
@@ -84,22 +87,32 @@ async function installGatewayRoutes(page: Page, server: NativeAppServerHandle, p
     }
     await route.continue({ headers });
   });
-  return { fake, linked, requests };
+  return { fake, linked, members, requests };
 }
 
-async function capture(page: Page, name: string, ...regions: Locator[]) {
+async function capture(page: Page, name: string, regions: Locator[], aboveComposer = false) {
   if (!shots) return;
+  await Promise.all(regions.map(region => region.evaluate(async node => {
+    const animations = node.getAnimations({ subtree: true });
+    const dialog = node.closest('[role="dialog"], [role="alertdialog"]');
+    for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      animations.push(...ancestor.getAnimations({ subtree: ancestor === dialog }));
+    }
+    await Promise.all(animations.filter(animation => animation.playState === "running").map(animation => animation.finished));
+  })));
   const boxes = await Promise.all(regions.map(region => region.boundingBox()));
   assert(boxes.every(box => box !== null), name);
   const x = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.x))));
   const y = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.y))));
   const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...boxes.map(box => box!.x + box!.width))));
-  const bottom = Math.min(page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height))));
+  const composerTop = aboveComposer ? await page.locator('[data-test-class="project-dashboard-view"] [data-test-class="composer-card"]')
+    .evaluate(composer => Math.floor(composer.getBoundingClientRect().top)) : page.viewportSize()!.height;
+  const bottom = Math.min(composerTop, page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height))));
   await page.screenshot({ path: join(shots, `${name}.png`), animations: "disabled", clip: { x, y, width: right - x, height: bottom - y } });
 }
 
 async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId: string, epicId: string, cell: string) {
-  const { fake, linked, requests } = await installGatewayRoutes(page, server, projectId, epicId);
+  const { fake, linked, members, requests } = await installGatewayRoutes(page, server, projectId, epicId);
   await page.goto(server.url);
   await openCanonBoard(page);
   const board = page.locator('[data-test-class="canon-board"]');
@@ -108,7 +121,8 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   const dashboardMenu = page.getByRole("button", { name: "프로젝트 메뉴", exact: true });
   const shareItem = menu.getByRole("menuitem", { name: share, exact: true });
   const confirm = page.getByRole("alertdialog");
-  const shot = (name: string, ...regions: Locator[]) => capture(page, `${cell}-${name}`, ...regions);
+  const shot = (name: string, ...regions: Locator[]) => capture(page, `${cell}-${name}`, regions);
+  const mobile = page.viewportSize()!.width === 390;
   await dashboardMenu.click();
   await shareItem.waitFor();
   await shot("dashboard-menu", menu);
@@ -188,16 +202,21 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   await newEpic.hover();
   const tooltip = page.getByRole("tooltip", { name: lock, exact: true });
   await tooltip.waitFor();
-  await shot("locked-board", board, tooltip);
+  await capture(page, `${cell}-locked-board`, [board, tooltip], mobile);
   await board.getByRole("button", { name: "연결 끊김", exact: true }).click();
   await dialog.getByText("온라인 공간과 연결이 끊겼습니다", { exact: true }).waitFor();
   await shot("detached-dialog", dialog);
   await dialog.getByRole("button", { name: "닫기", exact: true }).click();
 
+  const epic = board.locator(`[data-kanban-item="${epicId}"]`).getByRole("button");
+  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  await epic.click();
+  assert(await detail.getByRole("combobox", { name: "상태", exact: true }).isDisabled());
+  await closeCanonAside(page);
+
   fake.links = [{ ...linked, role: "viewer" }];
   await online.waitFor();
-  await board.locator(`[data-kanban-item="${epicId}"]`).getByRole("button").click();
-  const detail = page.locator('[data-test-class="canon-epic-detail"]');
+  await epic.click();
   const activity = detail.locator('[data-test-class="canon-activity"]');
   const title = detail.getByRole("button", { name: "제목 수정", exact: true });
   await detail.waitFor();
@@ -205,7 +224,7 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
     await title.hover();
     const reason = page.getByRole("tooltip", { name: viewerLock, exact: true });
     await reason.waitFor();
-    await shot("viewer-epic", detail, reason);
+    await capture(page, `${cell}-viewer-epic`, [detail, reason], mobile);
   }
   for (const line of ["다른 사람이 먼저 고쳤습니다", "제목: tA", "상태: 완료"]) await activity.getByText(line).waitFor();
   if (shots) {
@@ -214,6 +233,7 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   }
   await closeCanonAside(page);
 
+  members.members = [{ ...owner, account_id: "acc_owner" }, { ...editor, account_id: owner.account_id }, viewer];
   fake.links = [{ ...linked, role: "editor" }];
   await page.waitForResponse(response => response.url().endsWith("/setup/canon-online") && response.request().method() === "GET");
   await online.click();
@@ -237,7 +257,7 @@ async function captureStatus(page: Page, board: Locator, header: Locator, file: 
   await icon.hover();
   const tooltip = page.getByRole("tooltip", { name: label, exact: true });
   await tooltip.waitFor();
-  await capture(page, file, header, tooltip);
+  await capture(page, file, [header, tooltip]);
 }
 
 async function verifyJoin(page: Page, cell: string, { fake, requests }: Awaited<ReturnType<typeof verifyOnline>>) {
@@ -247,28 +267,33 @@ async function verifyJoin(page: Page, cell: string, { fake, requests }: Awaited<
   const menu = page.getByRole("menu");
   const item = menu.getByRole("menuitem", { name: joinLabel, exact: true });
   await item.waitFor();
-  await capture(page, `${cell}-space-menu`, menu);
+  await capture(page, `${cell}-space-menu`, [menu]);
   await item.click();
   const dialog = page.getByRole("dialog", { name: joinLabel, exact: true });
   const input = dialog.getByRole("textbox", { name: "초대 코드", exact: true });
   const submit = dialog.getByRole("button", { name: "참여", exact: true });
   await input.waitFor();
-  await capture(page, `${cell}-join-empty`, dialog);
-  if (shots) {
-    const { promise, resolve: release } = Promise.withResolvers<void>();
-    fake.rejectJoin = promise;
-    try {
-      await input.fill("invalid");
-      await submit.click();
+  await capture(page, `${cell}-join-empty`, [dialog]);
+  const failedStart = requests.length;
+  const { promise, resolve: release } = Promise.withResolvers<void>();
+  fake.rejectJoin = promise;
+  try {
+    await input.fill("invalid");
+    await submit.click();
+    if (shots) {
       await dialog.locator('form[aria-busy="true"]').waitFor();
-      await capture(page, `${cell}-join-busy`, dialog);
-    } finally {
-      release();
+      await capture(page, `${cell}-join-busy`, [dialog]);
     }
-    await dialog.getByText("참여하지 못했습니다. 코드를 확인해 주세요.", { exact: true }).waitFor();
-    await capture(page, `${cell}-join-error`, dialog);
-    fake.rejectJoin = undefined;
+  } finally {
+    release();
   }
+  await dialog.getByText("참여하지 못했습니다. 코드를 확인해 주세요.", { exact: true }).waitFor();
+  const failedRequests = requests.slice(failedStart);
+  const failedJoin = failedRequests[1];
+  assert(failedJoin?.action === "join");
+  assert.deepEqual(failedRequests[2], { action: "delete", path: `/projects/${encodeURIComponent(failedJoin.project_id)}?permanent=true` });
+  await capture(page, `${cell}-join-error`, [dialog]);
+  fake.rejectJoin = undefined;
   const start = requests.length;
   await input.fill("bci_x");
   await submit.click();

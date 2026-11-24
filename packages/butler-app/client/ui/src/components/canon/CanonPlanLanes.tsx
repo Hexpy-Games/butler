@@ -45,7 +45,9 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
         <ArrowRight size="xs" />
       </IconButton>
     </>}
-    {onEdit && <IconButton label={locked ?? appCopy.canon.edit} disabled={Boolean(locked)} onClick={onEdit}><Pencil size="sm" /></IconButton>}
+    {onEdit && <Tooltip label={locked}>
+      <IconButton label={appCopy.canon.edit} disabled={Boolean(locked)} onClick={onEdit}><Pencil size="sm" /></IconButton>
+    </Tooltip>}
   </ButtonContainer>}>
     <Grid columns="1" ref={element => {
       // This wrapper owns the board as its direct child; keep DS internals untouched.

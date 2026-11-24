@@ -3,7 +3,7 @@ import { api, apiErrorCode } from "@/app/api.ts";
 import type { CanonSpace } from "@/app/canonApi.ts";
 import { postCanonOnline, useCanonOnlineStore } from "@/app/canonOnline.ts";
 import { appCopy } from "@/app/copy.ts";
-import { notifyStatus } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { ProjectSummary } from "@/app/types.ts";
@@ -20,33 +20,36 @@ export function useCanonJoin(onClose: () => void) {
     setFailed(false);
     const copy = appCopy.canon.online;
     const app = useButlerStore.getState();
+    let project: ProjectSummary | undefined;
     try {
-      const { project } = await api<{ project: ProjectSummary }>("/projects", {
-        method: "POST", body: JSON.stringify({ source: "scratch", display_name: copy.joinedName }),
-      });
-      const path = `/projects/${encodeURIComponent(project.id)}`;
       try {
+        ({ project } = await api<{ project: ProjectSummary }>("/projects", {
+          method: "POST", body: JSON.stringify({ source: "scratch", display_name: copy.joinedName }),
+        }));
         await postCanonOnline({ action: "join", project_id: project.id, token });
       } catch (error) {
-        await api(path + "?permanent=true", { method: "DELETE" }).catch(() => undefined);
-        await app.refreshNavigation();
+        if (project) {
+          await api(`/projects/${encodeURIComponent(project.id)}?permanent=true`, { method: "DELETE" }).catch(() => undefined);
+          await app.refreshNavigation();
+        }
         if (apiErrorCode(error) === "butler_account_signed_out") account.setSignedOut();
         else setFailed(true);
         return;
       }
+      const { id } = project;
       try {
         const { spaces } = await postCanonOnline<{ spaces: CanonSpace[] }>({ action: "spaces" });
-        const space = spaces.find(space => space.project_id === project.id);
-        if (space) await api(path, { method: "PATCH", body: JSON.stringify({ display_name: space.name }) });
+        const space = spaces.find(space => space.project_id === id);
+        if (space) await api(`/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ display_name: space.name }) });
       } catch { /* The join has already succeeded. */ }
       await useCanonOnlineStore.getState().refresh();
       await app.refreshNavigation();
-      useProjectDashboardState.getState().update(project.id, { tab: "work" });
-      app.openProjectDashboard(project.id);
+      useProjectDashboardState.getState().update(id, { tab: "work" });
+      await app.openProjectDashboard(id);
       notifyStatus(copy.joined, { tone: "ok" });
       onClose();
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      notifyError(error, appCopy.butlerAccount.failed);
     } finally {
       setBusy(false);
     }

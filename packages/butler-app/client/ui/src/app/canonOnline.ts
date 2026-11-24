@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { api } from "./api.ts";
+import { api, apiErrorCode } from "./api.ts";
 import type { CanonOnlineAction, CanonOnlineLink, CanonOnlineStatus } from "./canonApi.ts";
 import { singleFlight } from "./canonEvents.ts";
 import { appCopy, useAppLocale } from "./copy.ts";
@@ -26,8 +26,9 @@ export const useCanonOnlineStore = create<{
     try {
       const { links } = await getCanonOnline();
       set({ available: true, loaded: true, links: Object.fromEntries(links.map(link => [link.project_id, link])) });
-    } catch {
-      set({ available: false, loaded: true, links: {} });
+    } catch (error) {
+      if (apiErrorCode(error) === "butler_account_disabled") set({ available: false, loaded: true, links: {} });
+      else set({ loaded: true });
     }
   }),
 }));

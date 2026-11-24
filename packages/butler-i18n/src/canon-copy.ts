@@ -36,6 +36,7 @@ export interface CanonCopy {
     roles: Record<"owner" | "editor" | "viewer", string>;
     roleLabel: string;
     roleOf: (email: string) => string;
+    roleMe: (role: string, me: string) => string;
     invited: (role: string) => string;
     email: string;
     invite: string;

@@ -21,17 +21,18 @@ export function CanonOnlineMembers({ state, owner }: { state: ReturnType<typeof 
       } /> : !members ? <><Skeleton height="row" /><Skeleton height="row" /></> : <>
         {members.members.map(member => {
           const me = member.account_id === account.accountId;
+          const role = copy.roles[member.role];
           return <Presence key={member.account_id} present motion="fade">
             <Stack align="row" cross="center" gap="sm" wrap>
               <Stack grow minWidth="0"><ListRow icon={<UserRound size="md" />} title={member.email}
-                description={me ? `${copy.roles[member.role]} · ${appCopy.canon.me}` : copy.roles[member.role]} /></Stack>
-              {owner && member.role !== "owner" && !me && <>
+                description={me ? copy.roleMe(role, appCopy.canon.me) : role} /></Stack>
+              {owner && member.role !== "owner" && !me && <ButtonContainer size="sm" justify="end" grow>
                 <NativeSelect size="sm" aria-label={copy.roleOf(member.email)} value={member.role} disabled={disabled}
                   onChange={event => void state.setRole(member.account_id, event.target.value as "editor" | "viewer")}>{roles}</NativeSelect>
                 <Button size="sm" variant="outline" disabled={disabled}
                   iconStart={busy === member.account_id ? <Spinner size={14} /> : undefined}
                   onClick={() => void state.remove(member.account_id, member.email)}>{copy.remove}</Button>
-              </>}
+              </ButtonContainer>}
             </Stack>
           </Presence>;
         })}
@@ -39,9 +40,11 @@ export function CanonOnlineMembers({ state, owner }: { state: ReturnType<typeof 
           <Stack align="row" cross="center" gap="sm" wrap>
             <Stack grow minWidth="0"><ListRow icon={<Clock3 size="md" />} title={invite.email}
               description={copy.invited(copy.roles[invite.role])} /></Stack>
-            {owner && <Button size="sm" variant="outline" disabled={disabled}
-              iconStart={busy === invite.id ? <Spinner size={14} /> : undefined}
-              onClick={() => void state.revoke(invite.id)}>{copy.revokeInvite}</Button>}
+            {owner && <ButtonContainer size="sm" justify="end" grow>
+              <Button size="sm" variant="outline" disabled={disabled}
+                iconStart={busy === invite.id ? <Spinner size={14} /> : undefined}
+                onClick={() => void state.revoke(invite.id)}>{copy.revokeInvite}</Button>
+            </ButtonContainer>}
           </Stack>
         </Presence>)}
         {owner && <Stack align="row" gap="sm" wrap>
