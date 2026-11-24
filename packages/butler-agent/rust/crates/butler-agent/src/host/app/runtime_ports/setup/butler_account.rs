@@ -102,6 +102,9 @@ impl ButlerAccount {
             ButlerAccountRequest::Devices | ButlerAccountRequest::RevokeDevice { .. } => {
                 self.devices(request).await
             }
+            ButlerAccountRequest::PushAvailable => {
+                Ok(json!({"available": self.read().await?.is_some()}))
+            }
             ButlerAccountRequest::PushTokens { tokens } => self.push_tokens(tokens).await,
             ButlerAccountRequest::Push { messages, tokens } => self.push(messages, tokens).await,
         }

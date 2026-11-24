@@ -22,6 +22,9 @@ pub enum ButlerAccountRequest {
     RevokeDevice {
         id: String,
     },
+    /// Local only: true when signed in on this computer (no network call).
+    #[serde(skip)]
+    PushAvailable,
     #[serde(skip)]
     PushTokens {
         tokens: Vec<String>,
