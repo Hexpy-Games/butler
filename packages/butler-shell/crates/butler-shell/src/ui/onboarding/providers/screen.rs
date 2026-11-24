@@ -15,7 +15,8 @@ use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::tag::{Tag, Tone as TagTone};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window,
+    AnyElement, App, Context, Entity, IntoElement, ParentElement as _, SharedString, Styled as _,
+    Window,
 };
 
 use super::copy::{Words, description, more_providers, words};
@@ -227,6 +228,23 @@ pub(crate) fn screen(
     } else {
         more_providers(lang, snap.more.len())
     };
+    step_card(view, "providers", copy.title, body, cx)
+        .description(copy.lede)
+        .on_back(
+            shared.back,
+            cx.listener(|view, _, _, cx| view.back_from_connect(cx)),
+        )
+        .footer_start(more_toggle(expanded, more_open, label, cx))
+        .into_any_element()
+}
+
+/// The footer toggle that opens or closes the other services; its anchor hugs the button.
+fn more_toggle(
+    expanded: bool,
+    more_open: Entity<Option<bool>>,
+    label: String,
+    cx: &App,
+) -> impl IntoElement {
     let chevron = if expanded {
         Icon::ChevronUpIcon
     } else {
@@ -243,19 +261,10 @@ pub(crate) fn screen(
                 cx.notify();
             });
         });
-    step_card(view, "providers", copy.title, body, cx)
-        .description(copy.lede)
-        .on_back(
-            shared.back,
-            cx.listener(|view, _, _, cx| view.back_from_connect(cx)),
-        )
-        .footer_start(
-            Stack::new()
-                .cross(Cross::Start)
-                .child(crate::ui::widgets::anchored(
-                    toggle,
-                    "first-run-more-toggle",
-                )),
-        )
-        .into_any_element()
+    Stack::new()
+        .cross(Cross::Start)
+        .child(crate::ui::widgets::anchored(
+            toggle,
+            "first-run-more-toggle",
+        ))
 }
