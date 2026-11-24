@@ -78,7 +78,7 @@ async fn scheduled_child(resume_mode: &str) -> Result<(), HarnessError> {
     );
     script.release.add_permits(1);
     // The current turn retains its admission until the pending action resumes.
-    decide(&s, "printf reviewed", "allow").await?;
+    decide(&s, stub::MUTATION, "allow").await?;
     if resume_mode == "ask_first" {
         // This observation would run without approval under the start tier.
         decide(&s, "printf next", "deny").await?;
