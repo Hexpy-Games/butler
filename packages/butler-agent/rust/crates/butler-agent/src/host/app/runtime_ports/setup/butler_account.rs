@@ -28,7 +28,7 @@ pub(super) struct StoredAccount {
     schema_version: u32,
     api_url: String,
     pub(super) device_token: String,
-    account_id: String,
+    pub(super) account_id: String,
     pub(super) device_id: String,
 }
 
@@ -286,7 +286,7 @@ pub(super) fn unavailable() -> GatewayApplicationError {
     }
 }
 
-pub(super) fn signed_out() -> GatewayApplicationError {
+pub(crate) fn signed_out() -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 401,
         code: "butler_account_signed_out".into(),

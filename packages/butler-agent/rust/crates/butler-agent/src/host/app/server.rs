@@ -30,6 +30,7 @@ use crate::host::app::runtime_ports::{
     AppSessionTopicClassifierAdapter,
 };
 use crate::host::app::runtime_ports::{AppSetup, AppSetupParts, ButlerAccount, ComputerMemory};
+use crate::host::canon_online::CanonOnline;
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -410,6 +411,13 @@ impl AppServerOwners {
         } else {
             None
         };
+        let canon_online = butler_account.as_ref().map(|account| {
+            CanonOnline::start(
+                account.clone(),
+                runtime.canon.storage(),
+                runtime.service_shutdown.clone(),
+            )
+        });
         Ok(AppSetup::start(AppSetupParts {
             computer_memory: Arc::new(ComputerMemory {
                 conversations: runtime.conversations.clone(),
@@ -418,6 +426,7 @@ impl AppServerOwners {
                 reads: runtime.memory_reads.clone(),
             }),
             butler_account,
+            canon_online,
             butler_backup,
             plugins: runtime.plugins.clone(),
             configuration: runtime.models.configuration.clone(),

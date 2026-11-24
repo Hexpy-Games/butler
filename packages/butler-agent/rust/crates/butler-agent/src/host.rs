@@ -51,6 +51,7 @@ pub(crate) use crate::host::service::conversation_observer::ConversationObserver
 pub(crate) use butler_runtime::capabilities::{RegisteredWrite, RegisteredWriteContext};
 mod app;
 mod automation;
+mod canon_online;
 pub(crate) mod cli;
 mod embedding;
 mod guided;

@@ -42,7 +42,9 @@ pub(crate) use session_progress::AppSessionProgress;
 pub(crate) use session_workspaces::AppSessionWorkspaces;
 pub(crate) use settings::AppSettingsFactsAdapter;
 pub(crate) use settings_mutation::AppSettingsMutation;
-pub(crate) use setup::{AppSetup, AppSetupParts, ButlerAccount, ComputerMemory};
+pub(crate) use setup::{
+    AppSetup, AppSetupParts, ButlerAccount, CloudIdentity, ComputerMemory, signed_out,
+};
 pub(crate) use topic_branch::{AppBranchConversations, AppBranchSummarizerAdapter};
 
 pub(crate) struct AppApprovalClaimsAdapter {
