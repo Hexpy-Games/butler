@@ -170,8 +170,9 @@ impl SetupWizardStepCard {
         self
     }
 
-    /// The card's rows arrive in order after a card morph: the header, the titles, each child,
-    /// and the footer.
+    /// Rows arrive in order during a morph, with the header staying visible in the first slot
+    /// if the previous card had one and arriving first otherwise. This is a 2026-11-24 owner
+    /// decision that differs from Electron, where the header staggers with the rows.
     pub fn rows(mut self, morph: &SetupWizardMorph) -> Self {
         self.rows = Some(morph.clone());
         self
@@ -223,7 +224,8 @@ impl SetupWizardStepCard {
                     .flex()
                     .flex_none()
                     .items_center()
-                    .min_h(ds.len(Length::TypoCaptionLineHeight)) // DS: SetupWizardStepCard.module.css:3
+                    // DS: SetupWizardStepCard.module.css:3
+                    .min_h(ds.len(Length::TypoCaptionLineHeight))
                     .child(back),
             );
         }
@@ -288,15 +290,25 @@ impl RenderOnce for SetupWizardStepCard {
             .chain(footer);
         let mut body = Stack::new().gap(Space::Lg);
         let mut card = Stack::new().gap(Space::Lg);
-        if let Some(since) = self.rows.as_ref().and_then(SetupWizardMorph::since) {
+        let morph = self.rows.as_ref().and_then(|handle| {
+            handle.set_header(header.is_some());
+            handle.since().map(|since| (since, handle.keeps_header()))
+        });
+        if let Some((since, keeps_header)) = morph {
             let ds = Ds::get(cx);
-            let mut count = 0;
-            let mut row = |element| {
+            let mut count = u32::from(header.is_some());
+            card = card.children(header.map(|element| {
+                if keeps_header {
+                    element
+                } else {
+                    rise_row(element, 0, since, ds)
+                }
+            }));
+            let row = |element| {
                 let element = rise_row(element, count, since, ds);
                 count += 1;
                 element
             };
-            card = card.children(header.map(&mut row));
             body = body.children(rows.map(row));
             settle_rows(count, since, window, cx);
         } else {

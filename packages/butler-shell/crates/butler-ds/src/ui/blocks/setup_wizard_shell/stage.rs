@@ -6,6 +6,9 @@
 //! reduced motion cards swap at once. The old content drops away during a morph, and the larger
 //! card has no content clip: its rows are invisible until the surface has nearly arrived. The
 //! first-install ink intro is still pending (P6).
+//! A step card's header stays visible through a morph when the previous card had a header,
+//! and otherwise arrives as the first row. This is a 2026-11-24 owner decision that differs
+//! from Electron, where the header staggers with the rows.
 
 use std::{cell::Cell, rc::Rc};
 
@@ -22,7 +25,14 @@ use crate::ui::motion::{self, Props, Timing, Transition};
 /// caller keeps one per stage and hands it to the shell ([`super::SetupWizardShell::morph`]) and
 /// to the card that owns the rows (`SetupWizardContent::rows`, `SetupWizardStepCard::rows`).
 #[derive(Clone, Default)]
-pub struct SetupWizardMorph(Rc<Cell<Option<u32>>>);
+pub struct SetupWizardMorph(Rc<MorphState>);
+
+#[derive(Default)]
+struct MorphState {
+    since: Cell<Option<u32>>,
+    header: Cell<bool>,
+    kept_header: Cell<bool>,
+}
 
 impl SetupWizardMorph {
     pub fn new() -> Self {
@@ -31,7 +41,15 @@ impl SetupWizardMorph {
 
     /// The clock value at which the last step change began a morph; none after a plain swap.
     pub(in crate::ui::blocks) fn since(&self) -> Option<u32> {
-        self.0.get()
+        self.0.since.get()
+    }
+
+    pub(in crate::ui::blocks) fn set_header(&self, shown: bool) {
+        self.0.header.set(shown);
+    }
+
+    pub(in crate::ui::blocks) fn keeps_header(&self) -> bool {
+        self.0.kept_header.get()
     }
 }
 
@@ -134,7 +152,9 @@ impl SetupWizardStage {
                 state.enter = motion.then_some(Enter::Step);
                 state.morph = morph;
                 if let Some(handle) = handle {
-                    handle.0.set(morph.then_some(now));
+                    handle.0.since.set(morph.then_some(now));
+                    handle.0.kept_header.set(morph && handle.0.header.get());
+                    handle.0.header.set(false);
                 }
                 if morph {
                     window.animate_layout(deliberate.ms());
