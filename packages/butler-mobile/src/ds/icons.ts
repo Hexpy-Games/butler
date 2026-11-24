@@ -54,6 +54,7 @@ import UserIcon from "@hugeicons/core-free-icons/UserIcon";
 import RefreshIcon from "@hugeicons/core-free-icons/RefreshIcon";
 import DatabaseIcon from "@hugeicons/core-free-icons/DatabaseIcon";
 import Globe02Icon from "@hugeicons/core-free-icons/Globe02Icon";
+import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
 import LockIcon from "@hugeicons/core-free-icons/LockIcon";
 import Activity01Icon from "@hugeicons/core-free-icons/Activity01Icon";
 import MagicWand01Icon from "@hugeicons/core-free-icons/MagicWand01Icon";
@@ -76,6 +77,7 @@ export const icons = {
   RefreshCcw: RefreshIcon,
   Database: DatabaseIcon,
   Globe2: Globe02Icon,
+  Link: Link01Icon,
   Lock: LockIcon,
   Activity: Activity01Icon,
   MagicWand: MagicWand01Icon,

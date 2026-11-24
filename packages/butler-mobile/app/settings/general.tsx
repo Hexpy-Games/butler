@@ -2,18 +2,13 @@ import { ListGroup } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useAppLocale } from "@/i18n";
 import { SettingsScreen, LoadState } from "@/settings/layout";
-import { SelectRow, SwitchRow } from "@/settings/rows";
+import { accessModeOptions, SelectRow, SwitchRow } from "@/settings/rows";
 import { useSettings } from "@/settings/useSettings";
-import type { AccessMode } from "@/settings/types";
 
 export default function GeneralSettings() {
   const app = getAppCopy(useAppLocale());
   const S = app.settings;
   const { settings, error, reload, update } = useSettings();
-  const accessOptions = (factory: AccessMode) => ([
-    ["auto", "auto"], ["read_only", "readOnly"], ["ask_first", "askAlways"], ["ask_except_reads", "askFirst"], ["full_access", "fullAccess"],
-  ] as const).map(([value, key]) => ({ value, label: app.permissions[key], description: app.permissions[`${key}Desc`],
-    meta: [value === "auto" ? app.permissions.recommended : "", value === factory ? app.interfaceDetails.default : ""].filter(Boolean).join(" · ") }));
   return <SettingsScreen title={S.sections.general}>
     {!settings ? <ListGroup><LoadState error={error} onRetry={reload} /></ListGroup> : <>
       <ListGroup label={S.pageSections.languageRegion}>
@@ -32,9 +27,9 @@ export default function GeneralSettings() {
       </ListGroup>
       <ListGroup label={S.pageSections.defaultPermission}>
         <SelectRow title={S.fields.chatAccess} value={settings.access_mode}
-          options={accessOptions("ask_except_reads")} onSelect={access_mode => { void update({ access_mode }); }} />
+          options={accessModeOptions(app, "ask_except_reads")} onSelect={access_mode => { void update({ access_mode }); }} />
         <SelectRow title={S.fields.scheduleAccess} value={settings.schedule_access_mode ?? "auto"}
-          options={accessOptions("auto")} onSelect={schedule_access_mode => { void update({ schedule_access_mode }); }} />
+          options={accessModeOptions(app, "auto")} onSelect={schedule_access_mode => { void update({ schedule_access_mode }); }} />
       </ListGroup>
       <ListGroup>
         <SelectRow title={S.fields.searchProvider} value={settings.web_search.provider} options={[

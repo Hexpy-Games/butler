@@ -18,10 +18,10 @@ export async function readFileText(pairing: Pairing, path: string): Promise<stri
   return response.text();
 }
 
-export async function openImage(pairing: Pairing, path: string, title: string): Promise<void> {
+export async function openImage(pairing: Pairing, path: string, title: string, share?: () => void): Promise<void> {
   const s = fileSource(pairing, path);
   const { width, height } = await Image.getSizeWithHeaders(s.uri, s.headers);
-  openImageViewer([{ source: s, alt: title, width, height }], 0);
+  openImageViewer([{ source: s, alt: title, width, height, share }], 0);
 }
 
 export async function shareFile(pairing: Pairing, path: string, name: string, title: string): Promise<void> {

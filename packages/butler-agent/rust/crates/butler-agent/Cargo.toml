@@ -34,6 +34,7 @@ butler-test-support = { path = "../butler-test-support", optional = true }
 butler-gateway = { path = "../butler-gateway" }
 butler-memory = { path = "../butler-memory", default-features = false }
 butler-ledger = { path = "../butler-ledger" }
+butler-backup = { path = "../butler-backup" }
 butler-runtime = { path = "../butler-runtime" }
 butler-models = { path = "../butler-models" }
 butler-turn = { path = "../butler-turn" }

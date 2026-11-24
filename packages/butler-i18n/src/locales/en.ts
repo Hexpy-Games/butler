@@ -1,5 +1,6 @@
 import { workFailureLine } from "../work-failure.ts";
 import { COMPUTERS_COPY } from "./computers.ts";
+import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -66,6 +67,53 @@ const onboardingFallback: BriefingFallbackCopy = {
       },
     ],
   };
+
+const butlerBackup: AppCopy["butlerBackup"] = {
+  name: "Backup",
+  description: "Encrypts chats, memory and the Butler vault, then backs them up to the server.",
+  turnOn: "Turn on backup",
+  plusOnly: "Available on the Plus plan",
+  keyTitle: "Recovery key",
+  keyBody: "You need it to restore on another computer. Butler can't show it again.",
+  copy: "Copy",
+  copied: "Copied.",
+  saveFile: "Save to file",
+  saved: "I saved it somewhere safe",
+  cancel: "Cancel",
+  start: "Start backup",
+  startNeedsConfirm: "Confirm you saved it to start",
+  lastBackup: "Last backup",
+  storage: "Storage",
+  usage: (used, total) => `${used} / ${total}`,
+  backUpNow: "Back up now",
+  menu: "Backup menu",
+  newKey: "New recovery key",
+  turnOff: "Turn off backup",
+  running: (p) => `Backing up… ${p}%`,
+  runningTooltip: "Backing up",
+  full: "Storage is full",
+  viewPlans: "View plans",
+  fullTooltip: "Storage is full, so backup can't run",
+  failed: "Backup failed",
+  retry: "Try again",
+  paused: "Server maintenance",
+  pausedTooltip: "Backup resumes after maintenance",
+  newKeyConfirm: "The old recovery key stops working. Everything uploads again.",
+  newKeyAction: "Create",
+  offConfirm: "All backups on the server are deleted.",
+  found: "This account has a backup",
+  foundMeta: (date, size) => `${date} · ${size}`,
+  restore: "Restore from backup",
+  restoreBody: "Enter the recovery key you saved when you turned on backup.",
+  keyLabel: "Recovery key",
+  restoreAction: "Restore",
+  keyWrong: "Recovery key doesn't match",
+  restoring: "Restoring…",
+  restartToFinish: "Restart Butler to finish restoring",
+  restart: "Restart",
+  diskFull: "Not enough disk space to restore",
+  failedToast: "Something went wrong. Try again.",
+};
 
 const butlerAccount: AppCopy["butlerAccount"] = {
   name: "Butler account",
@@ -223,6 +271,7 @@ const firstRun = {
       verifying: "Verifying memory model",
       failed: "Couldn't download the memory model",
       ready: "Ready",
+      preparingSearch: "Preparing memory search",
       retry: "Retry",
       progress: (percent: number, doneMB: number, totalMB: number) => `${percent}% · ${doneMB} / ${totalMB} MB`,
       reasons: {
@@ -424,6 +473,7 @@ export const enUsCopy: AppCopy = {
   },
   shell: { footerNav: "Updates and settings", update: { downloading: "Downloading update", working: "Preparing update", ready: "Update ready", failed: "Update failed", restart: "Restart" } },
   canon: CANON_COPY["en-US"],
+  publishing: PUBLISHING_COPY["en-US"],
   sessionInfo: SESSION_INFO_COPY["en-US"],
   computers: COMPUTERS_COPY["en-US"],
   fileViewer: FILE_VIEWER_COPY["en-US"],
@@ -575,9 +625,9 @@ export const enUsCopy: AppCopy = {
       applyUpdateBody: "Butler on your computer restarts to finish the update.",
       version: (version: string, build?: string) => `Version ${version}${build === undefined ? "" : ` (${build})`}`,
     },
-    outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed." },
+    outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed.", savedToLibrary: "Saved to Library.", saveFailed: "Could not save to Library." },
     library: { changeFailed: "Could not save the change." },
-    automations: { nextRun: "Next run", lastRun: "Last run", deleteFailed: "Could not delete the schedule." },
+    automations: { nextRun: "Next run", lastRun: "Last run", deleteFailed: "Could not delete the schedule.", edit: "Edit", allRuns: "All runs" },
   },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
@@ -862,6 +912,7 @@ export const enUsCopy: AppCopy = {
     notificationNewMessage: "A new message arrived.", notificationCompleted: "Work completed.", notificationFailed: "Work failed.", notificationCancelled: "Work cancelled.", notificationUpdated: "Work status updated.",
 
   },
+  butlerBackup,
   butlerAccount,
   butlerVault,
   firstRun: firstRun,

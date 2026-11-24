@@ -66,8 +66,7 @@ pub(super) async fn run_until_stopped(
         .ok_or_else(|| failure("native_home_unavailable", "User home is unavailable"))?;
     let journal_seen =
         crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
-    let mut config =
-        support::capture_configuration(explicit_data, &user_home, &installation).await?;
+    let config = support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
         Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
     } else {
@@ -82,7 +81,8 @@ pub(super) async fn run_until_stopped(
     .await?;
     attach_instance(stop, &instance);
     crate::host::service::data_reset::initialize_owned(&config, &user_home, journal_seen).await?;
-    config = support::initialize_credentials(config).await?;
+    let (config, listener) =
+        restore_configuration(config, listener, explicit_data, &user_home).await?;
     report_credential_errors(&config, logs);
     let staging = reader_staging(config.data_root.clone()).await?;
     let port = listener
@@ -128,6 +128,34 @@ pub(super) async fn run_until_stopped(
         .await
         .map_err(|error| failure("native_service_instance_release_failed", error.to_string()))?;
     result.and_then(|session| closed.and(reset).map(|()| session))
+}
+
+async fn restore_configuration(
+    mut config: ServiceConfiguration,
+    mut listener: Option<tokio::net::TcpListener>,
+    explicit_data: Option<&str>,
+    user_home: &std::path::Path,
+) -> Result<(ServiceConfiguration, Option<tokio::net::TcpListener>), BtccError> {
+    if crate::host::backup::apply_staged(&config.data_root)
+        .await
+        .map_err(io)?
+    {
+        let restored =
+            support::capture_configuration(explicit_data, user_home, &config.installation).await?;
+        if (restored.app.enabled, &restored.app.host, restored.app.port)
+            != (config.app.enabled, &config.app.host, config.app.port)
+        {
+            drop(listener.take());
+            if restored.app.enabled {
+                listener = Some(
+                    crate::host::AppServer::bind(&restored.app.host, restored.app.port).await?,
+                );
+            }
+        }
+        config = restored;
+    }
+    config = support::initialize_credentials(config).await?;
+    Ok((config, listener))
 }
 
 /// From here a forced exit releases the record and DATA lock first.

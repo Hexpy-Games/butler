@@ -58,7 +58,7 @@ export function StewardCard({ child }: { child: StewardChild }) {
   </Surface></View>;
 }
 
-function StewardDetails({ view }: { view: SessionView | null }) {
+export function StewardDetails({ view }: { view: SessionView | null }) {
   const locale = useAppLocale();
   const copy = getAppCopy(locale);
   const t = useTokens();

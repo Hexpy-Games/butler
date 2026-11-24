@@ -3,9 +3,16 @@ import { View, useWindowDimensions } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { Icon, icons, ListGroup, ListRow, Sheet, Switch, Text, TextField, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import type { AppModelSummary, ReasoningEffort } from "./types";
+import type { AccessMode, AppModelSummary, ReasoningEffort } from "./types";
 import { effectiveReasoningEffort, reasoningOptionLabel } from "./useModelCatalog";
 export { TimeRow } from "./TimeRow";
+
+export function accessModeOptions(app: ReturnType<typeof getAppCopy>, factory: AccessMode) {
+  return ([
+    ["auto", "auto"], ["read_only", "readOnly"], ["ask_first", "askAlways"], ["ask_except_reads", "askFirst"], ["full_access", "fullAccess"],
+  ] as const).map(([value, key]) => ({ value, label: app.permissions[key], description: app.permissions[`${key}Desc`],
+    meta: [value === "auto" ? app.permissions.recommended : "", value === factory ? app.interfaceDetails.default : ""].filter(Boolean).join(" · ") }));
+}
 
 /** Picker rows: the chosen row shows an accent check and says "선택됨"; pickers never use the ListRow `selected` fill. */
 export function usePicked() {
@@ -15,10 +22,10 @@ export function usePicked() {
     : {};
 }
 
-export function SelectRow<T extends string>({ title, value, options, onSelect, disabled, search }: {
+export function SelectRow<T extends string>({ title, value, options, onSelect, onReselect, disabled, search }: {
   title: string; value: T;
   options: { value: T; label: string; description?: string; meta?: string; disabled?: boolean }[];
-  onSelect(value: T): void; disabled?: boolean; search?: { label: string; empty: string };
+  onSelect(value: T): void; onReselect?(): void; disabled?: boolean; search?: { label: string; empty: string };
 }) {
   const M = useMobileCopy();
   const t = useTokens();
@@ -37,7 +44,7 @@ export function SelectRow<T extends string>({ title, value, options, onSelect, d
         {visible.length ? <ListGroup>
           {visible.map(o => <ListRow key={o.value} title={o.label} description={o.description} meta={o.meta} disabled={o.disabled}
             {...picked(o.value === value, [o.label, o.description, o.meta])}
-            onPress={() => { setOpen(false); if (o.value !== value) onSelect(o.value); }} />)}
+            onPress={() => { setOpen(false); if (o.value !== value) onSelect(o.value); else onReselect?.(); }} />)}
         </ListGroup> : null}
         {search && !visible.length ? <Text variant="caption">{search.empty}</Text> : null}
       </View>

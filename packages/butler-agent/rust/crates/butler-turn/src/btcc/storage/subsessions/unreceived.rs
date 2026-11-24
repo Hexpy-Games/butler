@@ -1,6 +1,14 @@
 use crate::btcc::storage::StorageError;
 use rusqlite::OptionalExtension;
 
+/// The Steward-queue turn that receives a Worker result (`result_delivery.rs`).
+pub(crate) fn worker_result_turn_id(result_id: &str) -> String {
+    format!(
+        "worker-result-turn-{}",
+        crate::btcc::digest_identity(result_id)
+    )
+}
+
 /// A Worker result that is committed but whose Steward result turn has not started.
 pub(super) fn has_unreceived_worker_result(
     db: &rusqlite::Connection,
@@ -21,10 +29,7 @@ pub(super) fn has_unreceived_worker_result(
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
     for result in results {
-        let turn = format!(
-            "worker-result-turn-{}",
-            crate::btcc::digest_identity(&result)
-        );
+        let turn = worker_result_turn_id(&result);
         let started = db
             .query_row("SELECT 1 FROM btcc_turns WHERE turn_id=?1", [&turn], |_| {
                 Ok(())

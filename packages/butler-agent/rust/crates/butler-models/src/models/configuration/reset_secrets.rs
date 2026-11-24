@@ -1,6 +1,7 @@
 //! Enumerate system-store identifiers using the credential owner's exact key rule.
 use super::{
     credentials::{CREDENTIALS_FILE, CredentialsFile},
+    mcp_secrets::{mcp_store_key, stored_secret_refs},
     secret_store,
 };
 use butler_platform::secrets::SecretBackend;
@@ -35,10 +36,18 @@ pub fn reset_secret_keys(root: &Path) -> io::Result<Vec<(String, String)>> {
             ids.push(("computer_key".into(), id, backend));
         }
     }
-    ids.into_iter()
+    let mut keys = ids
+        .into_iter()
         .map(|(provider, id, backend)| {
             let key = secret_store::key(root, backend, &provider, &id).map_err(io::Error::other)?;
             Ok((key.service().to_owned(), key.account().to_owned()))
         })
-        .collect()
+        .collect::<io::Result<Vec<_>>>()?;
+    for (id, backend) in stored_secret_refs(root).map_err(io::Error::other)? {
+        if backend.is_system() {
+            let key = mcp_store_key(root, backend, &id).map_err(io::Error::other)?;
+            keys.push((key.service().to_owned(), key.account().to_owned()));
+        }
+    }
+    Ok(keys)
 }

@@ -41,15 +41,3 @@ fn mdns_name_of(host: &str) -> Option<String> {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-');
     valid.then(|| format!("{label}.local"))
 }
-
-/// This computer's host name without its domain (`Example-Mac`), for a paired phone to show.
-pub(in crate::gateway::http) fn computer_name() -> String {
-    butler_platform::instance::host_name()
-        .ok()
-        .as_deref()
-        .and_then(|host| host.split('.').next())
-        .map(str::trim)
-        .filter(|label| !label.is_empty())
-        .unwrap_or("Butler")
-        .to_owned()
-}

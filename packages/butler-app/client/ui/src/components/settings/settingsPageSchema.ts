@@ -118,6 +118,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   account: [
     { id: "butler-account", kind: "form", fields: [] },
     { id: "butler-account-devices", kind: "list", fields: [], optional: true },
+    { id: "butler-pages", kind: "list", fields: [], optional: true },
   ],
   // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [

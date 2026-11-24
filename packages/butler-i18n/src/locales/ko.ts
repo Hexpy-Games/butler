@@ -1,5 +1,6 @@
 import { workFailureLine } from "../work-failure.ts";
 import { COMPUTERS_COPY } from "./computers.ts";
+import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -72,6 +73,53 @@ const onboardingFallback: BriefingFallbackCopy = {
       },
     ],
   };
+
+const butlerBackup: AppCopy["butlerBackup"] = {
+  name: "백업",
+  description: "대화, 기억, 버틀러 금고를 암호화해 서버에 백업합니다.",
+  turnOn: "백업 켜기",
+  plusOnly: "Plus 요금제에서 사용할 수 있습니다",
+  keyTitle: "복구 키",
+  keyBody: "다른 컴퓨터에서 복원할 때 필요합니다. 버틀러도 다시 보여줄 수 없습니다.",
+  copy: "복사",
+  copied: "복사했습니다.",
+  saveFile: "파일로 저장",
+  saved: "안전한 곳에 저장했습니다",
+  cancel: "취소",
+  start: "백업 시작",
+  startNeedsConfirm: "저장했다고 확인하면 시작할 수 있습니다",
+  lastBackup: "마지막 백업",
+  storage: "사용량",
+  usage: (used, total) => `${used} / ${total}`,
+  backUpNow: "지금 백업",
+  menu: "백업 메뉴",
+  newKey: "복구 키 새로 만들기",
+  turnOff: "백업 끄기",
+  running: (p) => `백업 중… ${p}%`,
+  runningTooltip: "백업 중입니다",
+  full: "저장 공간이 가득 찼습니다",
+  viewPlans: "요금제 보기",
+  fullTooltip: "저장 공간이 가득 차 백업할 수 없습니다",
+  failed: "백업하지 못했습니다",
+  retry: "다시 시도",
+  paused: "서버 점검 중입니다",
+  pausedTooltip: "점검이 끝나면 다시 백업합니다",
+  newKeyConfirm: "이전 복구 키는 더 이상 쓸 수 없습니다. 전체를 다시 올립니다.",
+  newKeyAction: "새로 만들기",
+  offConfirm: "서버의 백업이 모두 삭제됩니다.",
+  found: "이 계정에 백업이 있습니다",
+  foundMeta: (date, size) => `${date} · ${size}`,
+  restore: "백업에서 복원",
+  restoreBody: "백업을 켤 때 저장한 복구 키를 입력합니다.",
+  keyLabel: "복구 키",
+  restoreAction: "복원",
+  keyWrong: "복구 키가 맞지 않습니다",
+  restoring: "복원 중…",
+  restartToFinish: "복원을 마치려면 버틀러를 다시 시작합니다",
+  restart: "다시 시작",
+  diskFull: "저장 공간이 부족해 복원할 수 없습니다",
+  failedToast: "처리하지 못했습니다. 다시 시도해 주세요.",
+};
 
 const butlerAccount: AppCopy["butlerAccount"] = {
   name: "버틀러 계정",
@@ -229,6 +277,7 @@ const firstRun = {
       verifying: "기억 모델 확인 중",
       failed: "기억 모델을 받지 못했습니다",
       ready: "준비되었습니다",
+      preparingSearch: "기억 검색 준비 중",
       retry: "다시 시도",
       progress: (percent: number, doneMB: number, totalMB: number) => `${percent}% · ${doneMB} / ${totalMB} MB`,
       reasons: {
@@ -428,6 +477,7 @@ export const koKrCopy: AppCopy = {
   },
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
+  publishing: PUBLISHING_COPY["ko-KR"],
   sessionInfo: SESSION_INFO_COPY["ko-KR"],
   computers: COMPUTERS_COPY["ko-KR"],
   fileViewer: FILE_VIEWER_COPY["ko-KR"],
@@ -573,9 +623,9 @@ export const koKrCopy: AppCopy = {
       applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
       version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,
     },
-    outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다." },
+    outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다.", savedToLibrary: "서랍에 저장했습니다.", saveFailed: "서랍에 저장하지 못했습니다." },
     library: { changeFailed: "변경하지 못했습니다." },
-    automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다." },
+    automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다.", edit: "편집", allRuns: "모든 실행 기록" },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
@@ -859,6 +909,7 @@ export const koKrCopy: AppCopy = {
     notificationNewMessage: "새 메시지가 도착했습니다.", notificationCompleted: "작업이 완료되었습니다.", notificationFailed: "작업이 실패했습니다.", notificationCancelled: "작업이 취소되었습니다.", notificationUpdated: "작업 상태가 업데이트되었습니다.",
 
   },
+  butlerBackup,
   butlerAccount,
   butlerVault,
   firstRun: firstRun,

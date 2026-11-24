@@ -32,7 +32,7 @@ impl ProviderPromptPort for CancelledProvider {
 }
 
 #[tokio::test]
-async fn caller_cancellation_settles_terminal_failure_under_original_nonce() {
+async fn caller_cancellation_leaves_window_running_for_recovery() {
     let fixture = Fixture::new("semantic-cancel");
     fixture.seed().await;
     let facts = Arc::new(Facts::new());
@@ -75,14 +75,13 @@ async fn caller_cancellation_settles_terminal_failure_under_original_nonce() {
     entered.notified().await;
     cancellation.cancel();
     let (service, result) = running.await.unwrap();
-    result.unwrap().unwrap();
+    assert!(result.is_err());
     service.close().await;
     let graph = Connection::open(fixture.graph_path()).unwrap();
-    let row:(String,Option<String>,String)=graph.query_row("SELECT state,owner_nonce,error_code FROM memory_projection_windows ORDER BY ordinal LIMIT 1",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
-    assert_eq!(
-        row,
-        ("failed".into(), None, "memory_extract_cancelled".into())
-    );
+    let (state, owner_nonce, error_code):(String,Option<String>,Option<String>)=graph.query_row("SELECT state,owner_nonce,error_code FROM memory_projection_windows ORDER BY ordinal LIMIT 1",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
+    assert_eq!(state, "running");
+    assert!(owner_nonce.is_some());
+    assert!(error_code.is_none());
 }
 
 struct GateProvider {
@@ -163,8 +162,11 @@ async fn dropping_caller_keeps_tracked_projection_until_close_drains() {
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .unwrap();
-    assert!(matches!(row.0.as_str(), "complete" | "failed"));
-    assert_eq!(row.1, None);
+    assert!(service.active_windows.lock().is_empty());
+    assert!(matches!(
+        (row.0.as_str(), row.1.as_deref()),
+        ("complete", None) | ("running", Some(_))
+    ));
 }
 
 struct InvalidProvider {

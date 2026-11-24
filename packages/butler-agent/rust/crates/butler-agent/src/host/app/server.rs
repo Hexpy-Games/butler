@@ -134,13 +134,15 @@ impl AppServer {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address, installation).await?);
-        let setup = owners.start_setup(
-            runtime,
-            settings.clone(),
-            installation,
-            data_root,
-            app_config,
-        )?;
+        let setup = owners
+            .start_setup(
+                runtime,
+                settings.clone(),
+                installation,
+                data_root,
+                app_config,
+            )
+            .await?;
         let dependencies = composition::dependencies(
             composition::Context {
                 runtime,
@@ -384,7 +386,7 @@ async fn start_application(
 }
 
 impl AppServerOwners {
-    fn start_setup(
+    async fn start_setup(
         &self,
         runtime: &AgentRuntime,
         settings: Arc<AppSettingsFactsAdapter>,
@@ -392,6 +394,18 @@ impl AppServerOwners {
         data_root: &std::path::Path,
         app_config: &AppServiceConfiguration,
     ) -> Result<AppSetup, BtccError> {
+        let butler_account = app_config
+            .butler_account_enabled()
+            .then(|| ButlerAccount::new(data_root).map(Arc::new))
+            .transpose()?;
+        let butler_backup = if let Some(account) = &butler_account {
+            Some(
+                crate::host::backup::BackupService::start(data_root, installation, account.clone())
+                    .await?,
+            )
+        } else {
+            None
+        };
         Ok(AppSetup::start(AppSetupParts {
             computer_memory: Arc::new(ComputerMemory {
                 conversations: runtime.conversations.clone(),
@@ -399,10 +413,8 @@ impl AppServerOwners {
                 profile: runtime.profile.clone(),
                 reads: runtime.memory_reads.clone(),
             }),
-            butler_account: app_config
-                .butler_account_enabled()
-                .then(|| ButlerAccount::new(data_root))
-                .transpose()?,
+            butler_account,
+            butler_backup,
             plugins: runtime.plugins.clone(),
             configuration: runtime.models.configuration.clone(),
             settings,

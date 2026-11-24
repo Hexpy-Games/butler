@@ -42,11 +42,12 @@ export async function tagItems(items: LibraryItem[], addTags: string[], removeTa
 /** One line of meta: source, version (when kept in several), saved date. The version precedes the date so a narrow card truncates the date. */
 export function itemMeta(item: LibraryItem) {
   const meta = documentKind(item)?.meta;
-  if (meta) return meta(item);
+  const published = item.published ? appCopy.publishing.metaPublished : undefined;
+  if (meta) return [published, meta(item)].filter(Boolean).join(" · ");
   const host = hasWebSource(item) ? item.site ?? (item.kind === "bookmark" ? safeHost(item.url) : undefined) : undefined;
   const versions = item.revisions?.length ?? 0;
   const version = versions > 1 ? `${appCopy.artifacts.revision} ${versions}` : undefined;
-  return [host, version, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
+  return [published, host, version, new Date(item.capturedAt).toLocaleDateString(document.documentElement.lang)].filter(Boolean).join(" · ");
 }
 /** A web source must be a non-empty, absolute HTTP(S) URL. */
 export function hasWebSource(item: Pick<LibraryItem, "url">) {

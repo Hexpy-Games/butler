@@ -250,6 +250,19 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
         })
     }
 
+    fn session_branches(
+        &self,
+        runtime_session_ids: Vec<String>,
+    ) -> ApplicationFuture<std::collections::HashMap<String, Option<String>>> {
+        let recovery = self.recovery.clone();
+        Box::pin(async move {
+            recovery
+                .session_branches(runtime_session_ids)
+                .await
+                .map_err(GatewayApplicationError::internal_from)
+        })
+    }
+
     fn project_git(
         &self,
         workspace_path: String,

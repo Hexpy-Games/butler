@@ -13,6 +13,7 @@ import { QuestionAnswerCard, QuestionCard } from "./QuestionCard";
 import { SessionInfoSheet } from "./SessionInfoSheet";
 import { SESSION_PAGE, useSessionView } from "./useSessionView";
 import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { NewChatIntro } from "./NewChatIntro";
 import { Message, UserMessage } from "./Message";
 import { useSessionQueue } from "./useSessionQueue";
@@ -22,7 +23,10 @@ import { anchoredStewardChildren } from "./stewardAnchors";
 import { latestStatus, turnStatusLabel } from "./workStatus";
 import { createSelectableRows } from "./selectableRows";
 import { SelectableRowsContext } from "@/ds/internal/textSelection";
+import { ImageSessionContext } from "./imageViewer";
 import { useElapsed } from "./useElapsed";
+import { ActivityTimeline } from "./ActivityHistory";
+import { projectActivities } from "./activityProjection";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
   id?: string; title: string; project?: string; group?: string; initialText?: string;
@@ -30,7 +34,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
-  const options = useHeaderOptions(opaque(t.gradient("--conversation-bg").stops[0][0]));
+  const stops = t.gradient("--conversation-bg").stops;
+  const options = useHeaderOptions(opaque(stops[0][0]));
   const composer = useRef<ChatComposerHandle>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const session = useSessionView(id);
@@ -39,6 +44,13 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const [text, setText] = useState(initialText);
   const [pending, setPending] = useState<string | null>(null);
   const [dockHeight, setDockHeight] = useState(0);
+  const [keyboard, setKeyboard] = useState(0);
+  const [atEnd, setAtEnd] = useState(true);
+  const [latest, setLatest] = useState("");
+  const [unread, setUnread] = useState(false);
+  const [jumps, setJumps] = useState(0);
+  useEffect(() => { if (atEnd) setUnread(false); }, [atEnd]);
+  useEffect(() => { if (!atEnd && latest) setUnread(true); }, [latest]);
   const [sends, setSends] = useState(0);
   const decision = view ? pendingDecision(view) : null;
   const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
@@ -54,7 +66,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
-      setText={setText} onSend={value => { void composer.current?.send(value); }} /> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
+      setText={setText} onSend={value => { void composer.current?.send(value); }} />
+      : <ConversationMessages {...session} dockHeight={dockHeight} keyboard={keyboard} sends={sends} jumps={jumps} onAtEndChange={setAtEnd} onLatestChange={setLatest}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -63,14 +76,18 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
     <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
-      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
-      onSend={() => setSends(value => value + 1)} />
+      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh}
+      onHeightChange={(height, covered) => { setDockHeight(height); setKeyboard(covered); }}
+      onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }}
+      accessory={<ScrollToBottomButton visible={!atEnd && latest !== ""} unread={unread}
+        onPress={() => { setUnread(false); setJumps(value => value + 1); }} />} />
   </Surface>;
 }
 
-function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, children }: {
+function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, keyboard, sends, jumps, onAtEndChange, onLatestChange, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
-  dockHeight: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  dockHeight: number; keyboard: number; sends: number; jumps: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  onAtEndChange(atEnd: boolean): void; onLatestChange(latest: string): void;
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -87,22 +104,27 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const count = useRef(0);
   const atBottom = useRef(true);
   const dragging = useRef(false);
-  const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
+  // iOS adds the keyboard inset natively (automaticallyAdjustKeyboardInsets).
+  const inset = dockHeight + (Platform.OS === "android" ? keyboard : 0);
   const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
       || (view?.session_id !== "general" && (!!message.turn_activity_rows?.length || (message.status !== "streaming" && !!message.work_blocks?.length))))));
-  useEffect(() => { atBottom.current = true; setBottom(true); }, [sends]);
+  useEffect(() => { atBottom.current = true; onAtEndChange(true); }, [sends, onAtEndChange]);
+  useLatestRow(rows, onLatestChange);
+  useEffect(() => { if (!jumps) return; atBottom.current = true; list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }); }, [jumps]);
   useEffect(() => {
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
     }
-  }, [dockHeight]);
+  }, [inset]);
   return <>
+    <ImageSessionContext.Provider value={view?.session_id}>
     <SelectableRowsContext.Provider value={selection}>
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
         renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
+          liveRows={item.role === "assistant" && !!item.turn_id && item.turn_id === view?.active_turn?.id ? view.active_turn.progress?.safe_progress_rows : undefined}
           stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
@@ -112,7 +134,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
         onViewableItemsChanged={selection?.onViewableItemsChanged}
         onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
         onScroll={({ nativeEvent }) => {
-          setBottom(nearEnd(nativeEvent));
+          onAtEndChange(nearEnd(nativeEvent));
           setScrolled(nativeEvent.contentOffset.y > 0);
         }}
         onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; selection?.begin(); }}
@@ -135,11 +157,11 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
           count.current = rows.length;
         }}
         ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-        ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
+        ListFooterComponent={<View style={{ paddingBottom: inset + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
       />
     </SelectableRowsContext.Provider>
+    </ImageSessionContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
-    <EdgeFade color={opaque(stops[stops.length - 1][0])} edge="bottom" offset={dockHeight} visible={!bottom} />
   </>;
 }
 
@@ -153,6 +175,13 @@ type ScrollMetrics = { contentSize: { height: number }; layoutMeasurement: { hei
 const nearEnd = ({ contentSize, layoutMeasurement, contentOffset }: ScrollMetrics) =>
   contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
 
+/** Reports the last row's version ("" with no rows or once the list unmounts); it changes when a row is added or the last row grows (desktop latestMessageVersion). */
+function useLatestRow(rows: ConversationRow[], report: (latest: string) => void) {
+  const last = rows.at(-1);
+  const latest = !last ? "" : "questionAnswer" in last ? last.id : `${last.id}:${last.status ?? ""}:${last.text.length}`;
+  useEffect(() => { report(latest); return () => report(""); }, [latest, report]);
+}
+
 function TurnStatus({ view, hasDecision, anchors }: {
   view: SessionView; hasDecision: boolean; anchors: ReturnType<typeof anchoredStewardChildren>;
 }) {
@@ -165,10 +194,13 @@ function TurnStatus({ view, hasDecision, anchors }: {
     return child && (child.active_turn || child.waiting_for_children) ? <DelegatedTurnStatus child={child} /> : null;
   }
   if (turn.state === "waiting_for_form") return hasDecision ? null : <StatusLine label={copy.chat.waitingForYou} active={false} />;
-  const newest = view.messages.at(-1);
-  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
-    || (newest?.role === "assistant" && newest.status === "streaming")) return null;
-  return <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />;
+  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)) return null;
+  const attached = view.messages.some(m => m.role === "assistant" && m.turn_id === turn.id);
+  const work = view.session_id !== "general" && !attached ? projectActivities(turn.progress?.safe_progress_rows ?? [], turn.id, locale) : null;
+  return <>
+    {work?.activities.length ? <ActivityTimeline activities={work.activities} currentState={work.semanticState} live /> : null}
+    <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />
+  </>;
 }
 
 function DelegatedTurnStatus({ child }: { child: StewardChild }) {

@@ -60,6 +60,8 @@ pub use application::settings::{
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
 pub use application::setup::butler_account::{ButlerAccountRequest, butler_account_disabled};
+pub use application::setup::butler_backup::ButlerBackupRequest;
+pub use application::setup::publishing::{PublishSource, PublishingRequest};
 pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
@@ -129,7 +131,8 @@ pub use application::{
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
-    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
+    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, RunsQuery,
+    UpdateAutomationRequest,
 };
 pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]

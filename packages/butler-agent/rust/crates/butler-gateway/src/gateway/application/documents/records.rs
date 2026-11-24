@@ -106,6 +106,31 @@ pub(in crate::gateway::application) fn bind_reply(
     Ok(())
 }
 
+/// Documents a turn declared in its final payload are its reply's deliverables.
+/// One made in a delegated session (no App chat) moves to this chat.
+pub(in crate::gateway::application) fn deliver_reply(
+    db: &Connection,
+    chat: &str,
+    reply: &str,
+    ids: &[String],
+) -> Result<(), AppStorageError> {
+    for id in ids {
+        let moved = db.execute(
+            "UPDATE documents SET chat_id=?2,message_id=?3 WHERE id=?1 AND (chat_id IS NULL OR NOT EXISTS(SELECT 1 FROM chats c WHERE c.id=documents.chat_id))",
+            params![id, chat, reply]).map_err(AppStorageError::sqlite)?;
+        if moved > 0 {
+            db.execute("UPDATE browser_library SET payload=json_set(payload,'$.session',?2,'$.message',?3) WHERE id=?1 AND kind='doc'",
+                params![id, chat, reply]).map_err(AppStorageError::sqlite)?;
+        }
+        db.execute(
+            "INSERT OR IGNORE INTO document_deliveries SELECT id,?2,?3 FROM documents WHERE id=?1",
+            params![id, chat, reply],
+        )
+        .map_err(AppStorageError::sqlite)?;
+    }
+    Ok(())
+}
+
 pub(super) fn delivery(db: &Connection, id: &str, input: &Value) -> Result<(), AppStorageError> {
     if input["author"] != "butler" {
         return Ok(());

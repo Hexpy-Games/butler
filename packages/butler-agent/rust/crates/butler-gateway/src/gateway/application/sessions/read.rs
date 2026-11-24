@@ -66,8 +66,8 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  c.runtime_session_hint,
  ",
     read_marker_columns!(),
-    ",c.computer_id",
     r"
+ ,c.computer_id
 FROM chats c
 LEFT JOIN turns t ON t.rowid=(
  SELECT latest.rowid FROM turns latest WHERE latest.chat_id=c.id ORDER BY latest.rowid DESC LIMIT 1
@@ -76,7 +76,6 @@ LEFT JOIN turns t ON t.rowid=(
 );
 
 struct SessionRow {
-    computer_id: Option<String>,
     runtime_session_hint: Option<String>,
     id: String,
     kind: String,
@@ -97,6 +96,7 @@ struct SessionRow {
     project_display_name: Option<String>,
     latest_reply_rowid: Option<i64>,
     read_rowid: i64,
+    computer_id: Option<String>,
 }
 
 fn session_row(row: &Row<'_>) -> rusqlite::Result<SessionRow> {
@@ -308,8 +308,6 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         title: row.title,
         project_id,
         project,
-        computer_id: row.computer_id,
-        computer_name: None,
         session_hint: row
             .runtime_session_hint
             .unwrap_or_else(|| crate::gateway::app_session_hint(&row.id)),
@@ -331,6 +329,9 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         archived: row.archived == 1,
         automation_target_count: u64::try_from(row.automation_target_count.max(0))
             .unwrap_or_default(),
+        branch: None,
+        computer_id: row.computer_id,
+        computer_name: None,
     })
 }
 

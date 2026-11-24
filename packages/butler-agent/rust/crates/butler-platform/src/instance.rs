@@ -132,6 +132,22 @@ pub fn host_name() -> io::Result<String> {
     sys::host_name()
 }
 
+/// This computer's host name without its domain (`Example-Mac`), read once;
+/// "Butler" when the host has none. Pairing and the App navigation show it.
+pub fn computer_name() -> &'static str {
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| {
+        host_name()
+            .ok()
+            .as_deref()
+            .and_then(|host| host.split('.').next())
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+            .unwrap_or("Butler")
+            .to_owned()
+    })
+}
+
 /// The OS name as Rust reports it ("macos", "windows", "linux", ...).
 pub fn os_name() -> &'static str {
     std::env::consts::OS

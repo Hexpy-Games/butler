@@ -2,6 +2,7 @@
 //!
 //! - `GET`/`POST`/`DELETE /setup/butler-account`
 //! - `GET /setup/butler-account/devices`, `DELETE /setup/butler-account/devices/{id}`
+//! - `GET`/`POST /setup/butler-backup`
 //! - `GET /setup/readiness`, `POST /setup/readiness/retry`
 //! - `POST /setup/memory-model` (`{enabled}`: the persisted memory-model choice)
 //! - `GET /setup/local-model-servers`
@@ -22,7 +23,8 @@ use axum::{
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::{
-    HttpError, HttpState, butler_account, json, read_body_with_limit, subsessions::decode_component,
+    HttpError, HttpState, butler_account, butler_backup, json, read_body_with_limit,
+    subsessions::decode_component,
 };
 use crate::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput,
@@ -92,6 +94,11 @@ pub(super) async fn route(
             if path == "/setup/butler-account" || path.starts_with("/setup/butler-account/") =>
         {
             butler_account::route(&setup, request, path).await
+        }
+        (_, path)
+            if path == "/setup/butler-backup" || path.starts_with("/setup/butler-backup/") =>
+        {
+            butler_backup::route(&setup, request, path).await
         }
         (_, path) if path == "/setup/butler-vault" || path.starts_with("/setup/butler-vault/") => {
             vault_route(&setup, request, uri.path()).await

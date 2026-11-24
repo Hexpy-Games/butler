@@ -106,12 +106,13 @@ pub use configuration::{
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,
-    LocalModelMutation, McpModelTarget, ModelConfiguration, ModelConfigurationClock,
-    ModelConfigurationEnvironment, ModelConfigurationRead, ModelContextMetadataRead,
-    ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError, ProviderKeySaveError,
-    QuietHours, ResolvedImageModel, SavedProviderKey, SettingsError, generate_pkce_verifier,
-    pkce_challenge,
+    LocalModelMutation, McpModelTarget, McpSecretStore, ModelConfiguration,
+    ModelConfigurationClock, ModelConfigurationEnvironment, ModelConfigurationRead,
+    ModelContextMetadataRead, ProviderCredentialMutation, ProviderKeyCheck, ProviderKeyCheckError,
+    ProviderKeySaveError, QuietHours, ResolvedImageModel, SavedProviderKey, SettingsError,
+    clean_secret_key, generate_pkce_verifier, is_literal_source, pkce_challenge, secret_id,
 };
+pub(crate) use configuration::{stored_secret_refs, stored_secret_refs_from_value};
 pub use status::{StatusModels, auth_status_with_environment, open_status_models};
 
 /// Process-owned immutable catalog data and lazily allocated tokenizer.

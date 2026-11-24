@@ -104,6 +104,10 @@ impl Coordinator {
         result
     }
 
+    pub(crate) async fn recover_answered(&self) -> Result<(), BtccError> {
+        self.facade.recover_answered().await
+    }
+
     /// Includes preparation, session-tail waits and final delivery.
     pub(crate) fn has_active_session_execution(&self, session_id: &str) -> bool {
         self.state.lock().session_tails.contains_key(session_id)

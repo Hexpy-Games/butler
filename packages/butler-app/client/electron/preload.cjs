@@ -785,6 +785,10 @@ const butlerApp = Object.freeze({
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
     method: "POST", body: "{}",
   }),
+  getButlerBackup: () => requestBridgeResult("/setup/butler-backup"),
+  postButlerBackup: (request) => requestBridgeResult("/setup/butler-backup", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
   getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
   postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
     method: "POST", body: JSON.stringify(request ?? {}),
@@ -794,6 +798,12 @@ const butlerApp = Object.freeze({
   revokeButlerAccountDevice: ({ id } = {}) => requestBridgeResult(`/setup/butler-account/devices/${encodeURIComponent(id ?? "")}`, {
     method: "DELETE",
   }),
+  getPublishing: () => requestBridgeResult("/publishing"),
+  listPublishedPages: () => requestBridgeResult("/publishing/pages"),
+  unpublishPage: ({ id } = {}) => requestBridgeResult(`/publishing/pages/${encodeURIComponent(id ?? "")}`, { method: "DELETE" }),
+  previewPublish: ({ id } = {}) => requestBridgeResult(`/library/${encodeURIComponent(id ?? "")}/publish`),
+  publishItem: ({ id } = {}) => requestBridgeResult(`/library/${encodeURIComponent(id ?? "")}/publish`, { method: "POST" }),
+  unpublishItem: ({ id } = {}) => requestBridgeResult(`/library/${encodeURIComponent(id ?? "")}/publish`, { method: "DELETE" }),
   getButlerVault: () => requestBridgeResult("/setup/butler-vault"),
   enableButlerVault: (request) => requestBridgeResult("/setup/butler-vault/enable", {
     method: "POST", body: JSON.stringify(request ?? {}),

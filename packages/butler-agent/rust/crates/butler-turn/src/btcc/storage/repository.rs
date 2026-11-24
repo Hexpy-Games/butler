@@ -2,8 +2,9 @@ use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::turn::{
     CanonicalMessageStore, ContinuationBudgetTransition, HostDependencies,
     ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, PortFuture, PreparedTurn,
-    ProgressEventRepository, ProgressWrite, StateExecutionClaim, StopPersistenceOutcome,
-    StorageReadiness, TransitionCommitError, TurnRecord, TurnStore, TurnTransition,
+    ProgressEventRepository, ProgressWrite, SettledTurn, StateExecutionClaim,
+    StopPersistenceOutcome, StorageReadiness, TransitionCommitError, TurnRecord, TurnStore,
+    TurnTransition,
 };
 use crate::btcc::{BtccError, ProgressDestination};
 use tokio_util::sync::CancellationToken;
@@ -121,6 +122,34 @@ impl TurnStore for BtccRepositories {
         Box::pin(async move {
             storage
                 .execute(move |db| stop::stop(db, &id))
+                .await
+                .map_err(BtccError::from)
+        })
+    }
+    fn settled_turns(&self, session_id: &str) -> PortFuture<'_, Vec<SettledTurn>> {
+        let storage = self.storage.clone();
+        let id = session_id.to_owned();
+        Box::pin(async move {
+            storage
+                .execute(move |db| transitions::answered::settled_turns(db, &id))
+                .await
+                .map_err(BtccError::from)
+        })
+    }
+    fn close_settled(&self, settled: Vec<SettledTurn>) -> PortFuture<'_, ()> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .execute(move |db| transitions::answered::close_settled(db, &settled))
+                .await
+                .map_err(BtccError::from)
+        })
+    }
+    fn waiting_sessions(&self) -> PortFuture<'_, Vec<String>> {
+        let storage = self.storage.clone();
+        Box::pin(async move {
+            storage
+                .execute(transitions::answered::waiting_sessions)
                 .await
                 .map_err(BtccError::from)
         })

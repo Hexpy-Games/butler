@@ -55,6 +55,7 @@ interface FirstRunCopy {
     verifying: string;
     failed: string;
     ready: string;
+    preparingSearch: string;
     retry: string;
     progress: (percent: number, doneMB: number, totalMB: number) => string;
     reasons: Record<string, string>;
@@ -527,9 +528,9 @@ export interface MobileCopy {
     applyUpdateBody: string;
     version: (version: string, build?: string) => string;
   };
-  outputs: { share: string; shareFailed: string; loadFailed: string; unsupported: string };
+  outputs: { share: string; shareFailed: string; loadFailed: string; unsupported: string; savedToLibrary: string; saveFailed: string };
   library: { changeFailed: string };
-  automations: { nextRun: string; lastRun: string; deleteFailed: string };
+  automations: { nextRun: string; lastRun: string; deleteFailed: string; edit: string; allRuns: string };
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
@@ -571,6 +572,7 @@ export interface AppCopy {
     revokeUnconfirmed: string;
   };
   shell: { footerNav: string; update: { downloading: string; working: string; ready: string; failed: string; restart: string } };
+  publishing: typeof import("./locales/publishing.ts").PUBLISHING_COPY["en-US"];
   sessionInfo: typeof import("./locales/session-info.ts").SESSION_INFO_COPY["en-US"];
   computers: typeof import("./locales/computers.ts").COMPUTERS_COPY["en-US"];
   fileViewer: typeof import("./locales/file-viewer.ts").FILE_VIEWER_COPY["en-US"];
@@ -772,6 +774,52 @@ export interface AppCopy {
     notificationCancelled: string;
     notificationUpdated: string;
 
+  };
+  butlerBackup: {
+    name: string;
+    description: string;
+    turnOn: string;
+    plusOnly: string;
+    keyTitle: string;
+    keyBody: string;
+    copy: string;
+    copied: string;
+    saveFile: string;
+    saved: string;
+    cancel: string;
+    start: string;
+    startNeedsConfirm: string;
+    lastBackup: string;
+    storage: string;
+    usage: (used: string, total: string) => string;
+    backUpNow: string;
+    menu: string;
+    newKey: string;
+    turnOff: string;
+    running: (p: number) => string;
+    runningTooltip: string;
+    full: string;
+    viewPlans: string;
+    fullTooltip: string;
+    failed: string;
+    retry: string;
+    paused: string;
+    pausedTooltip: string;
+    newKeyConfirm: string;
+    newKeyAction: string;
+    offConfirm: string;
+    found: string;
+    foundMeta: (date: string, size: string) => string;
+    restore: string;
+    restoreBody: string;
+    keyLabel: string;
+    restoreAction: string;
+    keyWrong: string;
+    restoring: string;
+    restartToFinish: string;
+    restart: string;
+    diskFull: string;
+    failedToast: string;
   };
   butlerAccount: {
     name: string;

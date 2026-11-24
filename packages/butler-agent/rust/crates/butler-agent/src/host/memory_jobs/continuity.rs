@@ -100,7 +100,14 @@ impl Continuity {
             let result = self.fold(&notice, visible.as_ref()).await;
             let mut state = self.state.lock().await;
             if let Err(error) = result {
-                butler_core::diagnostic!("[chat-continuity] fold failed: {error}");
+                let mut chain = error.to_string();
+                let mut cause = std::error::Error::source(&error);
+                while let Some(next) = cause {
+                    chain.push_str(": ");
+                    chain.push_str(&next.to_string());
+                    cause = next.source();
+                }
+                butler_core::diagnostic!("[chat-continuity] fold failed: {chain}");
                 if !state.closed
                     && !state.deleted.contains(&notice.conversation_session_id)
                     && let Some(visible) = visible

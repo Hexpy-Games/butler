@@ -7,6 +7,7 @@ pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
 mod computer_memory;
+mod publishing;
 pub(crate) use computer_memory::ComputerMemory;
 mod credentials;
 mod oauth;
@@ -22,8 +23,8 @@ use tokio::sync::watch;
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ApplicationFuture, ButlerAccountRequest, GatewayApplicationError, LocalModelServersView,
-    OauthFlowView, ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
-    SavedProviderKey, SetupReadinessView, butler_account_disabled,
+    OauthFlowView, ProviderKeyVerificationView, PublishingRequest, ReplacedCredentialView,
+    SavedCredentialView, SavedProviderKey, SetupReadinessView, butler_account_disabled,
 };
 use butler_models::models::{
     ComputerModel, CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe,
@@ -40,7 +41,8 @@ const LOCAL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Everything first-run setup needs from the process.
 pub(crate) struct AppSetupParts {
-    pub(crate) butler_account: Option<ButlerAccount>,
+    pub(crate) butler_account: Option<Arc<ButlerAccount>>,
+    pub(crate) butler_backup: Option<crate::host::backup::BackupService>,
     pub(crate) computer_memory: Arc<ComputerMemory>,
     pub(crate) plugins: Arc<crate::host::plugins::Plugins>,
     pub(crate) configuration: Arc<ModelConfiguration>,
@@ -57,7 +59,8 @@ pub(crate) struct AppSetup(Arc<SetupInner>);
 
 struct SetupInner {
     computer_memory: Arc<ComputerMemory>,
-    butler_account: Option<ButlerAccount>,
+    butler_account: Option<Arc<ButlerAccount>>,
+    butler_backup: Option<crate::host::backup::BackupService>,
     plugins: Arc<crate::host::plugins::Plugins>,
     configuration: Arc<ModelConfiguration>,
     settings: Arc<AppSettingsFactsAdapter>,
@@ -83,6 +86,7 @@ impl AppSetup {
         );
         Self(Arc::new(SetupInner {
             butler_account: parts.butler_account,
+            butler_backup: parts.butler_backup,
             computer_memory: parts.computer_memory,
             oauth: OauthFlows::new(parts.configuration.clone()),
             configuration: parts.configuration,
@@ -121,6 +125,19 @@ fn local_server_probes() -> Vec<LocalServerProbe> {
 }
 
 impl AppSetupPort for AppSetup {
+    fn butler_backup(
+        &self,
+        request: butler_gateway::gateway::ButlerBackupRequest,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            match &this.butler_backup {
+                Some(backup) => backup.handle(request).await,
+                None => Err(butler_account_disabled()),
+            }
+        })
+    }
+
     fn butler_account(
         &self,
         request: ButlerAccountRequest,
@@ -129,6 +146,16 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move {
             match &this.butler_account {
                 Some(account) => account.handle(request).await,
+                None => Err(butler_account_disabled()),
+            }
+        })
+    }
+
+    fn publishing(&self, request: PublishingRequest) -> ApplicationFuture<serde_json::Value> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            match &this.butler_account {
+                Some(account) => account.publishing(request).await,
                 None => Err(butler_account_disabled()),
             }
         })

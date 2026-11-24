@@ -1,5 +1,4 @@
 import { appCopy, getAppLocale } from "@/app/copy";
-import { useMinuteClock } from "@/app/space/minute-clock";
 import { Button, ListRow, Monitor, SettingsSection, Stack, Tooltip } from "@/butler-ds";
 import type { useButlerAccount } from "./hooks/useButlerAccount";
 
@@ -13,9 +12,11 @@ function lastSeen(value: string | null, now: number) {
   return format.format(-Math.floor(elapsed / 86400), "day");
 }
 
-export function ButlerAccountDevices({ account }: { account: ReturnType<typeof useButlerAccount> }) {
+export function butlerAccountDevicesSection({ account, now }: {
+  account: ReturnType<typeof useButlerAccount>;
+  now: number;
+}) {
   const copy = appCopy.butlerAccount;
-  const now = useMinuteClock(account.devices.length > 0);
   if (account.state === "unsupported") return null;
   return (
     <SettingsSection id="butler-account-devices" kind="list" title={copy.devices} state={account.state}

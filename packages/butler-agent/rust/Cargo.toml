@@ -12,6 +12,7 @@ publish = false
 [workspace.dependencies]
 age = "=0.12.1"
 ring = "=0.17.14"
+bech32 = "0.11.1"
 tracing = "0.1.44"
 semver = "1.0.27"
 arrow-array = "=57.3.1"

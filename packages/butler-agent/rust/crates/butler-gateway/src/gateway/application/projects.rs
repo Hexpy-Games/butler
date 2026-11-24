@@ -226,14 +226,22 @@ impl AppApplication {
                 .collect(),
         )
         .await;
+        let worktrees = self.session_worktree_branches(&sessions_by_project).await?;
         let projects = rows
             .into_iter()
             .zip(heads)
             .map(|(row, head)| {
                 let project_sessions = include_sessions.then(|| {
-                    sessions_by_project
+                    let mut sessions = sessions_by_project
                         .remove(rows::id(&row))
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    for session in &mut sessions {
+                        session.branch = match worktrees.get(&session.session_hint) {
+                            Some(branch) => branch.clone(),
+                            None => head.branch.clone(),
+                        };
+                    }
+                    sessions
                 });
                 AppProjectSummary {
                     git: Some(head),
@@ -242,6 +250,24 @@ impl AppApplication {
             })
             .collect();
         Ok(AppProjectList { projects })
+    }
+
+    async fn session_worktree_branches(
+        &self,
+        sessions: &HashMap<String, Vec<AppSessionSummary>>,
+    ) -> Result<HashMap<String, Option<String>>, GatewayApplicationError> {
+        let ids: Vec<String> = sessions
+            .values()
+            .flatten()
+            .map(|s| s.session_hint.clone())
+            .collect();
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        self.dependencies
+            .session_workspaces
+            .session_branches(ids)
+            .await
     }
 }
 

@@ -141,7 +141,7 @@ async fn cb_11_later_result_turn_shows_earlier_worker_result() -> Result<(), Har
     butler_e2e::gate!();
     let (s, script, server) = setup("CB-11-EARLIER-RESULT", 2).await?;
     s.gw.say("general", "Verify batch red").await?;
-    let (_, rows) = workers(&s, "general", 2).await?;
+    let (steward, rows) = workers(&s, "general", 2).await?;
     started(&script, 2).await;
     script.release("red-0");
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -218,7 +218,51 @@ async fn cb_11_later_result_turn_shows_earlier_worker_result() -> Result<(), Har
         )),
         "{second}"
     );
+    assert_steward_turns_closed(&s, &steward).await?;
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+async fn assert_steward_turns_closed(s: &Scenario, steward: &str) -> Result<(), HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let rows = {
+            let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+            let mut statement = db.prepare(
+                "SELECT turn_id, semantic_state, final_disposition, suspension_reason, canonical_assistant_message_id
+                 FROM btcc_turns WHERE session_id=?1 ORDER BY rowid",
+            )?;
+            statement
+                .query_map([steward], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        if rows.len() == 3
+            && let Some(message_id) = &rows[2].4
+            && rows
+                .iter()
+                .all(|(_, state, disposition, suspension, message)| {
+                    state == "delivered"
+                        && disposition.as_deref() == Some("completed")
+                        && suspension.is_none()
+                        && message.as_ref() == Some(message_id)
+                })
+        {
+            return Ok(());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Steward turns: {rows:?}\n{}",
+            s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }

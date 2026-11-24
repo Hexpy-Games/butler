@@ -4,7 +4,7 @@ mod records;
 mod writes;
 use super::{AppApplication, AppStorageError, app_error, events};
 use crate::gateway::ApplicationFuture;
-pub(super) use records::{bind_reply, delete, has_deliverable, head, revision};
+pub(super) use records::{bind_reply, delete, deliver_reply, has_deliverable, head, revision};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 

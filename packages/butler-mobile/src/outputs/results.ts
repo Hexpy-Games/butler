@@ -1,7 +1,7 @@
 import type { ConversationMessage, MessageFileRef, SessionArtifactSummary } from "../../../butler-protocol/src/index.ts";
 export type ViewMode = "image" | "markdown" | "text" | "pdf" | "html" | "unsupported";
 export type ResultTarget =
-  | { kind: "image"; path: string; title: string }
+  | { kind: "image"; path: string; name?: string; title: string }
   | { kind: "file"; id: string; name: string; title: string; type?: string }
   | { kind: "output"; id: string; title: string }
   | { kind: "doc"; id: string; title: string }
@@ -38,7 +38,7 @@ export function artifactTarget(a: SessionArtifactSummary): ResultTarget | null {
   if (a.kind === "doc") return { kind: "doc", id: a.id, title: a.title };
   if (!a.file_id) return null;
   if (fileViewMode(artifactName(a), a.kind) === "image") {
-    return { kind: "image", path: `/message-files/${encodeURIComponent(a.file_id)}`, title: a.title };
+    return { kind: "image", path: `/message-files/${encodeURIComponent(a.file_id)}`, name: artifactName(a), title: a.title };
   }
   return { kind: "file", id: a.file_id, name: artifactName(a), title: a.title, type: a.kind };
 }

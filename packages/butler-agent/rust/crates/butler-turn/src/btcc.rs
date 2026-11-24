@@ -67,8 +67,9 @@ pub use turn::{
     ContentRef, ContextAssembly, ContextSection, ContinuationBudgetTransition,
     DefaultTurnPreparation, DeliveryOutbox, ExecutionRoute, FinalDisposition, HostDependencies,
     ModelRoundAcceptanceWrite, ModelRoundKey, ModelRouteEventWrite, ModelRouteWrite, PortFuture,
-    PreparedConversation, ProgressEvent, StateExecutionClaim, SuspensionReason, TerminalOutcome,
-    TurnCheckpoint, TurnFacadeDependencies, TurnRecord, TurnSemanticState, TurnStore, WakeIdentity,
+    PreparedConversation, ProgressEvent, SettledTurn, StateExecutionClaim, SuspensionReason,
+    TerminalOutcome, TurnCheckpoint, TurnFacadeDependencies, TurnRecord, TurnSemanticState,
+    TurnStore, WakeIdentity,
 };
 pub use turn::{
     AttemptFailure, AttemptHistory, CanonicalMessageStore, DeliveryStatus, FailureDisposition,
@@ -239,6 +240,11 @@ impl Btcc {
     /// Runs a turn to delivery, suspension or cancellation; concurrent requests for the same turn share one run.
     pub async fn run_turn(&self, request: TurnRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.run_turn(request).await
+    }
+
+    /// Closes waiting turns whose children are all terminal.
+    pub async fn recover_answered(&self) -> Result<(), BtccError> {
+        self.inner.recover_answered().await
     }
 
     /// Whether a session has a live turn flight, including preparation and delivery.

@@ -1,11 +1,14 @@
 import { appCopy } from "@/app/copy.ts";
 import { Button, QrCode, SettingsField, SettingsSection, Stack, Tooltip, Typo } from "@/butler-ds";
 import { pairingLink } from "./pairingLink";
-import { usePairingSession } from "./usePairingSession";
+import type { usePairingSession } from "./usePairingSession";
 
-export function SecurityPairingSection({ disabled, addresses }: { disabled: boolean; addresses: readonly string[] }) {
+export function securityPairingSection({ disabled, addresses, pairing }: {
+  disabled: boolean;
+  addresses: readonly string[];
+  pairing: ReturnType<typeof usePairingSession>;
+}) {
   const copy = appCopy.settings.security;
-  const pairing = usePairingSession();
   const unavailable = disabled || pairing.busy || Boolean(pairing.code);
   const digits = pairing.busy ? undefined : pairing.code?.code;
   const link = digits ? pairingLink(addresses, digits) : null;

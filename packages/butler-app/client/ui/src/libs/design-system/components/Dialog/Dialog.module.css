@@ -189,6 +189,11 @@
   gap: var(--space-2);
 }
 
+/* A ButtonContainer that wraps fills the footer; its rows stay right-aligned, primary last. */
+.footer > [data-slot="button-container"] {
+  justify-content: flex-end;
+}
+
 .title {
   margin: 0;
   padding-inline-end: var(--dialog-title-close-room, 0);

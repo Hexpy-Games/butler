@@ -93,7 +93,7 @@ pub(in crate::gateway::http) async fn pair_device_request(
                 device_id: id,
                 device_token,
                 butler_id: state.devices.butler_id().to_owned(),
-                computer_name: super::lan::computer_name(),
+                computer_name: butler_platform::instance::computer_name().to_owned(),
             },
         },
     )?;

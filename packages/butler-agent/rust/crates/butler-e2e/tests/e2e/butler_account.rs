@@ -31,6 +31,11 @@ async fn butler_account_01_off_by_default_makes_no_request() -> Result<(), Harne
         .await?;
     assert_eq!(reply.status, 404);
     assert_eq!(reply.error_code(), Some("butler_account_disabled"));
+    let reply = app
+        .send(Method::GET, "/setup/butler-backup", None, &[])
+        .await?;
+    assert_eq!(reply.status, 404);
+    assert_eq!(reply.error_code(), Some("butler_account_disabled"));
     assert_eq!(
         fake.seen(),
         Vec::<String>::new(),

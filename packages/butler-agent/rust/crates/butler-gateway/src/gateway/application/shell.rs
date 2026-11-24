@@ -49,6 +49,7 @@ impl AppApplication {
             },
             "settings_summary": {"profile_label": "Local Butler"},
             "generated_at": generated_at,
+            "computer_name": butler_platform::instance::computer_name(),
         }))
     }
 

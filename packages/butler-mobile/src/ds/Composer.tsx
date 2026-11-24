@@ -1,8 +1,9 @@
 import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
-import { useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RADIUS } from "../design/tokens";
+import { alpha, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
 import { icons } from "./icons";
@@ -30,7 +31,15 @@ export interface ComposerProps {
   attachments?: React.ReactNode;
   testID?: string;
 }
-export interface ComposerDockProps { children: React.ReactNode; onHeightChange?: (height: number) => void }
+export interface ComposerDockProps {
+  children: React.ReactNode;
+  /** height: the dock; keyboard: how much of the dock's frame the keyboard covers (0 when hidden). */
+  onHeightChange?: (height: number, keyboard: number) => void;
+  /** Android only: fills the dock area, with a fade above it, while content scrolls beneath; iOS uses the native scroll edge effect. */
+  backdrop?: { color: string; visible: boolean };
+  /** Floats centered just above the composer and moves with it over the keyboard; it is not part of the reported height. */
+  accessory?: React.ReactNode;
+}
 
 // Eight input lines before the input scrolls (web `8lh`).
 const MAX_LINES = 8;
@@ -89,30 +98,52 @@ export function Composer({
 }
 
 /** Keyboard and safe-area placement; the Composer itself has no position. */
-export function ComposerDock({ children, onHeightChange }: ComposerDockProps) {
+export function ComposerDock({ children, onHeightChange, backdrop, accessory }: ComposerDockProps) {
   const t = useTokens();
   const insets = useSafeAreaInsets();
-  const [keyboard, setKeyboard] = useState(false);
+  // KeyboardAvoidingView measures from its parent, not the window; offset by where the dock's frame starts on screen.
+  const frame = useRef<ComponentRef<typeof View>>(null);
+  const [top, setTop] = useState(0);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
+  const [frameHeight, setFrameHeight] = useState(0);
+  const [height, setHeight] = useState(0);
   useEffect(() => {
     const ios = Platform.OS === "ios";
-    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboard(true));
-    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboard(false));
+    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (event) => setKeyboardTop(event.endCoordinates.screenY));
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardTop(null));
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
+  const covered = keyboardTop === null ? 0 : Math.max(0, top + frameHeight - keyboardTop);
+  useEffect(() => { onHeightChange?.(height, covered); }, [height, covered]);
   const gap = t.length("--space-sm");
+  const fade = t.length("--tinted-glass-edge-size");
   return (
-    <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
-      <ScrollEdgeEffect edge="bottom" effect="soft">
-      <View
-        onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
-        style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboard ? gap : insets.bottom + gap }}
-      >
-        {children}
-      </View>
-      </ScrollEdgeEffect>
-    </KeyboardAvoidingView>
+    <View ref={frame} pointerEvents="box-none" style={StyleSheet.absoluteFill}
+      onLayout={(event) => {
+        setFrameHeight(event.nativeEvent.layout.height);
+        frame.current?.measureInWindow((_x, y) => setTop(y));
+      }}>
+      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" keyboardVerticalOffset={top}
+        style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
+        {accessory ? <View pointerEvents="box-none" style={{ zIndex: 1, alignItems: "center", paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: gap }}>{accessory}</View> : null}
+        <ScrollEdgeEffect edge="bottom" effect="soft">
+          <View
+            onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
+            style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboardTop !== null ? gap : insets.bottom + gap }}
+          >
+            {backdrop?.visible && Platform.OS === "android" && (
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { top: -fade }]}>
+                <LinearGradient colors={[alpha(backdrop.color, 0), backdrop.color]} style={{ height: fade }} />
+                <View style={{ flex: 1, backgroundColor: backdrop.color }} />
+              </View>
+            )}
+            {children}
+          </View>
+        </ScrollEdgeEffect>
+      </KeyboardAvoidingView>
+    </View>
   );
 }

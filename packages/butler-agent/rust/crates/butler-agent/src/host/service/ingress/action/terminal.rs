@@ -21,6 +21,7 @@ pub(super) struct Terminal<'a> {
     model: Option<Value>,
     pub(super) artifacts: &'a [FinalArtifact],
     pub(super) outputs: &'a [String],
+    pub(super) documents: &'a [String],
     pub(super) changed_files: &'a [ChangedFileSummary],
     pub(super) plan: Option<&'a Value>,
 }
@@ -56,6 +57,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
                 .and_then(|model| serde_json::to_value(model).ok()),
             artifacts: &value.artifacts,
             outputs: &value.outputs,
+            documents: &value.documents,
             changed_files: &value.changed_files,
             plan: value.plan.as_ref(),
         },
@@ -78,6 +80,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             model: None,
             artifacts: &value.artifacts,
             outputs: &value.outputs,
+            documents: &value.documents,
             changed_files: &value.changed_files,
             plan: None,
         },
@@ -96,6 +99,7 @@ pub(super) fn from_outcome(result: &TurnOutcomeKind) -> Result<Terminal<'_>, Ing
             model: None,
             artifacts: &[],
             outputs: &[],
+            documents: &[],
             changed_files: &[],
             plan: None,
         },
@@ -123,6 +127,7 @@ pub(super) fn cancelled(turn_id: &str) -> Terminal<'_> {
         model: None,
         artifacts: &[],
         outputs: &[],
+        documents: &[],
         changed_files: &[],
         plan: None,
     }
@@ -142,6 +147,7 @@ pub(super) fn crash_interrupted(turn_id: &str) -> Terminal<'_> {
         model: None,
         artifacts: &[],
         outputs: &[],
+        documents: &[],
         changed_files: &[],
         plan: None,
     }
@@ -161,6 +167,7 @@ pub(super) fn rejected<'a>(turn_id: &'a str, code: &'a str) -> Terminal<'a> {
         model: None,
         artifacts: &[],
         outputs: &[],
+        documents: &[],
         changed_files: &[],
         plan: None,
     }
@@ -225,6 +232,9 @@ pub(super) fn action(
     );
     if !terminal.outputs.is_empty() {
         message.insert("outputs".into(), json!(terminal.outputs));
+    }
+    if !terminal.documents.is_empty() {
+        message.insert("documents".into(), json!(terminal.documents));
     }
     if !artifacts.is_empty() {
         message.insert("artifacts".into(), Value::Array(artifacts));

@@ -164,8 +164,6 @@ export interface SessionSummary {
   kind: ChatKind;
   title: string;
   project_id?: string;
-  computer_id?: string;
-  computer_name?: string;
   project?: { id: string; display_name: string };
   session_hint: string;
   created_at: string;
@@ -186,6 +184,12 @@ export interface SessionSummary {
   pinned: boolean;
   archived: boolean;
   automation_target_count: number;
+  /** The checked-out branch: the session worktree's, else its project folder's. Set in navigation lists. */
+  branch?: string;
+  /** The registered computer the chat runs on; absent on this computer. */
+  computer_id?: string;
+  /** That computer's name, when known. */
+  computer_name?: string;
 }
 
 export interface ProjectSummary {

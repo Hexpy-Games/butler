@@ -11,6 +11,7 @@ publish.workspace = true
 # `age` is built without its CLI, plugin, SSH and armor features.
 [dependencies]
 age.workspace = true
+bech32.workspace = true
 butler-platform = { path = "../butler-platform" }
 serde.workspace = true
 serde_json.workspace = true

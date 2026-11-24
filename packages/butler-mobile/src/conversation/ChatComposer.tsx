@@ -17,10 +17,12 @@ import { documentContent, documentKindLabel } from "./documents";
 
 export type ChatComposerHandle = { send(text?: string): Promise<void> };
 
-export function ChatComposer({ ref, id, project, group, view, hasDecision, text, setText, onPending, refreshQueue, onHeightChange, onSend }: {
+export function ChatComposer({ ref, id, project, group, view, hasDecision, text, setText, onPending,
+  refreshQueue, onHeightChange, onSend, backdrop, accessory }: {
   ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
   text: string; setText(text: string): void; onPending(text: string | null): void;
-  refreshQueue(): Promise<void>; onHeightChange(height: number): void; onSend(): void;
+  refreshQueue(): Promise<void>; onHeightChange(height: number, keyboard: number): void; onSend(): void;
+  backdrop?: { color: string; visible: boolean }; accessory?: React.ReactNode;
 }) {
   const copy = useMobileCopy();
   const { client } = useConversation();
@@ -47,7 +49,7 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
     catch { showToast({ message: copy.chat.stopFailed, tone: "error" }); }
     finally { setBusy(false); }
   };
-  return <ComposerDock onHeightChange={onHeightChange}>
+  return <ComposerDock backdrop={backdrop} onHeightChange={onHeightChange} accessory={accessory}>
     <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
       mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={() => { void send(); }} onStop={stop}
       sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}

@@ -168,6 +168,7 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod provider_first_response;
+mod publishing;
 mod queue_admission_shutdown;
 #[cfg(debug_assertions)]
 mod queue_claim_crash;
@@ -193,6 +194,7 @@ mod schedule_calendar;
 mod schedule_chat;
 mod schedule_model;
 mod schedule_replay_after_hold;
+mod schedule_runs_page;
 mod schedule_sleep_wake;
 mod schedule_store;
 mod schedule_wake_catchup;

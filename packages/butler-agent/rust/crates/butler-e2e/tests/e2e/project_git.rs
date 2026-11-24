@@ -3,7 +3,8 @@
 //! no process per project), and the project dashboard adds uncommitted
 //! changes and the commits ahead of and behind the upstream branch,
 //! without ever running a program the repository config names (PRJ-05),
-//! and in time when Git is missing or hangs (PRJ-06).
+//! and in time when Git is missing or hangs (PRJ-06). The `/navigation` view
+//! names this computer and each session's branch (PRJ-07).
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -305,6 +306,67 @@ async fn prj_06_missing_or_hanging_git_leaves_status_unknown() -> Result<(), Har
         started.elapsed(),
         std::time::Duration::from_secs(8),
         "the dashboard waited"
+    );
+    s.finish().await
+}
+
+/// PRJ-07 — `/navigation` names this computer; a project session shows its
+/// project's branch, a worktree session its own worktree branch, and a
+/// plain chat neither a branch nor a computer id.
+#[tokio::test]
+async fn prj_07_navigation_names_computer_and_session_branches() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("PRJ-07")?.start().await?;
+    let (project_id, repo) = project(&s, "Branch Repo").await?;
+    init_repository(&repo)?;
+    git(&repo, &["checkout", "-q", "-b", "feature/sample"]);
+    let mut ids = Vec::new();
+    for body in [
+        json!({"kind": "project", "project_id": project_id, "workspace_mode": "local"}),
+        json!({"kind": "project", "project_id": project_id, "workspace_mode": "worktree"}),
+        json!({"kind": "chat"}),
+    ] {
+        let reply = s.gw.post("/sessions", body).await?;
+        assert_eq!(reply.status, 201, "{}", reply.text);
+        ids.push(reply.data()["session"]["id"].as_str().unwrap().to_owned());
+    }
+    let summary =
+        s.gw.get(&format!("/session-summary?session_id={}", ids[1]))
+            .await?;
+    let worktree_branch = summary.data()["branch_info"]["branch_name"].clone();
+    assert!(
+        worktree_branch.is_string() && worktree_branch != "feature/sample",
+        "{}",
+        summary.text
+    );
+    let navigation = s.gw.get("/navigation").await?;
+    assert_eq!(navigation.status, 200, "{}", navigation.text);
+    let view = navigation.data();
+    assert!(
+        view["computer_name"]
+            .as_str()
+            .is_some_and(|name| !name.is_empty()),
+        "{view}"
+    );
+    let projects = view["projects"].as_array().unwrap().iter();
+    let sessions: Vec<&Value> = view["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(projects.flat_map(|p| p["sessions"].as_array().into_iter().flatten()))
+        .collect();
+    let listed = |id: &str| {
+        *sessions
+            .iter()
+            .find(|s| s["id"] == id)
+            .unwrap_or_else(|| panic!("{id} missing: {view}"))
+    };
+    assert_eq!(listed(&ids[0])["branch"], "feature/sample");
+    assert_eq!(listed(&ids[1])["branch"], worktree_branch);
+    let chat = listed(&ids[2]);
+    assert!(
+        chat["branch"].is_null() && chat["computer_id"].is_null(),
+        "{chat}"
     );
     s.finish().await
 }

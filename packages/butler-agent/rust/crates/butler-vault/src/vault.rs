@@ -30,6 +30,7 @@ mod format;
 mod keychain;
 mod merge;
 mod product;
+mod recovery;
 mod store;
 mod transfer;
 mod unlock;
@@ -42,4 +43,5 @@ pub use merge::merge;
 pub use product::{
     DECLINED_MARKER, LegacyItem, LegacySource, MIGRATION_MARKER, ProductVault, SwitchReport, shared,
 };
+pub use recovery::{recovery_recipient, rekey_restored};
 pub use store::{NewItem, Vault, VaultPaths, VaultState};

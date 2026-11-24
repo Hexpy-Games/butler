@@ -12,14 +12,15 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use super::{
-    ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, TurnPreparation, TurnStore,
+    ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, SettledTurn,
+    TurnPreparation, TurnStore,
 };
 use crate::btcc::BtccCode;
 use crate::btcc::storage::{BtccRepositories, StorageCode, WakeAuthorization};
 use crate::btcc::{BtccError, ReasoningEffort, TurnRequest, TurnTrigger};
 use crate::conversation::{
-    AgentConversationStore, ConversationAdmissionObserver, ConversationAdmissionTurn,
-    ConversationAdmissionTurnInput,
+    AgentConversationStore, CompletionObservation, ConversationAdmissionObserver,
+    ConversationAdmissionTurn, ConversationAdmissionTurnInput,
 };
 use crate::workspace::{SessionBindingStore, StoredSessionBinding};
 
@@ -313,6 +314,47 @@ impl DefaultTurnPreparation {
 impl TurnPreparation for DefaultTurnPreparation {
     fn prepare(&self, request: TurnRequest) -> PortFuture<'_, PreparedExecution> {
         Box::pin(self.prepare_owned(request))
+    }
+
+    fn close_settled(&self, session_id: &str, settled: &[SettledTurn]) -> PortFuture<'_, ()> {
+        let session_id = session_id.to_owned();
+        let settled = settled.to_vec();
+        Box::pin(async move {
+            let binding = self
+                .binding_store
+                .get_by_session_id(&session_id)
+                .await
+                .map_err(BtccError::from)?
+                .ok_or_else(|| {
+                    error(
+                        BtccCode::SessionBindingMissing,
+                        format!("Missing stored BTCC session binding: {session_id}"),
+                    )
+                })?;
+            let now = self.conversation_store.identity_clock().now_iso();
+            for s in settled {
+                if let Some(answered) = self
+                    .conversation_store
+                    .finalize_answered(&s.turn_id, s.answer_turn_id.as_deref(), &now)
+                    .await?
+                {
+                    let _ = self
+                        .observer
+                        .completion_observation(CompletionObservation {
+                            project_id: binding.project_id.clone(),
+                            runtime_session_id: session_id.clone(),
+                            conversation_session_id: answered.session_id,
+                            conversation_turn_id: s.turn_id,
+                            inbound_message_id: answered.request_message_id,
+                            outbound_message_id: answered.assistant_message_id.unwrap_or_default(),
+                            outcome_generation: answered.generation,
+                            completed_at: now.clone(),
+                        })
+                        .await;
+                }
+            }
+            Ok(())
+        })
     }
 }
 
