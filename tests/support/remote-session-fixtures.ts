@@ -16,6 +16,8 @@ export const [remoteComputer, unreachableComputer, unconfiguredComputer] = compu
 const chatId = "chat-remote";
 const turnId = "turn-remote";
 const at = "2026-11-24T00:00:00Z";
+const approval = { request_ref: "approval-smoke", category: "command", reason: "Run a command?", executable: "echo",
+  command_count: 1, source_turn_id: turnId, scope: { title: "Run a command?", description: "echo smoke" } };
 
 export async function installRemoteSessionGateway(page: Page, language: "ko" | "en", theme: "light" | "dark") {
   const root = resolve("packages/butler-app/client/ui/dist");
@@ -30,6 +32,7 @@ export async function installRemoteSessionGateway(page: Page, language: "ko" | "
   const fake = {
     computers: false,
     unreachable: false,
+    approvalPending: false,
     pending: [] as object[],
     sessionReads: 0,
     reconnects: 0,
@@ -41,7 +44,7 @@ export async function installRemoteSessionGateway(page: Page, language: "ko" | "
         text: language === "ko" ? "기억 검색을 마치지 못했습니다." : "The memory search did not finish.", created_at: at,
         work_blocks: [{
           id: "memory-work", label: "memory_search", state: "failed",
-          rows: [{ id: "memory-output", kind: "used_tool", safe_label: "memory_search", state: "failed", safe_tool_name: "memory_search",
+          rows: [{ id: "memory-output", kind: "used_tool", safe_label: "recall_memory", state: "failed", safe_tool_name: "recall_memory",
             tool_call_id: "memory-search", tool_result_id: "memory-result" }],
         }],
       }];
@@ -119,10 +122,17 @@ export async function installRemoteSessionGateway(page: Page, language: "ko" | "
       if (id !== chatId) return ok(session([], id));
       fake.sessionReads++;
       if (fake.unreachable) return route.fulfill({ status: 422, json: { error: { code: "ssh_unreachable" } } });
-      return ok({ ...session(messages, id), title: storedSession?.title });
+      return ok({ ...session(messages, id), title: storedSession?.title, authority_requests: fake.approvalPending ? [approval] : [] });
     }
     if (path === "/session-queue") return ok({ queued_messages: [] });
-    if (path === "/authority-requests") return ok({ session_id: chatId, requests: [] });
+    if (path === "/authority-requests") return ok({
+      session_id: searchParams.get("session_id"),
+      requests: fake.approvalPending && searchParams.get("session_id") === chatId ? [approval] : [],
+    });
+    if (path === `/authority-requests/${approval.request_ref}/deny` && method === "POST") {
+      fake.approvalPending = false;
+      return ok({ request_ref: approval.request_ref, decision: "denied", scheduled: true }, 202);
+    }
     if (path.endsWith("/controls")) return ok({ session_id: chatId, revision: 0, catalog_generation: HARNESS_MODEL_CATALOG.generation,
       controls: { model: HARNESS_MODEL_CATALOG.default_model_ref, reasoning_effort: "none", access_mode: "ask_first", plan_mode: false } });
     if (path.endsWith("/pending-asks")) return ok({ session_id: chatId, asks: [], open_count: 0 });

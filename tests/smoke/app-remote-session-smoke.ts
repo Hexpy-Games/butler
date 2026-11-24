@@ -76,7 +76,20 @@ async function verify(page: Page, [language, theme, width]: typeof variants[numb
   await picker.waitFor({ state: "hidden" });
   const subtitle = page.locator('[data-test-class="titlebar-subtitle"]').getByText(remoteComputer.name, { exact: true });
   await subtitle.waitFor({ state: width === 375 ? "hidden" : "visible" });
+
+  const attentionToast = page.locator("[data-sonner-toast]:visible")
+    .filter({ hasText: `${title} · ${copy.space.attention}` });
+  await attentionToast.getByRole("button", { name: "Close toast", exact: true }).click();
+  await attentionToast.waitFor({ state: "hidden" });
+
+  const info = page.locator('[data-test-class="session-info-toggle"]');
+  await info.click();
+  const runLocation = page.getByText(copy.sessionInfo.runLocation, { exact: true });
+  await runLocation.waitFor();
   await shot("C2");
+  if (await info.isVisible()) await info.click();
+  else await button(copy.common.close).click();
+  await runLocation.waitFor({ state: "hidden" });
 
   await openSidebar();
   await tab(copy.space.all).click();
@@ -92,13 +105,26 @@ async function verify(page: Page, [language, theme, width]: typeof variants[numb
   await row.getByText(copy.space.attention, { exact: true }).waitFor();
   await shot("C3");
 
-  const attentionToast = page.locator("[data-sonner-toast]:visible")
-    .filter({ hasText: `${title} · ${copy.space.attention}` });
-  if (await attentionToast.isVisible()) {
-    await attentionToast.getByRole("button", { name: "Close toast", exact: true }).click();
-    await attentionToast.waitFor({ state: "hidden" });
-  }
-  await sidebar.getByRole("button", { name: copy.sidebar.newChat, exact: true }).first().click();
+  const newChat = sidebar.getByRole("button", { name: copy.sidebar.newChat, exact: true }).first();
+  await newChat.click();
+  await picker.waitFor();
+  await openSidebar();
+  await tab(copy.space.all).click();
+  await row.getByRole("status", { name: copy.space.attention, exact: true }).waitFor();
+  await shot("E1a");
+
+  fake.approvalPending = true;
+  await row.click();
+  if (width > 375) await button(copy.titlebar.hideLeftPanel).click();
+  const approval = page.locator('[data-test-class="composer-authority-decision"]');
+  await approval.waitFor();
+  await shot("E2");
+  await approval.getByRole("button", { name: copy.interfaceDetails.deny, exact: true }).click();
+  await approval.waitFor({ state: "hidden" });
+
+  await openSidebar();
+  await tab(copy.space.running).click();
+  await newChat.click();
   await picker.waitFor();
   await openSidebar();
   fake.unreachable = true;
@@ -126,15 +152,6 @@ async function verify(page: Page, [language, theme, width]: typeof variants[numb
   await page.getByText(c.mainNotConnected, { exact: true }).waitFor();
   assert.equal(await page.getByText("Raw gateway diagnostic").count(), 0);
   await shot("D2");
-
-  const info = page.locator('[data-test-class="session-info-toggle"]');
-  await info.waitFor();
-  await shot("E1a");
-  await info.click();
-  await page.getByText(copy.sessionInfo.runLocation, { exact: true }).waitFor();
-  await shot("E2");
-  if (await info.isVisible()) await info.click();
-  else await button(copy.common.close).click();
 
   const p = c.pendingInstruction;
   fake.pending = [{ id: "remember", action: "remember", text: "Keep drafts in the project folder.", conflict: false, current: null }];

@@ -95,7 +95,8 @@ export function PendingInstructionCard({ item, computerName, refresh, remove }: 
     eyebrow={copy.eyebrow} title={forget ? copy.forgotten(computerName) : copy.saved(computerName)}
     onOpen={() => useButlerStore.getState().openSettings("memory")} error={error}
     details={item.conflict
-      ? [copy.current, item.current?.text ?? "", copy.incoming(computerName), text, copy.replaceNotice]
+      ? [...(removed ? [] : [copy.current, item.current?.text ?? ""]),
+        copy.incoming(computerName), text, removed ? copy.removedHere : copy.replaceNotice]
       : [text]}
     actions={<ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={() => void decide("discard")}>
