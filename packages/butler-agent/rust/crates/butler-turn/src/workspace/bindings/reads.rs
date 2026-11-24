@@ -68,6 +68,31 @@ impl SessionBindingStore {
         })
         .await
     }
+
+    /// The stored bindings among `session_ids`, by primary key in one statement.
+    pub async fn get_many(
+        &self,
+        session_ids: Vec<String>,
+    ) -> WorkspaceResult<Vec<StoredSessionBinding>> {
+        let ids = butler_core::json::stringify(&serde_json::Value::from(session_ids))
+            .map_err(WorkspaceError::json)?;
+        self.execute(move |connection| {
+            let sql = format!(
+                "SELECT {SESSION_COLUMNS} FROM session_bindings
+                 WHERE session_id IN (SELECT value FROM json_each(?1))"
+            );
+            let mut statement = connection.prepare(&sql).map_err(WorkspaceError::sqlite)?;
+            let rows = statement
+                .query_map([ids], read_row)
+                .map_err(WorkspaceError::sqlite)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(WorkspaceError::sqlite)?;
+            rows.into_iter()
+                .map(|row| hydrate(connection, row))
+                .collect()
+        })
+        .await
+    }
 }
 
 pub(super) fn get_by_session_id(

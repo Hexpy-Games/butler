@@ -5,7 +5,7 @@ import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo
 import { router, useFocusEffect } from "expo-router";
 import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
-import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -21,7 +21,7 @@ import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
 import { useCanonSidebars } from "@/conversation/useCanonSidebars";
 import { spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
-import { sessionMark, timeLabel } from "@/conversation/sessions";
+import { sessionMark, sessionSubtitle, timeLabel } from "@/conversation/sessions";
 
 type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
 
@@ -100,7 +100,6 @@ function Conversations() {
   const sidebars = useCanonSidebars(useMemo(() => view?.projects.filter(project => !project.archived && !collapsed.has(`p:${project.id}`)).map(project => project.id) ?? [], [view, collapsed]));
   const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? withCanon(spaceTree(view), sidebars, appCopy.canon.backlog) : { children: new Map() }, [view, sidebars, appCopy]);
   const rows: SpaceRow[] = visibleRows(tree, collapsed);
-  if (tree.general) rows.unshift({ key: "s:general", kind: "session", title: tree.general.title, session: tree.general, depth: 0 });
   const reduced = useReducedMotion();
   const toggle = (key: string) => {
     const expanding = collapsed.has(key);
@@ -144,7 +143,7 @@ function Conversations() {
         void refresh().finally(() => setRefreshing(false));
       }} />}
       renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
-        {item.session ? <SessionRow session={item.session} locale={locale} onLongPress={item.key === "s:general" ? undefined : () => setActionRow(item)} />
+        {item.session ? <SessionRow session={item.session} locale={locale} computerName={view?.computer_name} onLongPress={() => setActionRow(item)} />
           : item.kind === "epic" ? <EpicRow epic={item.epic!} />
           : <ListRow icon={item.kind === "project" ? icons.Briefcase : item.kind === "plan" ? icons.Flag : icons.Folder} title={item.title}
             onLongPress={item.kind === "plan" || item.kind === "backlog" ? undefined : () => setActionRow(item)}
@@ -162,7 +161,7 @@ function Conversations() {
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={<HomeShortcuts lost={lost} />}
+      ListHeaderComponent={<HomeShortcuts lost={lost} general={tree.general} />}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
@@ -185,12 +184,12 @@ function EpicRow({ epic }: { epic: EpicCard }) {
     trailing={running ? <Spinner label={copy.conversations.working} /> : undefined} />;
 }
 
-function SessionRow({ session, locale, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; onLongPress?: () => void }) {
+function SessionRow({ session, locale, computerName, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; computerName?: string; onLongPress?: () => void }) {
   const copy = useMobileCopy();
   const title = session.title.trim() ? session.title : copy.conversations.untitled;
   const mark = sessionMark(session);
-  return <ListRow icon={session.project_id && session.id !== "general" ? icons.Notebook : icons.MessageSquare}
-    title={title} description={session.last_message_preview ? markdownPlainText(session.last_message_preview) : undefined}
+  return <ListRow icon={session.project_id ? icons.Notebook : icons.MessageSquare}
+    title={title} description={sessionSubtitle(session, computerName, copy.conversations)}
     descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())} onLongPress={onLongPress}
     trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
       : mark === "working" ? <Spinner label={copy.conversations.working} />

@@ -57,6 +57,27 @@ impl SessionWorkspaceRecovery {
         }
     }
 
+    /// See `AppSessionWorkspaceProvisioner::session_branches`: the stored
+    /// authority only (no Git, no file reads).
+    pub async fn session_branches(
+        &self,
+        session_ids: Vec<String>,
+    ) -> WorkspaceResult<HashMap<String, Option<String>>> {
+        let bindings = self.bindings.get_many(session_ids).await?;
+        Ok(bindings
+            .iter()
+            .filter_map(|binding| {
+                let branch = match resolve_authority(Some(binding), None) {
+                    SessionWorkspaceAuthority::Project { .. } => return None,
+                    SessionWorkspaceAuthority::SessionWorktree { branch, .. } => Some(branch),
+                    SessionWorkspaceAuthority::SessionFolder { .. }
+                    | SessionWorkspaceAuthority::Unavailable { .. } => None,
+                };
+                Some((binding.session_id.clone(), branch))
+            })
+            .collect())
+    }
+
     /// The session's recovered workspace.
     pub async fn recover(
         &self,

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -87,6 +89,16 @@ pub trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
         _cancellation: CancellationToken,
     ) -> ApplicationFuture<Value> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
+    }
+    /// Sessions that do not work in their project folder, by runtime session
+    /// id, from stored bindings only: the session worktree's branch, or
+    /// `None` (moved folder, unusable worktree). Sessions absent from the map
+    /// work in their project folder.
+    fn session_branches(
+        &self,
+        _runtime_session_ids: Vec<String>,
+    ) -> ApplicationFuture<HashMap<String, Option<String>>> {
+        Box::pin(async { Ok(HashMap::new()) })
     }
     /// The Git status of the repository `workspace_path` is in (branch,
     /// dirty, ahead/behind); `None` when it is not in one or Git is
@@ -186,6 +198,16 @@ pub struct AppSessionSummary {
     pub pinned: bool,
     pub archived: bool,
     pub automation_target_count: u64,
+    /// The checked-out branch: the session worktree's, else its project
+    /// folder's. Filled by project lists (navigation); absent elsewhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The registered computer the chat runs on; absent on this computer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub computer_id: Option<String>,
+    /// That computer's name; filled by the session-environment work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub computer_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
