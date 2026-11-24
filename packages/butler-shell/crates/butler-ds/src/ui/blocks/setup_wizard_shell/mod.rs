@@ -20,8 +20,8 @@ mod wizard;
 
 use crate::ui::cover::cover;
 use gpui::{
-    AnyElement, App, Bounds, ElementId, Global, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, Styled as _, Window, div,
+    AnyElement, App, Bounds, ElementId, Global, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, RenderOnce, SharedString, Styled as _, Window, div,
 };
 
 pub use content::{ContentWidth, SetupWizardContent, SetupWizardList};
