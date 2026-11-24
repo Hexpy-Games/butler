@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { appCopy } from "@/app/copy";
 import {
-  Clickable, Download, EmptyLine, FileText, Folder, IconButton, ListRow, Popover, PopoverContent,
-  PopoverTrigger, ProgressMeter, ProgressRing, ScrollArea, Stack, X,
+  Box, Clickable, Download, EmptyLine, FileText, Folder, IconButton, IconSlot, Popover, PopoverContent,
+  PopoverTrigger, ProgressMeter, ProgressRing, ScrollArea, Stack, Typo, X,
 } from "@/butler-ds";
 import { formatFileSize } from "../conversation/conversationUtils";
 import { browserCall, type BrowserDownloadEntry } from "./browserBridge";
@@ -44,20 +44,27 @@ function DownloadRow({ item }: { item: BrowserDownloadEntry }) {
   const { id, name, state, bytes, total } = item;
   const progress = state === "progress";
   const done = state === "done";
+  const inactive = state === "failed" || state === "cancelled";
   const size = formatFileSize(bytes);
   const meta = state === "failed" ? copy.downloadFailed : state === "cancelled" ? copy.downloadCancelled
     : progress && total ? `${size} / ${formatFileSize(total)}` : size;
   const open = () => void browserCall("download.open", { id });
   return (
-    <Stack gap="none">
-      <Stack align="row" cross="center">
-        <Clickable stretch disabled={!done} onClick={open}>
-          <ListRow icon={<FileText size="md" />} title={name} meta={meta} />
-        </Clickable>
-        {progress && <IconButton label={copy.cancel} onClick={() => void browserCall("download.cancel", { id })}><X size="sm" /></IconButton>}
-        {done && <IconButton label={copy.showInFolder} onClick={() => void browserCall("download.show", { id })}><Folder size="sm" /></IconButton>}
-      </Stack>
-      {progress && <ProgressMeter bare value={total ? bytes / total * 100 : 0} indeterminate={total === 0} ariaLabel={name} />}
+    <Stack align="row" cross="center">
+      <Clickable stretch disabled={!done} onClick={open}>
+        <Box padding="sm" grow minWidth="0">
+          <Stack align="row" cross="start" gap="sm">
+            <IconSlot size="md" minHeight="line" tone="tertiary"><FileText size="md" /></IconSlot>
+            <Stack gap="xs" grow minWidth="0">
+              <Typo.Body truncate tone={inactive ? undefined : "primary"}>{name}</Typo.Body>
+              <Typo.Caption tone="secondary">{meta}</Typo.Caption>
+              {progress && <ProgressMeter bare value={total ? bytes / total * 100 : 0} indeterminate={total === 0} ariaLabel={name} />}
+            </Stack>
+          </Stack>
+        </Box>
+      </Clickable>
+      {progress && <IconButton label={copy.cancel} onClick={() => void browserCall("download.cancel", { id })}><X size="sm" /></IconButton>}
+      {done && <IconButton label={copy.showInFolder} onClick={() => void browserCall("download.show", { id })}><Folder size="sm" /></IconButton>}
     </Stack>
   );
 }

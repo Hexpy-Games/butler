@@ -34,6 +34,14 @@ function freePath(directory, name, taken) {
   return path;
 }
 
+// A transfer ends on "done", or on "updated" with "interrupted": Chromium has given up retrying and no "done" follows.
+function onEnd(item, end) {
+  let ended = false;
+  const finish = state => { if (!ended) { ended = true; end(state); } };
+  item.on("updated", (_event, state) => { if (state === "interrupted") finish("interrupted"); });
+  item.once("done", (_event, state) => finish(state));
+}
+
 /** Change-driven accounting includes all tabs and concurrent transfers of a session. */
 export class BrowserDownloads {
   constructor(browser, directory) {
@@ -81,11 +89,13 @@ export class BrowserDownloads {
     item.setSavePath(path);
     const entry = this.record(item, { name: basename(path), path });
     this.live.set(entry.id, () => item.cancel());
-    const end = state => { this.live.delete(entry.id); this.update(entry, { bytes: item.getReceivedBytes(), state }, true); };
-    // Chromium retries a dropped transfer itself; "interrupted" here means it gave up, and no "done" follows.
-    item.on("updated", (_event, state) => state === "interrupted" ? end("failed")
-      : this.update(entry, { bytes: item.getReceivedBytes(), total: Math.max(0, item.getTotalBytes()) }, false));
-    item.once("done", (_event, state) => end(state === "completed" ? "done" : state === "cancelled" ? "cancelled" : "failed"));
+    item.on("updated", (_event, state) => {
+      if (state !== "interrupted") this.update(entry, { bytes: item.getReceivedBytes(), total: Math.max(0, item.getTotalBytes()) }, false);
+    });
+    onEnd(item, state => {
+      this.live.delete(entry.id);
+      this.update(entry, { bytes: item.getReceivedBytes(), state: state === "completed" ? "done" : state === "cancelled" ? "cancelled" : "failed" }, true);
+    });
   }
   start(item, tab) {
     const owner = tab.owner;
@@ -103,7 +113,7 @@ export class BrowserDownloads {
       const reason = this.limit(transfer, Math.max(transfer.total, transfer.bytes));
       if (reason) this.cancel(transfer, reason);
     });
-    item.once("done", (_event, state) => {
+    onEnd(item, state => {
       transfer.bytes = item.getReceivedBytes();
       transfer.done = true;
       void this.finish(transfer, state).catch(() => this.event(transfer, "download_failed", { reason: "download_storage_failed" }));
