@@ -233,12 +233,8 @@ async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), H
             return Err(harness_error("computer identity changed after restart"));
         }
         let body = json!({"provider_id":"openai", "api_key": uuid::Uuid::new_v4().to_string()});
-        assert_eq!(
-            socket(&remote.0, "POST", "/credentials", Some(&body))
-                .await?
-                .0,
-            201
-        );
+        let (status, _) = socket(&remote.0, "POST", "/credentials", Some(&body)).await?;
+        assert_eq!(status, 201);
     }
     fs::write(public_path, Identity::generate().to_public().to_string())?;
     drop(StopOnDrop(remote.0.clone()));
