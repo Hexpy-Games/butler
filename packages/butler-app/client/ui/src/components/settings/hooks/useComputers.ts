@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiErrorCode } from "@/app/api.ts";
 import { setComputerConnection, useComputerConnections } from "@/app/computerEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
@@ -52,13 +53,13 @@ export function useComputers() {
     return computerStatus(computer, states[computer.id] ?? "idle");
   }
 
-  async function remove(computer: Computer, forget: boolean) {
+  async function remove(computer: Computer, forget: boolean, force: boolean) {
     if (removing.current) return;
     removing.current = true;
     setBusy(true);
     const copy = appCopy.computers.removeDialog;
     try {
-      const result = await deleteComputer(computer.id);
+      const result = await deleteComputer(computer.id, force);
       if (!result.remote_cleaned) notifyStatus(copy.remoteNotCleaned, { id: "computers", tone: "error" });
       if (forget) {
         try {
@@ -69,7 +70,13 @@ export function useComputers() {
       }
       await refresh();
     } catch (error) {
-      notifyError(error, copy.removeFailed, { id: "computers" });
+      const code = apiErrorCode(error);
+      if (code === "computer_unreachable") return "unreachable";
+      if (code === "computer_not_synced") {
+        notifyStatus(copy.notSynced, { id: "computers", tone: "error" });
+      } else {
+        notifyError(error, copy.removeFailed, { id: "computers" });
+      }
     } finally {
       removing.current = false;
       if (mounted.current) setBusy(false);

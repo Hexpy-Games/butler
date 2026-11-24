@@ -10,7 +10,7 @@ export function useComputersSection() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Computer | null>(null);
   const [aiFor, setAiFor] = useState<Computer | null>(null);
-  const [removing, setRemoving] = useState<Computer | null>(null);
+  const [removing, setRemoving] = useState<{ computer: Computer; forget: boolean; unreachable: boolean } | null>(null);
 
   function added(computer: Computer, failure?: string) {
     setAdding(false);
@@ -27,10 +27,13 @@ export function useComputersSection() {
     setAiFor(null);
   }
 
-  function confirmRemove(forget: boolean) {
+  async function confirmRemove(forget: boolean, force: boolean) {
     if (!removing) return;
+    const { computer } = removing;
     setRemoving(null);
-    void computers.remove(removing, forget);
+    if (await computers.remove(computer, forget, force) === "unreachable") {
+      setRemoving({ computer, forget, unreachable: true });
+    }
   }
 
   return { computers, adding, setAdding, editing, setEditing, aiFor, removing, setRemoving, added, aiClosed, confirmRemove };
