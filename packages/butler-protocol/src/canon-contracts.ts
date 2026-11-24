@@ -18,7 +18,7 @@ export interface CanonTagCreateInput { name: string; color: CanonTagColor }
 export interface CanonTagEditInput { expected_revision: number; name?: string; color?: CanonTagColor }
 export interface CanonTagExists extends Error { code: "tag_exists"; status: 409; existing: CanonTag }
 export interface CanonAgent { person: string; via: string }
-export interface CanonActor { person?: string | null; via?: string | null; origin?: string; client?: string }
+export interface CanonActor { person?: string | null; via?: string | null; origin?: string; client?: string; account?: string; device?: string }
 export interface CanonActivity { seq: number; entity_id: string; kind: string; from?: CanonStatus; to?: CanonStatus; summary: string; body: string | null; actor: CanonActor; at: number }
 export interface CanonActivityPage { activity: CanonActivity[]; activity_before: number | null }
 export interface CanonMcpProposal { id: string; spec_id: string | null; summary: string; current_body: string | null; proposed_body: string; actor: CanonActor; base_revision: number | null; created_at: string }
@@ -169,3 +169,23 @@ export interface CanonConversationInput { sessionId?: string }
 export type CanonQueueMoveSelection =
   | { epic_id: string; epic_ids?: never }
   | { epic_ids: string[]; epic_id?: never };
+
+export type CanonSpaceRole = "owner" | "editor" | "viewer";
+export interface CanonSpace { id: string; name: string; owner_account_id: string; role: CanonSpaceRole; created_at: string; project_id: string | null }
+export interface CanonOnlineLink { project_id: string; space_id: string; role: CanonSpaceRole; state: "linked" | "detached"; connection: "connected" | "offline" | "error"; pending: number }
+export interface CanonOnlineStatus { links: CanonOnlineLink[] }
+export interface CanonSpaceMember { account_id: string; email: string; role: CanonSpaceRole; added_at: string }
+export interface CanonSpaceInvite { id: string; email: string; role: "editor" | "viewer"; expires_at: string }
+export interface CanonSpaceMembers { members: CanonSpaceMember[]; invites: CanonSpaceInvite[] }
+export type CanonOnlineAction =
+  | { action: "spaces" }
+  | { action: "link"; project_id: string; name: string }
+  | { action: "join"; project_id: string; token: string }
+  | { action: "members"; project_id: string }
+  | { action: "invite"; project_id: string; email: string; role: "editor" | "viewer" }
+  | { action: "revoke_invite"; project_id: string; invite_id: string }
+  | { action: "set_role"; project_id: string; account_id: string; role: "editor" | "viewer" }
+  | { action: "remove_member"; project_id: string; account_id: string }
+  | { action: "leave"; project_id: string }
+  | { action: "unlink"; project_id: string };
+export interface CanonConflictBody { conflict: true; fields: Record<string, unknown> }

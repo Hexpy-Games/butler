@@ -1,5 +1,6 @@
 //! Stub-only Butler account service.
 use sha2::{Digest, Sha256};
+use std::sync::PoisonError;
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{
@@ -11,14 +12,19 @@ use std::{
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, State as AxumState},
+    extract::{
+        DefaultBodyLimit, Path, State as AxumState, WebSocketUpgrade,
+        ws::{CloseFrame, Message, rejection::WebSocketUpgradeRejection},
+    },
     http::{HeaderMap, Method, StatusCode, Uri},
     response::{IntoResponse, Response},
 };
 use serde_json::{Value, json};
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use super::HarnessError;
+
+mod canon;
 
 const PAGE_ID: &str = "k7m2q9xd4b3hn";
 const PAGE_URL: &str = "https://pages.test/p/k7m2q9xd4b3hn/";
@@ -27,6 +33,8 @@ struct State {
     seen: Mutex<Vec<String>>,
     plan: Mutex<String>,
     devices: AtomicU64,
+    emails: Mutex<HashMap<u64, String>>,
+    canon: Mutex<canon::Canon>,
     backup: Mutex<Backup>,
     blobs: Mutex<BTreeSet<String>>,
     page: Mutex<Option<(String, u64)>>,
@@ -46,11 +54,17 @@ impl FakeButlerCloud {
             seen: Mutex::new(Vec::new()),
             plan: Mutex::new("free".into()),
             devices: AtomicU64::new(0),
+            emails: Mutex::default(),
+            canon: Mutex::default(),
             backup: Mutex::default(),
             blobs: Mutex::new(BTreeSet::new()),
             page: Mutex::new(None),
         });
         let router = Router::new()
+            .route(
+                "/v1/canon/spaces/{id}/socket",
+                axum::routing::get(canon_socket),
+            )
             .fallback(route)
             .layer(DefaultBodyLimit::max(8 * 1024 * 1024 + 32))
             .with_state(state.clone());
@@ -112,8 +126,6 @@ async fn route(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .push(format!("{method} {path}"));
-    let account = json!({"id": "acc_fake", "email": "user@example.com", "created_at": "2026-01-01T00:00:00Z"});
-
     if method == Method::POST && path == "/v1/auth/email/start" {
         return StatusCode::ACCEPTED.into_response();
     }
@@ -121,7 +133,15 @@ async fn route(
         let input: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
         return if input["code"] == "123456" {
             let id = state.devices.fetch_add(1, Ordering::Relaxed);
-            Json(json!({"device_token": format!("bct_fake{id}"), "account": account, "device": device(id)}))
+            let Some(email) = input["email"].as_str() else {
+                return failure(StatusCode::BAD_REQUEST, "invalid_request");
+            };
+            state
+                .emails
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(id, email.to_owned());
+            Json(json!({"device_token": format!("bct_fake{id}"), "account": account(email), "device": device(id)}))
                 .into_response()
         } else {
             (
@@ -131,15 +151,18 @@ async fn route(
                 .into_response()
         };
     }
-    let device_id: Option<u64> = headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer bct_fake"))
-        .and_then(|value| value.parse().ok())
-        .filter(|id| *id < state.devices.load(Ordering::Relaxed));
-    let Some(device_id) = device_id else {
+    let Some((device_id, email)) = state.bearer(&headers) else {
         return failure(StatusCode::UNAUTHORIZED, "unauthorized");
     };
+    let account = account(&email);
+    let device = device(device_id);
+    if let Some(path) = path.strip_prefix("/v1/canon/") {
+        return state
+            .canon
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .route(method, path, uri.query(), &account, &device, &body);
+    }
     if let Some(path) = path.strip_prefix("/v1/backup") {
         let quota = match state
             .plan
@@ -158,7 +181,29 @@ async fn route(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .route(&method, path, &headers, body, quota);
     }
-    authenticated(&state, method, path, &account, &device(device_id), &body)
+    authenticated(&state, method, path, &account, &device, &body)
+}
+
+impl State {
+    fn bearer(&self, headers: &HeaderMap) -> Option<(u64, String)> {
+        let id = headers
+            .get("authorization")?
+            .to_str()
+            .ok()?
+            .strip_prefix("Bearer bct_fake")?
+            .parse()
+            .ok()?;
+        let emails = self
+            .emails
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Some((id, emails.get(&id)?.clone()))
+    }
+}
+
+fn account(email: &str) -> Value {
+    let hash = format!("{:x}", Sha256::digest(email.as_bytes()));
+    json!({"id": format!("acc_{}", &hash[..16]), "email": email})
 }
 
 fn device(id: u64) -> Value {
@@ -386,4 +431,66 @@ fn valid_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn pending(invite: &Value, now: &str) -> bool {
+    invite["active"] == true
+        && invite["view"]["expires_at"]
+            .as_str()
+            .is_some_and(|expires| expires > now)
+}
+
+fn timestamp() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+async fn canon_socket(
+    AxumState(state): AxumState<Arc<State>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
+) -> Response {
+    state
+        .seen
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(format!("GET /v1/canon/spaces/{id}/socket"));
+    let Some((_, email)) = state.bearer(&headers) else {
+        return failure(StatusCode::UNAUTHORIZED, "unauthorized");
+    };
+    let account = account(&email);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let mut canon = state.canon.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(space) = canon.spaces.get_mut(&id).filter(|space| {
+        space
+            .role(account["id"].as_str().unwrap_or_default())
+            .is_some()
+    }) else {
+        return failure(StatusCode::NOT_FOUND, "not_found");
+    };
+    let Ok(upgrade) = upgrade else {
+        return failure(StatusCode::UPGRADE_REQUIRED, "upgrade_required");
+    };
+    space.sockets.push((email, tx));
+    upgrade.on_upgrade(move |mut socket| async move {
+        loop {
+            tokio::select! {
+                frame = rx.recv() => {
+                    let Some(frame) = frame else { break };
+                    let closing = matches!(frame, Message::Close(_));
+                    if socket.send(frame).await.is_err() || closing {
+                        break;
+                    }
+                }
+                incoming = socket.recv() => match incoming {
+                    Some(Ok(Message::Text(_) | Message::Binary(_))) => {
+                        let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: "read-only".into() }))).await;
+                        break;
+                    }
+                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
+                    _ => break,
+                },
+            }
+        }
+    })
 }

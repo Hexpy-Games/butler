@@ -410,6 +410,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/setup/butler-account/devices", Handler::Setup),
     ("/setup/butler-account/devices/{id}", Handler::Setup),
     ("/setup/butler-backup", Handler::Setup),
+    ("/setup/canon-online", Handler::Setup),
     ("/setup/butler-vault", Handler::Setup),
     ("/setup/butler-vault/enable", Handler::Setup),
     ("/setup/butler-vault/unlock", Handler::Setup),
