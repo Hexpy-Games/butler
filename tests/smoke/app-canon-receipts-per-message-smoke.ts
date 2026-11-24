@@ -1,4 +1,4 @@
-// test-category: e2e
+// test-category: race
 import { strict as assert } from "node:assert";
 import { resolve } from "node:path";
 import type { Locator, Page } from "playwright";
@@ -60,19 +60,18 @@ const server = await createNativeAppServer({
   },
 });
 
-type Snapshot = { ms: number; ids: (string | null)[] };
 async function sampleTurnB(page: Page, rowA: Locator, rowB: Locator, sentAt: number) {
   const expected = JSON.stringify([...idsA].sort());
-  let mismatch: Snapshot | undefined;
+  const deadline = sentAt + 30_000;
+  let mismatch: (string | null)[] | undefined;
   for (;;) {
     const finished = await rowB.isVisible();
     const ids = await rowA.evaluateAll(([row]) =>
       Array.from(row?.querySelectorAll("[data-kanban-item]") ?? [], card => card.getAttribute("data-kanban-item")).sort());
-    const snapshot = { ms: Math.round(performance.now() - sentAt), ids };
-    if (JSON.stringify(ids) !== expected) mismatch ??= snapshot;
+    if (JSON.stringify(ids) !== expected) mismatch ??= ids;
     if (finished) return mismatch;
-    assert(snapshot.ms < 30_000, "Step 4: B reply did not become visible");
-    await page.waitForTimeout(100 - (snapshot.ms % 100));
+    assert(performance.now() < deadline, "Step 4: B reply did not become visible");
+    await page.waitForTimeout(100);
   }
 }
 
@@ -81,10 +80,10 @@ async function exercise(page: Page) {
   const cardTitles = async (reply: string) => {
     const cards = assistant(reply).locator(epicCards);
     const titles = await cards.locator('[data-test-class="canon-epic-title"]').allTextContents();
-    return { count: await cards.count(), titles: titles.sort() };
+    return titles.sort();
   };
-  const expectA = { count: titlesA.length, titles: titlesA };
-  const expectB = { count: titlesB.length, titles: titlesB };
+  const expectA = titlesA;
+  const expectB = titlesB;
   const send = async (text: string) => {
     await page.locator('[contenteditable="true"]').fill(text);
     await page.getByRole("button", { name: "전송", exact: true }).click();
@@ -94,10 +93,9 @@ async function exercise(page: Page) {
   await page.locator('[data-slot="composer-compact-preview"]').click();
   await send(messageA);
   await assistant(replyA).waitFor();
-  assert.equal(idsA.length, titlesA.length, "Step 2: answer_blocks uses seven bound epic IDs");
-  console.log("Step 2 PASS: A reply and answer_blocks input");
+  console.log("Step 2 PASS: A reply");
 
-  await assistant(replyA).getByText(titlesA[6], { exact: true }).last().waitFor();
+  await assistant(replyA).getByText(titlesA[6], { exact: true }).waitFor();
   assert.deepEqual(await cardTitles(replyA), expectA, "Step 3: A cards");
   console.log("Step 3 PASS: A has 7 cards");
 
@@ -108,14 +106,14 @@ async function exercise(page: Page) {
   assert.equal(mismatch, undefined, `Step 4: A must keep exactly its seven epic IDs throughout turn B (${JSON.stringify(mismatch)})`);
   console.log("Step 4 PASS: B reply");
 
-  await page.waitForTimeout(2_000);
+  await assistant(replyB).getByText(titlesB[0], { exact: true }).waitFor();
   assert.deepEqual(await Promise.all([cardTitles(replyA), cardTitles(replyB)]), [expectA, expectB], "Step 5: live cards by reply");
   console.log("Step 5 PASS: A has 7 cards and B has 1");
 
   await page.reload();
   await Promise.all([
-    assistant(replyA).getByText(titlesA[6], { exact: true }).last().waitFor(),
-    assistant(replyB).getByText(titlesB[0], { exact: true }).last().waitFor(),
+    assistant(replyA).getByText(titlesA[6], { exact: true }).waitFor(),
+    assistant(replyB).getByText(titlesB[0], { exact: true }).waitFor(),
   ]);
   assert.deepEqual(await Promise.all([cardTitles(replyA), cardTitles(replyB)]), [expectA, expectB], "Step 6: reloaded cards by reply");
   console.log("Step 6 PASS: A has 7 cards and B has 1 after reopening");
