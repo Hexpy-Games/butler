@@ -50,6 +50,8 @@ struct Worker {
     backoff: Duration,
     /// A token the server refused; never retried on its own.
     dead: Option<String>,
+    /// Set while the signed-in account differs from the link's; warns once.
+    mismatched: bool,
 }
 /// Read once per pass; the token goes to every call of the pass.
 struct Pass {
@@ -74,6 +76,7 @@ pub(super) async fn run(
         cancel,
         backoff: Duration::from_secs(1),
         dead: None,
+        mismatched: false,
     };
     loop {
         match worker.pass().await {
@@ -176,9 +179,13 @@ impl Worker {
             }
             Err(_) => return Next::Retry,
         };
-        if link["account_id"] != id.account_id.as_str() {
-            self.state("error");
+        let mismatched = link["account_id"] != id.account_id.as_str();
+        if mismatched && !self.mismatched {
             tracing::warn!("signed-in account differs from the link's account");
+        }
+        self.mismatched = mismatched;
+        if mismatched {
+            self.state("error");
             return Next::Idle;
         }
         let mut pass = Pass {
@@ -243,7 +250,6 @@ impl Worker {
             Err(_) => return Outcome::Reconnect,
         };
         self.state("connected");
-        self.backoff = Duration::from_secs(1);
         self.connected(pass, socket).await
     }
 
@@ -254,6 +260,10 @@ impl Worker {
         }
         if matches!(outcome, Outcome::Done) {
             outcome = self.flush_if_sendable(pass).await;
+        }
+        if matches!(outcome, Outcome::Done) {
+            // The connection held through a full flush and pull.
+            self.backoff = Duration::from_secs(1);
         }
         let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + PING, PING);
         let mut last_seen = Instant::now();
