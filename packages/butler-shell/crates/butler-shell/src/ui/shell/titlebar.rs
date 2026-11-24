@@ -3,10 +3,18 @@
 use super::Shell;
 use crate::ui::manage::route;
 use crate::ui::{Icon, source::wire};
+use butler_ds::tokens::Length;
 use butler_ds::ui::{
-    blocks::titlebar_shell::TitlebarShell, context::Lang, icon_button::IconButton, typo::Typo,
+    blocks::scope::{self, ActionScale, Spec},
+    blocks::titlebar_shell::TitlebarShell,
+    context::{Ds, Lang},
+    icon_button::IconButton,
+    typo::Typo,
+    window_drag,
 };
-use gpui::{AnyElement, Context, IntoElement as _, Window, WindowControlArea, div, prelude::*};
+use gpui::{
+    AnyElement, App, Context, IntoElement as _, Window, WindowControlArea, div, prelude::*, px,
+};
 
 impl Shell {
     fn title_copy(&self, cx: &Context<Self>) -> (gpui::SharedString, Option<AnyElement>) {
@@ -53,7 +61,6 @@ impl Shell {
                 ))
             });
         use butler_ds::ui::{
-            context::Ds,
             icon::{IconSize, icon},
             icon_slot::{IconSlot, SlotSize, SlotTone},
             layout::{Cross, Space, Stack},
@@ -124,9 +131,6 @@ impl Shell {
                     .children(self.viewer_toggle(cx)),
             );
         }
-        if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
-            bar = bar.window_controls(window_controls(self.theme.strings.locale.ds_lang()));
-        }
         crate::ui::widgets::anchor(div(), "titlebar")
             .w_full()
             .child(bar)
@@ -134,8 +138,54 @@ impl Shell {
     }
 }
 
-/// Minimize, maximize and close (Windows and Linux); the setup screen shows them too.
-pub(crate) fn window_controls(lang: Lang) -> AnyElement {
+/// The controls' inset from the window's end edge.
+const CONTROLS_INSET: f32 = 10.; // DS: TitlebarShell.module.css:91
+/// Fallback of `--titlebar-action-size`.
+const ACTION_SIZE: f32 = 30.; // DS: TitlebarShell.module.css:80
+
+impl Shell {
+    /// Minimize, maximize and close belong to the window, not to a screen: one layer at the end
+    /// of the title band over whatever the frame shows, under the dialogs and the DS top layer,
+    /// which paint after it. Every screen keeps a drag band under it; `no_drag` cuts the buttons
+    /// out of it. macOS draws its own traffic lights.
+    pub(super) fn window_controls_layer(&self, cx: &App) -> Option<AnyElement> {
+        if matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
+            return None;
+        }
+        let ds = Ds::get(cx);
+        let tokens = ds.tokens();
+        let scale = ActionScale {
+            side: tokens
+                .try_len(Length::TitlebarActionSize)
+                .unwrap_or(ACTION_SIZE),
+            icon: tokens
+                .try_len(Length::TitlebarActionIconSize)
+                .unwrap_or_else(|| f32::from(ds.len(Length::IconSizeMd))),
+            fixed: false,
+        };
+        let lang = self.theme.strings.locale.ds_lang();
+        let controls =
+            window_drag::no_drag(div().flex().items_center().child(window_controls(lang)));
+        let spec = Spec {
+            action: Some(scale),
+            ..Spec::default()
+        };
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .right(px(CONTROLS_INSET))
+                .h(ds.len(Length::TitlebarHeight))
+                .flex()
+                .items_center()
+                .child(scope::scoped(spec, controls))
+                .into_any_element(),
+        )
+    }
+}
+
+/// Minimize, maximize and close (Windows and Linux).
+fn window_controls(lang: Lang) -> AnyElement {
     let copy = |en: &'static str, ko: &'static str| if lang == Lang::Ko { ko } else { en };
     let mut row = div().flex().items_center();
     for (id, label, glyph, area) in [

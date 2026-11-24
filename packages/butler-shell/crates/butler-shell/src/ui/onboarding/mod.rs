@@ -39,7 +39,6 @@ pub(crate) use copy::words;
 pub(crate) use flow::{AiStage, ConnectView, Screen, Stages, Step};
 
 use crate::ui::i18n::Locale;
-use crate::ui::theme::Platform;
 use commit::{CommitEvent, ReplyEvent};
 use memory::MemoryEvent;
 use providers::CardId;
@@ -385,7 +384,7 @@ impl Render for Onboarding {
         // retained old content; motion Props cannot animate layout bounds without scaling text.
         // ANIM-MIGRATE(first-install ink intro): requires the wallpaper's ink timeline and mark
         // reveal; motion Props animate painted groups, not the procedural ink or its keep-out.
-        let mut shell = SetupWizardShell::new("first-run", words(lang).product)
+        let shell = SetupWizardShell::new("first-run", words(lang).product)
             .variant(SetupWizardVariant::Focus)
             .anchor(SetupWizardAnchor::Top)
             .tone(self.tone(window))
@@ -393,9 +392,6 @@ impl Render for Onboarding {
             .intro(self.intro)
             .step_key(key)
             .child(body);
-        if !matches!(Platform::host(), Platform::Mac) {
-            shell = shell.window_controls(crate::ui::shell::window_controls(lang));
-        }
         crate::ui::widgets::anchor(div(), "first-run-setup")
             .size_full()
             .child(shell)

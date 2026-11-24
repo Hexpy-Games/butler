@@ -218,8 +218,8 @@ impl Shell {
         (input, platform)
     }
 
-    /// `AppShell` with `settingsActive`: the settings screen is the shell's only child (no
-    /// sidebar, title row or window chrome).
+    /// `AppShell` with `settingsActive`: the settings screen is the shell's only child (no sidebar
+    /// or title row; the window controls are the Shell root's).
     fn settings_frame(&self, view: Entity<SettingsView>, window: &Window) -> AnyElement {
         let (input, platform) = self.shell_window(window);
         AdaptiveShell::new("app-frame", input)
@@ -386,6 +386,7 @@ impl Render for Shell {
             .line_height(ds.len(Length::TypoBodyLineHeight))
             .text_color(ds.color(Color::TextPrimary))
             .child(frame)
+            .children(self.window_controls_layer(cx))
             .children(viewer)
             .child(rename)
             .children(task_graph)

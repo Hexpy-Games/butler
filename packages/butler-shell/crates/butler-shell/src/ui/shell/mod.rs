@@ -21,7 +21,6 @@ pub(crate) mod vault;
 
 pub(crate) use app_settings::AppSettings;
 pub(crate) use settings_link::text_scale;
-pub(crate) use titlebar::window_controls;
 
 use std::cell::Cell;
 use std::rc::Rc;
