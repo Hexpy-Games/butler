@@ -81,11 +81,11 @@ export class BrowserDownloads {
     item.setSavePath(path);
     const entry = this.record(item, { name: basename(path), path });
     this.live.set(entry.id, () => item.cancel());
-    item.on("updated", () => this.update(entry, { bytes: item.getReceivedBytes(), total: Math.max(0, item.getTotalBytes()) }, false));
-    item.once("done", (_event, state) => {
-      this.live.delete(entry.id);
-      this.update(entry, { bytes: item.getReceivedBytes(), state: state === "completed" ? "done" : state === "cancelled" ? "cancelled" : "failed" }, true);
-    });
+    const end = state => { this.live.delete(entry.id); this.update(entry, { bytes: item.getReceivedBytes(), state }, true); };
+    // Chromium retries a dropped transfer itself; "interrupted" here means it gave up, and no "done" follows.
+    item.on("updated", (_event, state) => state === "interrupted" ? end("failed")
+      : this.update(entry, { bytes: item.getReceivedBytes(), total: Math.max(0, item.getTotalBytes()) }, false));
+    item.once("done", (_event, state) => end(state === "completed" ? "done" : state === "cancelled" ? "cancelled" : "failed"));
   }
   start(item, tab) {
     const owner = tab.owner;
