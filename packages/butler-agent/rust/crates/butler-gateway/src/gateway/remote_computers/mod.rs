@@ -2,6 +2,7 @@
 mod deploy;
 mod edit;
 pub(super) use edit::edit;
+pub(super) mod environment;
 mod forward;
 pub(super) use forward::{OauthStart, oauth_start};
 mod live;
@@ -54,6 +55,10 @@ pub(super) struct Computer {
     model_source: ModelSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sent_credential: Option<String>,
+    #[serde(default)]
+    environment: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sent_environment: bool,
     host_keys: Vec<String>,
     added_at: String,
 }
@@ -76,6 +81,7 @@ impl Computer {
         if let Some(object) = value.as_object_mut() {
             object.remove("host_keys");
             object.remove("sent_credential");
+            object.remove("sent_environment");
         }
         Ok(value)
     }
@@ -137,6 +143,8 @@ pub(super) struct AddInput {
     folder: String,
     #[serde(default)]
     model_source: ModelSource,
+    #[serde(default)]
+    environment: Option<Vec<environment::EnvInput>>,
 }
 
 impl AddInput {
@@ -184,6 +192,7 @@ pub(super) async fn host_key(
 }
 
 pub(super) async fn add(
+    setup: &Arc<dyn AppSetupPort>,
     data: &Path,
     input: AddInput,
     cancel: CancellationToken,
@@ -195,6 +204,7 @@ pub(super) async fn add(
         key_file: input.key_file,
     };
     target.validate()?;
+    let values = environment::merge(&Default::default(), input.environment.unwrap_or_default())?;
     let records = list(data).await?;
     store::unique_name(&records, &name)?;
     let host_keys = ssh::host_key(&target, &records, cancel.clone()).await?;
@@ -213,10 +223,21 @@ pub(super) async fn add(
         ai_connected: false,
         model_source: input.model_source,
         sent_credential: None,
+        environment: values.keys().cloned().collect(),
+        sent_environment: false,
         host_keys,
         added_at: chrono::Utc::now().to_rfc3339(),
     };
-    store::add(data.join("config/computers.json"), computer).await
+    let id = computer.id.clone();
+    let has_environment = !values.is_empty();
+    if has_environment {
+        setup.save_computer_environment(id.clone(), values).await?;
+    }
+    let saved = store::add(data.join("config/computers.json"), computer).await;
+    if saved.is_err() && has_environment {
+        setup.delete_computer_key(id).await?;
+    }
+    saved
 }
 
 pub(super) async fn delete(
@@ -237,7 +258,7 @@ pub(super) async fn delete(
         Ok::<_, HttpError>(installed)
     }
     .await;
-    let cleaned = match reach {
+    let reachable = match reach {
         Ok(installed) => {
             if installed {
                 let link = Link {
@@ -261,7 +282,7 @@ pub(super) async fn delete(
                         )
                     })?;
             }
-            deploy::remove(computer, cancel).await.is_ok()
+            true
         }
         Err(_) if force => false,
         Err(_) => {
@@ -272,6 +293,10 @@ pub(super) async fn delete(
             ));
         }
     };
+    setup
+        .save_computer_environment(computer.id.clone(), Default::default())
+        .await?;
+    let cleaned = reachable && deploy::remove(computer, cancel).await.is_ok();
     store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
     setup.delete_computer_key(computer.id.clone()).await?;
     if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
@@ -352,6 +377,13 @@ async fn connect(
         let _ = error;
     }
     relay::unlock(computer, &identity, cancel.clone()).await?;
+    if (!computer.environment.is_empty() || computer.sent_environment)
+        && environment::push(setup, root, computer, cancel.clone())
+            .await
+            .is_err()
+    {
+        butler_core::diagnostic!("[remote-env] push failed computer={}", computer.id);
+    }
     let sync = model_sync::sync(setup, root, computer, cancel.clone()).await;
     if sync.is_err() {
         butler_core::diagnostic!("[remote-model] sync failed computer={}", computer.id);

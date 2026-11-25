@@ -85,10 +85,16 @@ async fn add(
     request: Request<Body>,
     root: &std::path::Path,
 ) -> Result<(StatusCode, serde_json::Value), HttpError> {
-    let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
     let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
-    let computer = remote_computers::add(root, input, state.shutdown.clone()).await?;
+    let computer = remote_computers::add(
+        &state.application.setup()?,
+        root,
+        input,
+        state.shutdown.clone(),
+    )
+    .await?;
     publish_changed(
         state,
         computer.id(),
@@ -154,7 +160,7 @@ async fn edit(
         .strip_prefix("/computers/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
     let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
     let (computer, target_changed) = remote_computers::edit(

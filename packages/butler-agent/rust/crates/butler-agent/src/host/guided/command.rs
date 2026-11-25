@@ -14,6 +14,7 @@ mod task_scope;
 pub(in crate::host) mod timing;
 mod validation;
 
+use butler_models::models::current_computer_environment as current_env;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -166,7 +167,7 @@ impl GuidedCommand {
             let host = Arc::clone(&self.host_environment);
             let environment = self
                 .jobs
-                .run(move || Commands::tool_environment(&host, &data))
+                .run(move || Commands::tool_environment(&host, &data, &current_env()))
                 .await?
                 .map_err(BtccError::from)?;
             let output_abort = scope.abort.clone();
@@ -269,6 +270,7 @@ fn observation_input(
         timeout_ms,
         access: observation_access(scope.contained_reads),
         host_environment: host_environment.clone(),
+        computer_environment: current_env(),
         abort: scope.abort.clone(),
     }
 }

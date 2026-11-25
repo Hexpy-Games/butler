@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use super::CommandError;
@@ -42,16 +42,24 @@ impl Scratch {
 pub(super) fn guided_environment(
     host: &HashMap<String, String>,
     butler_data: &Path,
+    computer: &BTreeMap<String, String>,
 ) -> Result<HashMap<String, String>, CommandError> {
-    scratch_environment(host, butler_data, &Scratch::new(butler_data, false))
+    scratch_environment(
+        host,
+        butler_data,
+        computer,
+        &Scratch::new(butler_data, false),
+    )
 }
 
 pub(super) fn scratch_environment(
     host: &HashMap<String, String>,
     butler_data: &Path,
+    computer: &BTreeMap<String, String>,
     scratch: &Scratch,
 ) -> Result<HashMap<String, String>, CommandError> {
     let mut env = butler_platform::command_sandbox::tool_environment(host);
+    env.extend(computer.clone());
     std::fs::create_dir_all(&scratch.temporary).map_err(CommandError::io)?;
     std::fs::create_dir_all(&scratch.cache).map_err(CommandError::io)?;
     let temporary = scratch.temporary.to_string_lossy().into_owned();

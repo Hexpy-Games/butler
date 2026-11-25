@@ -6,6 +6,7 @@ pub use attachment_text::{
     message_file_path, not_inlined_block,
 };
 mod catalog;
+mod computer_environment;
 mod configuration;
 mod diagnostics;
 mod local_servers;
@@ -94,6 +95,11 @@ use tokenizer::TokenizerOwner;
 
 /// Secret input for key commands: echo off at a terminal (#217).
 pub use butler_platform::secrets::read_secret_input;
+pub use computer_environment::{
+    EnvError, ReplaceError as ComputerEnvironmentReplaceError, check as check_computer_environment,
+    current as current_computer_environment, load as load_computer_environment,
+    replace as replace_computer_environment,
+};
 pub use configuration::chatgpt;
 pub use configuration::sealed;
 pub use configuration::{

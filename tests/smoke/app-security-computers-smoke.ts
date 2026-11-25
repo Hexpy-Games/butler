@@ -63,7 +63,7 @@ async function captureStates(page: Page, output: string, variant: string) {
   await screenshot("A1-empty", section(page));
   await button(section(page), copy.add).click();
   const dialog = addDialog(page);
-  const submit = button(dialog, copy.form.submit);
+  const submit = button(dialog, copy.form.submit).and(dialog.locator('button[type="submit"]'));
   await screenshot("A3-form", dialog);
 
   const name = copy.form.namePlaceholder;
@@ -89,7 +89,18 @@ async function captureStates(page: Page, output: string, variant: string) {
   await button(row(page, name), copy.edit).click();
   await assertVisible(dialog, copy.form.editTitle);
   await screenshot("E2-edit", dialog);
+  const environment = copy.form.environment;
+  await button(dialog, environment.add).click();
+  await screenshot("E4-environment", dialog);
+  await dialog.getByRole("textbox", { name: environment.name, exact: true }).last().fill("LD_PRELOAD");
+  await dialog.getByLabel(environment.value, { exact: true }).last().fill("smoke-value");
   const save = button(dialog, copy.form.save);
+  fake.failNext("edit", "computer_env_name_reserved");
+  await save.click();
+  await assertVisible(dialog, copy.errors.environment.reserved);
+  assert.equal(await dialog.locator("#computer-environment").evaluate((node) => node === document.activeElement), true);
+  await screenshot("E5-environment-error", dialog);
+  await button(dialog, environment.remove).last().click();
   fake.failNext("edit", "computer_host_different");
   await save.click();
   await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), copy.errors.otherComputer);
@@ -201,7 +212,7 @@ try {
   assert(await button(section(page), copy.add).isVisible());
   await button(section(page), copy.add).click();
   const dialog = addDialog(page);
-  const submit = button(dialog, copy.form.submit);
+  const submit = button(dialog, copy.form.submit).and(dialog.locator('button[type="submit"]'));
   assert(await submit.isDisabled());
   await submit.hover({ force: true });
   await assertVisible(page.getByRole("tooltip"), copy.form.required);
@@ -230,7 +241,7 @@ try {
   assert.equal(await page.getByRole("alertdialog").count(), 0);
   assert.deepEqual(lastCall("POST", "/computers/host-key")?.body, { address, port: 22, key_file: keyFile });
   assert.deepEqual(lastCall("POST", "/computers")?.body, {
-    name, address, port: 22, key_file: keyFile, folder, model_source: "follow",
+    name, address, port: 22, key_file: keyFile, folder, model_source: "follow", environment: [],
   });
   await assertVisible(dialog.getByRole("status"), copy.form.preparing);
   assert.equal(await dialog.locator("input:disabled").count(), 5);
@@ -258,7 +269,7 @@ try {
   await save.click();
   await dialog.waitFor({ state: "hidden" });
   assert.deepEqual(lastCall("PUT", computerPath)?.body, {
-    name: editedName, address, port: 22, key_file: keyFile, folder, model_source: "follow",
+    name: editedName, address, port: 22, key_file: keyFile, folder, model_source: "follow", environment: [{ name: "API_TOKEN" }],
   });
 
   await button(row(page, editedName), copy.edit).click();
@@ -367,8 +378,8 @@ try {
     await page.close();
     let captures = 0;
     for (const [locale, variants] of [
-      ["ko", [["light", "desktop", 1280, 900], ["dark", "desktop", 1280, 900], ["light", "mobile", 375, 812]]],
-      ["en", [["light", "desktop", 1280, 900]]],
+      ["ko", [["light", "desktop", 1280, 900], ["dark", "desktop", 1280, 900], ["light", "mobile", 375, 812], ["dark", "mobile", 375, 812]]],
+      ["en", [["light", "desktop", 1280, 900], ["light", "mobile", 375, 812]]],
     ] as const) {
       setAppCopyLanguage(locale);
       const captureServer = await createNativeAppServer({

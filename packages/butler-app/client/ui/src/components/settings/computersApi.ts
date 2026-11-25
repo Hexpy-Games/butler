@@ -22,11 +22,11 @@ export function checkHostKey(target: HostTarget) {
   return api<HostKeyCheck>("/computers/host-key", { method: "POST", body: JSON.stringify(target) });
 }
 
-export async function addComputer(input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource }): Promise<Computer> {
+export async function addComputer(input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource; environment: Array<{ name: string; value?: string }> }): Promise<Computer> {
   return (await api<{ computer: Computer }>("/computers", { method: "POST", body: JSON.stringify(input) })).computer;
 }
 
-export async function editComputer(id: string, input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource }): Promise<Computer> {
+export async function editComputer(id: string, input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource; environment: Array<{ name: string; value?: string }> }): Promise<Computer> {
   return (await api<{ computer: Computer }>(`/computers/${encodeURIComponent(id)}`, {
     method: "PUT", body: JSON.stringify(input),
   })).computer;

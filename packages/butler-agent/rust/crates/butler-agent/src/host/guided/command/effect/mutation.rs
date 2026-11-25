@@ -1,5 +1,6 @@
 use super::super::{artifacts, output};
 use super::{AdapterOutcome, CancellationToken, CommandEffectAdapter, Map, Value};
+use butler_models::models::current_computer_environment as current_env;
 use butler_turn::workspace::{GuidedAccess, GuidedCommandInput};
 
 impl CommandEffectAdapter {
@@ -91,6 +92,7 @@ impl CommandEffectAdapter {
             timeout_ms: args.get("timeout_ms").and_then(Value::as_f64),
             access: self.mutation_access(),
             host_environment: (*self.host_environment).clone(),
+            computer_environment: current_env(),
             abort: signal.clone(),
         }
     }

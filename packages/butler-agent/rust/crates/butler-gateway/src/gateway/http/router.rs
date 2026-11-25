@@ -229,6 +229,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/logs/trace", Handler::Logs),
     ("/logs/trace/{trace_id}", Handler::Logs),
     ("/remote/unlock", Handler::RemoteAccount),
+    ("/remote/environment", Handler::RemoteAccount),
     ("/remote/sessions", Handler::RemoteAccount),
     ("/remote/transcripts", Handler::RemoteAccount),
     ("/remote/sessions/state", Handler::RemoteAccount),

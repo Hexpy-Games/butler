@@ -228,7 +228,8 @@ async fn prepare_command(
         let secrets = secrets.to_vec();
         move || {
             let scratch = Scratch::new(&butler_data, input.access == GuidedAccess::ProjectWrite);
-            let mut environment = scratch_environment(&host, &butler_data, &scratch)?;
+            let mut environment =
+                scratch_environment(&host, &butler_data, &input.computer_environment, &scratch)?;
             if input.access == GuidedAccess::SecretReadsDenied {
                 super::environment::ssh_agent(&host, &mut environment);
             }

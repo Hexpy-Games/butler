@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { SavedCredentialView } from "@/app/types";
 import { Button, ButtonContainer, Dialog, DialogContent, DialogForm, Input, ProgressMeter, SettingsField, Tooltip } from "@/butler-ds";
 import { COMPUTER_FIELD_IDS, type ComputerField, type ComputerForm } from "./computerAddErrors";
+import { ComputerEnvironmentFields, type ComputerEnvironmentRow } from "./ComputerEnvironmentFields";
 import { ComputerModelFields } from "./ComputerModelFields";
 import type { MainModelKind } from "./computerTypes";
 import type { Computer } from "./computersApi";
@@ -23,6 +24,7 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   const add = useComputerAdd(onAdded);
   const model = useComputerModelChoice(defaultSource(mainModel));
   const [form, setForm] = useState(EMPTY_FORM);
+  const [environment, setEnvironment] = useState<ComputerEnvironmentRow[]>([]);
   const [lastEditing, setLastEditing] = useState<Computer | null>(null);
   useEffect(() => {
     if (open) {
@@ -34,6 +36,7 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
         keyFile: editing.key_file ?? "",
         folder: editing.folder,
       } : EMPTY_FORM);
+      setEnvironment((editing?.environment ?? []).map((name) => ({ id: name, name, value: "", saved: true })));
       add.reset();
       model.reset(editing?.model_source ?? defaultSource(mainModel));
     }
@@ -57,7 +60,7 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
     <Dialog open={open} onOpenChange={(next) => { if (!add.busy) onOpenChange(next); }}>
       <DialogContent closeLabel={appCopy.common.close} showCloseButton={!add.busy} data-test-class="computer-add-dialog">
         <DialogForm dialog title={isEditing ? copy.editTitle : copy.title}
-          onSubmit={() => void add.submit(form, model.source, editing ?? undefined)} footer={
+          onSubmit={() => void add.submit(form, model.source, environment, editing ?? undefined)} footer={
           <ButtonContainer size="default" justify="end">
             <Tooltip label={add.busy ? busyLabel : undefined}>
               <Button type="button" variant="outline" disabled={add.busy} onClick={() => onOpenChange(false)}>{appCopy.common.cancel}</Button>
@@ -78,6 +81,8 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
               />
             );
           })}
+          <ComputerEnvironmentFields rows={environment} onChange={setEnvironment} disabled={add.busy}
+            error={add.error?.field === "environment" ? add.error.message : undefined} />
           <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={add.busy ? busyLabel : undefined} />
           {add.busy && <ProgressMeter indeterminate label={busyLabel} />}
         </DialogForm>

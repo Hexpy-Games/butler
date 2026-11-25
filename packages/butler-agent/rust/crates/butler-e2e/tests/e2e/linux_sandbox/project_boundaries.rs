@@ -199,6 +199,7 @@ async fn project_write_cancellation_still_quarantines() -> Result<(), HarnessErr
     let owner = Commands::new();
     let result = owner
         .submit_guided(GuidedCommandInput {
+            computer_environment: Default::default(),
             allowed_folders: Vec::new(),
             extra_write_roots: Vec::new(),
             protected_roots: Vec::new(),
