@@ -1857,6 +1857,7 @@ export interface AppCopy {
       appName: string;
       appVersion: string;
       appRepository: string;
+      appPrivacyPolicy: string;
       appProtocol: string;
       developerMode: string;
       butlerNickname: string;

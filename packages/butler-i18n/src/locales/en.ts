@@ -2147,6 +2147,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       appName: "App name",
       appVersion: "Version",
       appRepository: "GitHub repository",
+      appPrivacyPolicy: "Privacy policy",
       appProtocol: "Protocol",
       developerMode: "Developer mode",
       butlerNickname: "Butler nickname",

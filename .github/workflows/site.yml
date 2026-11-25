@@ -54,6 +54,8 @@ jobs:
     uses: ./.github/workflows/site-check.yml
     with:
       upload-pages: true
+      privacy-officer-ko: ${{ vars.SITE_PRIVACY_OFFICER_KO }}
+      privacy-officer-en: ${{ vars.SITE_PRIVACY_OFFICER_EN }}
 
   deploy:
     name: Deploy to GitHub Pages

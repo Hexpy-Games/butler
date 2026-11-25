@@ -2151,6 +2151,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       appName: "앱 이름",
       appVersion: "버전",
       appRepository: "GitHub 저장소",
+      appPrivacyPolicy: "개인정보처리방침",
       appProtocol: "프로토콜",
       developerMode: "개발자 모드",
       butlerNickname: "버틀러 닉네임",

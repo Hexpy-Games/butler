@@ -1,7 +1,8 @@
 import { faviconSrc } from "@/app/favicons.ts";
 import { useEffect, useId, useState } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
-import { appCopy } from "@/app/copy.ts";
+import { privacyPolicyUrl } from "@/app/butlerSite.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { AppInfoView, SettingsView } from "@/app/types.ts";
@@ -11,6 +12,7 @@ import { OpenSourceLicenses } from "./OpenSourceLicenses";
 import { DiagnosticsExportField } from "./DiagnosticsExportField";
 
 export function AboutSettings() {
+  const privacyUrl = privacyPolicyUrl(useAppLocale());
   const taskGraphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -98,6 +100,12 @@ export function AboutSettings() {
             </Typo.Body>
           ) : "-"}
         />
+        <KeyValueRow data-setting-id="app-privacy-policy" data-test-class="about-app-privacy-policy" label={fields.appPrivacyPolicy}
+          value={
+            <Typo.Body as="span" tone="primary">
+              <InlineReference kind="external" href={privacyUrl} iconSrc={faviconSrc(privacyUrl)}>{privacyUrl}</InlineReference>
+            </Typo.Body>
+          } />
         <KeyValueRow data-setting-id="app-protocol" data-test-class="about-app-protocol" label={fields.appProtocol}
           value={info?.protocol_version ?? "-"} />
       </SettingsSection>
