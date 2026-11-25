@@ -140,7 +140,7 @@ pub(in crate::gateway) fn data(reply: Reply) -> Result<Value, HttpError> {
 
 pub(super) async fn loopback(
     computer: &Computer,
-    port: u16,
+    callback: super::forward::Callback,
     head: Vec<u8>,
     cancel: CancellationToken,
 ) -> Result<String, HttpError> {
@@ -151,8 +151,12 @@ pub(super) async fn loopback(
         key_file: computer.key_file.clone(),
     };
     let home = butler_platform::user_dirs::non_empty_home_dir();
-    let command =
-        format!(r#""$HOME/.butler-remote/current/butler-agent" --remote-loopback {port}"#);
+    let command = match callback {
+        super::forward::Callback::Port(port) =>
+            format!(r#""$HOME/.butler-remote/current/butler-agent" --remote-loopback {port}"#),
+        super::forward::Callback::Socket =>
+            r#""$HOME/.butler-remote/current/butler-agent" --remote-callback "$HOME/.butler-remote/data""#.to_owned(),
+    };
     let args = ssh::arguments(
         &target,
         &known_hosts.0,

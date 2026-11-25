@@ -3,6 +3,7 @@ mod deploy;
 mod edit;
 pub(super) use edit::edit;
 mod forward;
+pub(super) use forward::{OauthStart, oauth_start};
 mod live;
 mod live_pump;
 mod live_records;
@@ -30,10 +31,9 @@ pub(super) use streams::RemoteStream;
 use super::{AppSetupPort, http::HttpError};
 use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -377,63 +377,6 @@ async fn connect(
         computer.id.clone(),
     );
     Ok((state, sync))
-}
-
-#[derive(Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(super) struct OauthStart {
-    #[serde(default)]
-    kind: Option<Value>,
-}
-
-pub(super) async fn oauth_start(
-    setup: &Arc<dyn AppSetupPort>,
-    root: &Path,
-    id: &str,
-    version: &str,
-    input: OauthStart,
-    shutdown: CancellationToken,
-) -> Result<Value, HttpError> {
-    let (_lock, computer) = locked(root, id).await?;
-    let _ = connect(setup, root, version, &computer, shutdown.clone()).await?;
-    let listener = TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .map_err(|_| HttpError::Internal)?;
-    let port = listener
-        .local_addr()
-        .map_err(|_| HttpError::Internal)?
-        .port();
-    let mut body = json!({"force":true,"redirect_port":port});
-    if let Some(kind) = input.kind {
-        body["kind"] = kind;
-    }
-    let view = relay::data(
-        relay::request(
-            &computer,
-            "POST",
-            "/setup/oauth/start",
-            body.to_string().into_bytes(),
-            shutdown.clone(),
-        )
-        .await?,
-    )?;
-    if view["status"] != "pending" {
-        return Ok(view);
-    }
-    let invalid = || {
-        remote_error(
-            "remote_oauth_invalid",
-            "This computer returned an invalid sign-in.",
-        )
-    };
-    let port = view["callback_port"]
-        .as_u64()
-        .and_then(|p| u16::try_from(p).ok())
-        .ok_or_else(invalid)?;
-    let flow_id = view["flow_id"].as_str().ok_or_else(invalid)?;
-    let stop = forward::replace(id, flow_id, &shutdown);
-    tokio::spawn(forward::serve(listener, computer, port, stop));
-    Ok(view)
 }
 
 pub(super) async fn oauth_flow(

@@ -148,11 +148,15 @@ async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Res
         request_status(&socket, "http://agent/computers", &token, Some(&admin)).await?,
         200
     );
-    let control = record["control_endpoint"]
-        .as_str()
-        .and_then(|endpoint| endpoint.parse::<std::net::SocketAddr>().ok())
-        .ok_or_else(|| harness_error("no control endpoint"))?;
-    assert_eq!(listening_tcp_ports(pid).await?, [control.port()].into());
+    assert!(
+        record["control_endpoint"]
+            .as_str()
+            .is_some_and(|p| p.starts_with("unix:"))
+    );
+    assert!(local_socket::owner_only(
+        &data.0.data.join("remote/control.sock")
+    )?);
+    assert_eq!(listening_tcp_ports(pid).await?, Default::default());
     let idle_started = Instant::now();
     while process_start(pid)
         .map_err(|error| harness_error(error.to_string()))?

@@ -53,9 +53,10 @@ pub(crate) async fn record_helper_terminal(
         if !crate::host::service::instance::process_matches(&record)? {
             return Err("restart_handoff_owner_ambiguous".into());
         }
-        let online =
-            crate::host::app::gateway_lifecycle::report_restart_handoff(&record, intent_id, state)
-                .await;
+        let online = crate::host::app::gateway_lifecycle::report_restart_handoff(
+            data_root, &record, intent_id, state,
+        )
+        .await;
         if online.is_ok() {
             return online;
         }

@@ -54,7 +54,7 @@ pub(crate) async fn request_stop(
         write_shutdown_flag(data_root, &record.nonce)?;
         return Ok(StopDelivery::ShutdownFlag);
     }
-    match crate::host::app::gateway_lifecycle::request_service_stop(record).await {
+    match crate::host::app::gateway_lifecycle::request_service_stop(data_root, record).await {
         Ok(()) => Ok(StopDelivery::Control),
         // The endpoint closed because the instance exited meanwhile.
         Err(_) if !super::process_matches(record).unwrap_or(true) => {

@@ -171,6 +171,7 @@ async fn app_health_ready(
                 token,
                 None,
                 &[],
+                &[],
             );
             if let Ok(Ok(reply)) = tokio::time::timeout(Duration::from_secs(2), request).await
                 && reply["status"]

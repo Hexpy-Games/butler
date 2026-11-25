@@ -7,6 +7,7 @@ use butler_platform::local_socket;
 use serde_json::{Value, json};
 use std::{
     ffi::OsString,
+    fmt::Write as _,
     io::Read,
     path::{Path, PathBuf},
     process::ExitCode,
@@ -54,7 +55,7 @@ pub(super) async fn request(args: &[OsString]) -> ExitCode {
         })
         .await
         .map_err(|_| "remote_request_failed")??;
-        socket_request(&socket, &method, &path, &token, Some(&admin), &body).await
+        socket_request(&socket, &method, &path, &token, Some(&admin), &[], &body).await
     }
     .await;
     match reply {
@@ -69,22 +70,42 @@ pub(super) async fn request(args: &[OsString]) -> ExitCode {
     }
 }
 
-pub(super) async fn socket_request(
+pub(crate) async fn socket_request(
     socket: &Path,
     method: &str,
     path: &str,
     token: &str,
     admin: Option<&str>,
+    extra_headers: &[(&str, &str)],
     body: &[u8],
 ) -> Result<Value, &'static str> {
+    let invalid_header = "remote_request_failed";
+    if token.contains(['\r', '\n']) || admin.is_some_and(|value| value.contains(['\r', '\n'])) {
+        return Err(invalid_header);
+    }
+    let mut headers = format!(
+        "{method} http://agent{path} HTTP/1.1\r\nHost: agent\r\nAuthorization: Bearer {token}\r\n"
+    );
+    if let Some(admin) = admin {
+        write!(headers, "X-Butler-Admin: {admin}\r\n").map_err(|_| invalid_header)?;
+    }
+    for (name, value) in extra_headers {
+        if value.contains(['\r', '\n'])
+            || reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err()
+        {
+            return Err(invalid_header);
+        }
+        write!(headers, "{name}: {value}\r\n").map_err(|_| invalid_header)?;
+    }
+    write!(
+        headers,
+        "Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .map_err(|_| invalid_header)?;
     let mut stream = local_socket::connect(socket)
         .await
         .map_err(|_| "remote_not_running")?;
-    let admin = admin.map_or_else(String::new, |admin| format!("X-Butler-Admin: {admin}\r\n"));
-    let headers = format!(
-        "{method} http://agent{path} HTTP/1.1\r\nHost: agent\r\nAuthorization: Bearer {token}\r\n{admin}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
     stream
         .write_all(headers.as_bytes())
         .await
@@ -181,10 +202,9 @@ fn parse(response: &[u8]) -> Result<Value, &'static str> {
 }
 
 pub(super) async fn loopback(args: &[OsString]) -> ExitCode {
-    use std::io::Write;
-    use tokio::{net::TcpStream, time::timeout};
+    use tokio::net::TcpStream;
 
-    let reply = async {
+    relay_callback(async {
         let [port] = args else { return Err("connect") };
         let port = port
             .to_str()
@@ -194,13 +214,32 @@ pub(super) async fn loopback(args: &[OsString]) -> ExitCode {
             clippy::disallowed_methods,
             reason = "raw loopback relay for a sign-in callback that must stay out of HTTP logs"
         )]
-        let mut stream = timeout(
-            Duration::from_secs(10),
-            TcpStream::connect(("127.0.0.1", port)),
-        )
-        .await
-        .map_err(|_| "connect")?
-        .map_err(|_| "connect")?;
+        TcpStream::connect(("127.0.0.1", port))
+            .await
+            .map_err(|_| "connect")
+    })
+    .await
+}
+
+pub(super) async fn callback(args: &[OsString]) -> ExitCode {
+    relay_callback(async {
+        let [data] = args else { return Err("connect") };
+        let socket = Path::new(data).join("remote/oauth.sock");
+        local_socket::connect(&socket).await.map_err(|_| "connect")
+    })
+    .await
+}
+
+async fn relay_callback<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(
+    connect: impl Future<Output = Result<S, &'static str>>,
+) -> ExitCode {
+    use std::io::Write;
+    use tokio::time::timeout;
+
+    let reply = async {
+        let mut stream = timeout(Duration::from_secs(10), connect)
+            .await
+            .map_err(|_| "connect")??;
         let head = tokio::task::spawn_blocking(|| {
             let mut bytes = Vec::new();
             std::io::stdin()

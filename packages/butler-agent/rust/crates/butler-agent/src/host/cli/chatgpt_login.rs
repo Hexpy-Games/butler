@@ -21,7 +21,7 @@ pub(crate) async fn run(
     } else {
         SignInKind::Default
     };
-    let attempt = Attempt::start(&configuration, kind, None)
+    let attempt = Attempt::start(&configuration, kind, None, None)
         .await
         .map_err(HostError::from)?;
     println!("{}", attempt.auth_url);

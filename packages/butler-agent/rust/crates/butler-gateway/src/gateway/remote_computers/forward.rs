@@ -1,7 +1,16 @@
 //! Forward browser callbacks over the computer's pinned SSH connection.
-use super::{Computer, relay};
+use super::{
+    AppSetupPort, Computer, HttpError, connect, deploy::RemoteState, locked, relay, remote_error,
+};
 use parking_lot::Mutex;
-use std::{collections::HashMap, sync::LazyLock, time::Duration};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -35,7 +44,7 @@ pub(super) fn stop(id: &str, flow_id: &str) {
 pub(super) async fn serve(
     listener: TcpListener,
     computer: Computer,
-    port: u16,
+    callback: Callback,
     stop: CancellationToken,
 ) {
     let connections = async {
@@ -59,7 +68,7 @@ pub(super) async fn serve(
             let Ok(Some(head)) = time::timeout(Duration::from_secs(10), read).await else {
                 continue;
             };
-            let reply = relay::loopback(&computer, port, head, stop.clone())
+            let reply = relay::loopback(&computer, callback, head, stop.clone())
                 .await
                 .unwrap_or_else(|_| "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n".into());
             let _ = stream.write_all(reply.as_bytes()).await;
@@ -74,5 +83,101 @@ pub(super) async fn serve(
         () = stop.cancelled() => {},
         () = time::sleep(Duration::from_secs(330)) => {},
         () = connections => {},
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Callback {
+    Port(u16),
+    Socket,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(in crate::gateway) struct OauthStart {
+    #[serde(default)]
+    kind: Option<Value>,
+}
+
+pub(in crate::gateway) async fn oauth_start(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &Path,
+    id: &str,
+    version: &str,
+    input: OauthStart,
+    shutdown: CancellationToken,
+) -> Result<Value, HttpError> {
+    let (_lock, computer) = locked(root, id).await?;
+    let (state, _) = connect(setup, root, version, &computer, shutdown.clone()).await?;
+    let callback_socket = use_callback_socket(&state, version);
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .map_err(|_| HttpError::Internal)?;
+    let port = listener
+        .local_addr()
+        .map_err(|_| HttpError::Internal)?
+        .port();
+    let mut body = json!({"force":true,"redirect_port":port});
+    if callback_socket {
+        body["callback_socket"] = json!(true);
+    }
+    if let Some(kind) = input.kind {
+        body["kind"] = kind;
+    }
+    let view = relay::data(
+        relay::request(
+            &computer,
+            "POST",
+            "/setup/oauth/start",
+            body.to_string().into_bytes(),
+            shutdown.clone(),
+        )
+        .await?,
+    )?;
+    if view["status"] != "pending" {
+        return Ok(view);
+    }
+    let invalid = || {
+        remote_error(
+            "remote_oauth_invalid",
+            "This computer returned an invalid sign-in.",
+        )
+    };
+    let callback = if callback_socket {
+        if view["callback_socket"] != true {
+            return Err(invalid());
+        }
+        Callback::Socket
+    } else {
+        Callback::Port(
+            view["callback_port"]
+                .as_u64()
+                .and_then(|p| u16::try_from(p).ok())
+                .ok_or_else(invalid)?,
+        )
+    };
+    let flow_id = view["flow_id"].as_str().ok_or_else(invalid)?;
+    let stop = replace(id, flow_id, &shutdown);
+    tokio::spawn(serve(listener, computer, callback, stop));
+    Ok(view)
+}
+
+fn use_callback_socket(state: &RemoteState, version: &str) -> bool {
+    state.version == version
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // test-category: pure-logic
+    #[test]
+    fn oauth_callback_socket_requires_matching_versions() {
+        let state = RemoteState {
+            version: "1.2.3".into(),
+            started: false,
+        };
+        assert!(use_callback_socket(&state, "1.2.3"));
+        assert!(!use_callback_socket(&state, "1.2.4"));
     }
 }
