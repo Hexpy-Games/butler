@@ -12,7 +12,7 @@ export function SettingsSwitch({
   afterControl,
   onChange,
 }: {
-  label: string;
+  label: ReactNode;
   settingId?: string;
   description?: string;
   id?: string;

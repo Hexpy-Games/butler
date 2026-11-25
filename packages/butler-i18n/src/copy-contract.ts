@@ -2065,7 +2065,6 @@ export interface AppCopy {
       tunnelDescription: string;
       tunnelConnected: string;
       tunnelQrNote: string;
-      tunnelPlusOnly: string;
       addresses: string;
       noAddresses: string;
       bindErrors: {

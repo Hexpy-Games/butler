@@ -2,7 +2,7 @@ import type { ButlerAccountStatus } from "@/app/butlerAccount";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SecurityView } from "@/app/types.ts";
-import { Button, SettingsField, Stack, Typo } from "@/butler-ds";
+import { Button, SettingsField, Stack, Tag, Typo } from "@/butler-ds";
 import { SettingsSwitch } from "./SettingsSwitch";
 
 export function SecurityTunnelField({ tunnel, account, justEnabled, disabled, onChange }: {
@@ -13,11 +13,12 @@ export function SecurityTunnelField({ tunnel, account, justEnabled, disabled, on
   onChange: (enabled: boolean) => void;
 }) {
   const copy = appCopy.settings.security;
+  const label = <>{copy.tunnel}<Tag>{appCopy.butlerAccount.plans.plus}</Tag></>;
   if (tunnel.enabled || !account || (account.signed_in && account.entitlements.features.tunnel === true)) {
     return (
       <SettingsSwitch
         settingId="tunnel"
-        label={copy.tunnel}
+        label={label}
         description={copy.tunnelDescription}
         checked={tunnel.enabled}
         disabled={disabled}
@@ -37,18 +38,13 @@ export function SecurityTunnelField({ tunnel, account, justEnabled, disabled, on
   return (
     <SettingsField
       settingId="tunnel"
-      label={copy.tunnel}
+      label={label}
       description={copy.tunnelDescription}
-      control={(
-        <Stack align="row" gap="sm" cross="center">
-          <Typo.Caption tone="secondary">{copy.tunnelPlusOnly}</Typo.Caption>
-          {!account.signed_in && (
-            <Button size="sm" variant="secondary" onClick={() => useButlerStore.getState().openSettings("account")}>
-              {appCopy.butlerAccount.signIn}
-            </Button>
-          )}
-        </Stack>
-      )}
+      control={!account.signed_in ? (
+        <Button size="sm" variant="secondary" onClick={() => useButlerStore.getState().openSettings("account")}>
+          {appCopy.butlerAccount.signIn}
+        </Button>
+      ) : null}
     />
   );
 }
