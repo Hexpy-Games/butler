@@ -849,6 +849,7 @@ export interface AppCopy {
     signedOut: string;
     devices: string;
     thisDevice: string;
+    justNow: string;
     platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
     revoke: string;
     revokeDevice: (name: string) => string;

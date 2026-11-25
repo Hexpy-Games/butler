@@ -148,6 +148,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
   notSignedIn: "로그인하지 않았습니다",
   devices: "기기",
   thisDevice: "이 기기",
+  justNow: "방금",
   platforms: { macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" },
   revoke: "해제",
   revokeDevice: (name) => `${name} 해제`,

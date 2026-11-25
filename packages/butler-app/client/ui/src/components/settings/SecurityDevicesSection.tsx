@@ -1,15 +1,7 @@
-import { appCopy, getAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { Button, ListRow, Monitor, SettingsSection, Smartphone, Stack, Tooltip } from "@/butler-ds";
+import { relativeTimeSince } from "@/lib/relativeTime";
 import type { usePairedDevices } from "./usePairedDevices";
-
-function lastSeen(seconds: number, now: number) {
-  const elapsed = Math.max(0, now * 60 - seconds);
-  const format = new Intl.RelativeTimeFormat(getAppLocale(), { numeric: "auto" });
-  if (elapsed < 60) return format.format(0, "minute");
-  if (elapsed < 3600) return format.format(-Math.floor(elapsed / 60), "minute");
-  if (elapsed < 86400) return format.format(-Math.floor(elapsed / 3600), "hour");
-  return format.format(-Math.floor(elapsed / 86400), "day");
-}
 
 export function securityDevicesSection({ disabled, devices, now }: {
   disabled: boolean;
@@ -32,7 +24,7 @@ export function securityDevicesSection({ disabled, devices, now }: {
         <Stack key={device.id} align="row" cross="center" gap="sm" wrap>
           <Stack grow minWidth="0">
             <ListRow icon={device.kind === "browser" ? <Monitor size="md" /> : <Smartphone size="md" />} title={device.name}
-              description={device.ip} meta={lastSeen(device.last_seen_at, now)} />
+              description={device.ip} meta={relativeTimeSince(Math.max(0, now * 60 - device.last_seen_at))} />
           </Stack>
           <Tooltip label={unavailable ? copy.working : copy.revokeDevice(device.name)}>
             <Button size="sm" variant="outline" disabled={unavailable}

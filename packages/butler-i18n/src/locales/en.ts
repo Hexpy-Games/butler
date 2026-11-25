@@ -142,6 +142,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
   notSignedIn: "Not signed in",
   devices: "Devices",
   thisDevice: "This device",
+  justNow: "Just now",
   platforms: { macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" },
   revoke: "Remove",
   revokeDevice: (name) => `Remove ${name}`,
