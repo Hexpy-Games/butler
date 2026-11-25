@@ -21,6 +21,7 @@ ISOLATE = ROOT / '.github/scripts/isolated.py'
 ARM = 'aarch64-unknown-linux-gnu'
 WINDOWS = 'x86_64-pc-windows-msvc'
 MISSING_TOOLS = set()
+HOST_IS_WINDOWS = os.name == 'nt'
 
 
 def output(*args):
@@ -79,7 +80,7 @@ def push_ranges(lines, remote='origin'):
 
 def clippy_lines(path):
     commands = []
-    for line in (ROOT / path).read_text().splitlines():
+    for line in (ROOT / path).read_text(encoding='utf-8').splitlines():
         match = re.search(r'\bcargo clippy\s+(.+)$', line)
         if match and not line.lstrip().startswith('#'):
             commands.append(['cargo', 'clippy', *shlex.split(match[1])])
@@ -135,13 +136,17 @@ ORAS_TESTS = {
 }
 
 
-def ci_script_commands():
-    source = (ROOT / '.github/workflows/rust-quality.yml').read_text()
+def lint_job():
+    source = (ROOT / '.github/workflows/rust-quality.yml').read_text(encoding='utf-8')
     job = re.search(r'^  lint:.*?(?=^  [\w-]+:|\Z)', source, re.M | re.S)
     if not job or 'name: Repository and CI lint' not in job[0]:
         raise ValueError('Repository and CI lint job changed; update prepush extraction')
+    return job[0]
+
+
+def ci_script_commands():
     commands = []
-    for line in job[0].splitlines():
+    for line in lint_job().splitlines():
         match = re.fullmatch(
             r'\s*(?:run: )?python3 \.github/scripts/isolated\.py '
             r'(python3 \.github/scripts/test-[^\n]+)', line)
@@ -152,6 +157,18 @@ def ci_script_commands():
     if not commands:
         raise ValueError('No CI-script tests in Repository and CI lint')
     return commands
+
+
+def lint_runner_matches_host():
+    runner = re.search(r'^    runs-on: (\S+)$', lint_job(), re.M)
+    if not runner:
+        raise ValueError('Repository and CI lint runs-on changed; update prepush extraction')
+    # GitHub runner labels name their OS first: ubuntu-*, macos-*, windows-*.
+    if runner[1].startswith('windows') == HOST_IS_WINDOWS:
+        return True
+    print(f'prepush: WARNING: SKIP CI-script tests: the lint job runs on {runner[1]}; '
+          'CI still checks them', file=sys.stderr)
+    return False
 
 
 def python_tests(paths):
@@ -297,7 +314,10 @@ def check_range(base=None, tip=None, branch=None):
         if tool_available('actionlint'):
             success = run('actionlint', ['actionlint', *selected['workflows']]) and success
     success = powershell_check(selected['powershell']) and success
-    for command in python_tests(paths):
+    commands = python_tests(paths)
+    if commands and not lint_runner_matches_host():
+        commands = []
+    for command in commands:
         success = run('CI-script ' + Path(command[1]).name, local_ci_command(command)) and success
     if base and selected['licenses']:
         success = run('notices', ['node', 'deploy/licenses/generate.mjs', '--check']) and success
