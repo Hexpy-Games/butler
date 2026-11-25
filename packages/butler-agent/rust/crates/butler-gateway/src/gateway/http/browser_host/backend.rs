@@ -203,9 +203,18 @@ pub(super) async fn headless_call(
         return response(count, result);
     }
     enforce_result_policy(&state, session, op, &mut result);
+    background(&headless, &tab_id, &mut result);
     super::assets::finish(&state, session, op, &mut result).await?;
     super::shots::keep(&state, session, &mut result).await?;
     response(count, result)
+}
+
+/// Butler's own headless browser has no window: the user sees none of its tabs.
+fn background(headless: &butler_runtime::browser::Headless, frame_tab: &str, result: &mut Value) {
+    let tab = result["tab"].as_str().unwrap_or(frame_tab).to_owned();
+    if headless.tab(&tab).is_some() {
+        result["seen_by_user"] = json!("background");
+    }
 }
 
 /// A browser holding all the tabs memory allows: the conversation's own tabs

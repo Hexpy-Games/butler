@@ -13,6 +13,8 @@ pub(crate) struct Host {
     pub(super) log: Arc<Mutex<Vec<Value>>>,
     /// The most `tab.open` frames pending at once on this host.
     pub(super) parallel_opens: Arc<AtomicUsize>,
+    /// The tab this host's user is looking at, if any.
+    pub(crate) viewed: Arc<Mutex<Option<String>>>,
     stream: reqwest::Response,
     buffer: String,
     admin: AdminClient,
@@ -40,6 +42,7 @@ impl Host {
         Ok(Self {
             log: Arc::default(),
             parallel_opens: Arc::default(),
+            viewed: Arc::default(),
             stream,
             buffer: String::new(),
             admin,
@@ -134,10 +137,19 @@ impl Host {
         assert_eq!(reply.status, 200, "{}", reply.text);
         let first = self.tabs.len() - opens.len();
         for (frame, tab) in opens.iter().zip(self.tabs[first..].to_vec()) {
-            let opened = json!({"status":"ok","tab":tab["id"],"url":tab["url"],"title":"Tide table","epoch":1,"profile":"signed_out"});
+            let opened = json!({"status":"ok","tab":tab["id"],"url":tab["url"],"title":"Tide table","epoch":1,"profile":"signed_out","seen_by_user":self.seen(&tab["id"])});
             self.reply(frame, opened).await?;
         }
         Ok(())
+    }
+
+    /// What this host's user sees of `tab`, as the App reports it.
+    fn seen(&self, tab: &Value) -> &'static str {
+        if self.viewed.lock().unwrap().as_deref() == tab.as_str() {
+            "showing"
+        } else {
+            "in_pane"
+        }
     }
 
     fn answer(&self, op: &str, frame: &Value) -> Value {
@@ -153,10 +165,10 @@ impl Host {
                     "html_base64":base64::engine::general_purpose::STANDARD.encode(format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>")))})
             }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
-            ("tab.read", Some(tab)) => json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,
+            ("tab.read", Some(tab)) => json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,"seen_by_user":self.seen(&tab["id"]),
                 "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>"))}),
             ("tab.observe", Some(tab)) => {
-                json!({"status":"ok","tab":tab["id"],"obs":"o1","epoch":1,"url":url,
+                json!({"status":"ok","tab":tab["id"],"obs":"o1","epoch":1,"url":url,"seen_by_user":self.seen(&tab["id"]),
                 "frames":[{"id":"f0","url":url,"class":"main"}],
                 "text":format!("tab {} epoch 1 obs o1\nheading \"Tide table\" [f0-e1]\n{text}", tab["id"].as_str().unwrap()),
                 "nodes":[{"ref":"f0-e1","role":"heading","name":"Tide table"}],"fields":[],"layout_regions":[],
