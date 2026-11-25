@@ -98,16 +98,19 @@ async function capture(page: Page, name: string, regions: Locator[], aboveCompos
     for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
       animations.push(...ancestor.getAnimations({ subtree: ancestor === dialog }));
     }
-    await Promise.all(animations.filter(animation => animation.playState === "running").map(animation => animation.finished));
+    await Promise.all(animations
+      .filter(animation => animation.playState === "running" && animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map(animation => animation.finished));
   })));
   const boxes = await Promise.all(regions.map(region => region.boundingBox()));
   assert(boxes.every(box => box !== null), name);
-  const x = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.x))));
-  const y = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.y))));
-  const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...boxes.map(box => box!.x + box!.width))));
+  const pad = 16;
+  const x = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.x))) - pad);
+  const y = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.y))) - pad);
+  const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...boxes.map(box => box!.x + box!.width))) + pad);
   const composerTop = aboveComposer ? await page.locator('[data-test-class="project-dashboard-view"] [data-test-class="composer-card"]')
     .evaluate(composer => Math.floor(composer.getBoundingClientRect().top)) : page.viewportSize()!.height;
-  const bottom = Math.min(composerTop, page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height))));
+  const bottom = Math.min(composerTop, page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height))) + pad);
   await page.screenshot({ path: join(shots, `${name}.png`), animations: "disabled", clip: { x, y, width: right - x, height: bottom - y } });
 }
 
@@ -220,12 +223,14 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   const activity = detail.locator('[data-test-class="canon-activity"]');
   const title = detail.getByRole("button", { name: "제목 수정", exact: true });
   await detail.waitFor();
-  if (shots) {
-    await title.hover();
-    const reason = page.getByRole("tooltip", { name: viewerLock, exact: true });
-    await reason.waitFor();
-    await capture(page, `${cell}-viewer-epic`, [detail, reason], mobile);
-  }
+  await title.hover();
+  const reason = page.getByRole("tooltip", { name: viewerLock, exact: true });
+  await reason.waitFor();
+  assert.equal(await title.locator("svg").count(), 0, "No edit pencil on a locked epic");
+  await capture(page, `${cell}-viewer-epic-tooltip`, [title, reason], mobile);
+  await page.mouse.move(0, 0);
+  await reason.waitFor({ state: "hidden" });
+  await capture(page, `${cell}-viewer-epic`, [detail], mobile);
   for (const line of ["다른 사람이 먼저 고쳤습니다", "제목: tA", "상태: 완료"]) await activity.getByText(line).waitFor();
   if (shots) {
     await activity.scrollIntoViewIfNeeded();

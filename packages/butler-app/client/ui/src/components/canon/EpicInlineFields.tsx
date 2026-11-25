@@ -85,10 +85,10 @@ function EpicFieldRest({ field, epic, compact, busy, locked, onEdit, titleRef, t
       }} wrap="anywhere">{value}</Title>
         : <Box grow minWidth="0">{value ? <EpicMarkdown epicId={epic.id} description={value} attachments={epic.attachments} density="compact" />
           : <Typo.Caption>{appCopy.canon.descriptionPlaceholder}</Typo.Caption>}</Box>}
-      {title ? <Presence present={hover || focused} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
+      {title ? <Presence present={!locked && (hover || focused)} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
         : <Stack align="row" shrink={false}><IconButton label={label} disabled={busy} ref={node => { triggerRef.current = node; }}
           onClick={event => { event.stopPropagation(); onEdit(); }}>
-          <Presence present={hover || focused} motion="fade"><Pencil size="sm" /></Presence>
+          <Presence present={!locked && (hover || focused)} motion="fade"><Pencil size="sm" /></Presence>
         </IconButton></Stack>}
     </Stack>
   </Clickable></Tooltip>;

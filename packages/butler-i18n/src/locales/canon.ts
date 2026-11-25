@@ -80,7 +80,7 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       linked: "온라인 프로젝트로 바꿨습니다",
       unlinked: "로컬 전용으로 바꿨습니다",
       members: "멤버",
-      roles: { owner: "소유자", editor: "편집자", viewer: "뷰어" },
+      roles: { owner: "소유자", editor: "편집자", viewer: "보기 전용" },
       roleLabel: "역할",
       roleOf: (email) => `${email} 역할`,
       roleMe: (role, me) => `${role} · ${me}`,

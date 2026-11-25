@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogForm, DialogHeader, DialogTitle,
-  Field, FieldError, FieldLabel, Input, Skeleton,
+  Field, FieldError, FieldLabel, Input, Skeleton, Spinner,
 } from "@/butler-ds";
 import { ButlerAccountSignInStep } from "../settings/ButlerAccountSignInStep.tsx";
 import { useCanonJoin } from "./useCanonJoin.ts";
@@ -28,7 +28,7 @@ export function CanonJoinDialog({ onOpenChange }: { onOpenChange: (open: boolean
         </> : <DialogForm dialog title={copy.join} busy={busy} onSubmit={() => void submit(code)}
           footer={<ButtonContainer size="default" justify="end">
             <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>{appCopy.common.cancel}</Button>
-            <Button type="submit" disabled={!code.trim() || busy}>{copy.joinAction}</Button>
+            <Button type="submit" disabled={!code.trim() || busy} iconStart={busy ? <Spinner size={14} /> : undefined}>{copy.joinAction}</Button>
           </ButtonContainer>}>
           <Field>
             <FieldLabel htmlFor={codeId}>{copy.joinCode}</FieldLabel>

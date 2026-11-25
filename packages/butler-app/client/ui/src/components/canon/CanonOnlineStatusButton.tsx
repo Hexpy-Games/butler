@@ -1,7 +1,7 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonOnlineLink } from "@/app/canonApi.ts";
 import { canonOnlineState } from "@/app/canonOnline.ts";
-import { CircleAlert, Globe2, IconButton, IconSlot, RollingSwap, Unlink } from "@/butler-ds";
+import { CircleAlert, Globe2, IconButton, IconSlot, Presence, Unlink } from "@/butler-ds";
 
 export function CanonOnlineStatusButton({ link, onOpen }: { link: CanonOnlineLink; onOpen: () => void }) {
   useAppLocale();
@@ -15,6 +15,6 @@ export function CanonOnlineStatusButton({ link, onOpen }: { link: CanonOnlineLin
     detached: <Unlink size="sm" />,
   };
   return <IconButton label={link.pending > 0 ? copy.pending(status, link.pending) : status} badge={link.pending} onClick={onOpen}>
-    <RollingSwap itemKey={state}>{icons[state]}</RollingSwap>
+    <Presence key={state} present motion="fade">{icons[state]}</Presence>
   </IconButton>;
 }
