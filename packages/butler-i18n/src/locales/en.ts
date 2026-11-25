@@ -550,6 +550,7 @@ export const enUsCopy: AppCopy = {
       failed: "Couldn't connect. Try again.",
       desktopOffline: "Your computer is off",
       relayOff: "Outside access is off",
+      outsideAccess: "Outside access",
     },
     localNetwork: {
       title: "Allow local network",

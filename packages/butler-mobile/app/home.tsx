@@ -7,6 +7,7 @@ import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import type { Problem } from "@/connection/problems";
+import { displayAddress } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
@@ -49,9 +50,10 @@ export default function Home() {
       return;
     }
     if (id !== latest.current) return;
+    const origin = displayAddress(pairing, pairing.addresses[0], copy.problems.outsideAccess);
     setStatus(result.kind === "ready"
-      ? { kind: "ready", origin: pairing.addresses[0] }
-      : { kind: "problem", origin: pairing.addresses[0], problem: result.problem });
+      ? { kind: "ready", origin }
+      : { kind: "problem", origin, problem: result.problem });
   }, [copy, open]);
   useFocusEffect(useCallback(() => {
     void check();

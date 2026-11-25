@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
+import { displayAddress } from "@/connection/route";
 import { useConversation } from "@/conversation/live";
 import { Button, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
@@ -24,7 +25,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
-  const address = pairing ? pairing.addresses[0].replace(/^[^:]+:\/\//, "") : "";
+  const address = pairing ? displayAddress(pairing, pairing.addresses[0], copy.problems.outsideAccess) : "";
   const [open, setOpen] = useState(false);
   const leaving = useRef(false);
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null

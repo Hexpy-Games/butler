@@ -548,6 +548,7 @@ export const koKrCopy: AppCopy = {
       failed: "연결하지 못했습니다. 다시 시도하십시오.",
       desktopOffline: "컴퓨터가 꺼져 있습니다",
       relayOff: "밖에서 연결이 꺼져 있습니다",
+      outsideAccess: "밖에서 연결",
     },
     localNetwork: {
       title: "로컬 네트워크 허용",
