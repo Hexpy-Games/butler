@@ -171,7 +171,7 @@ export const OFF_SCALE_ALLOWLIST: Record<string, readonly string[]> = {
 
 function allowedOffScale(path: string, entry: string): boolean {
   return Object.entries(OFF_SCALE_ALLOWLIST).some(([file, values]) =>
-    path.endsWith(file) && values.includes(entry));
+    path.replaceAll("\\", "/").endsWith(file) && values.includes(entry));
 }
 
 function rawScaleFindings(

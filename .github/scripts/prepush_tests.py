@@ -224,6 +224,22 @@ class PrepushChecks(unittest.TestCase):
                 patch.object(prepush, 'run', return_value=False):
             self.assertEqual(prepush.main([]), 1)
 
+    # test-category: pure-logic
+    def test_ci_script_tests_run_only_on_the_lint_runner_os_family(self):
+        for windows in (False, True):
+            with self.subTest(windows=windows), \
+                    patch.object(prepush, 'HOST_IS_WINDOWS', windows), \
+                    patch.object(prepush, 'changed_paths', return_value=('HEAD', ['.github/scripts/ci_policy.py'])), \
+                    patch.object(prepush, 'output', return_value='ci/checks'), \
+                    patch.object(prepush, 'run', return_value=True) as run, \
+                    contextlib.redirect_stderr(io.StringIO()) as errors, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(prepush.main([]), 0)
+                labels = [call.args[0] for call in run.call_args_list]
+                self.assertEqual(any(l.startswith('CI-script ') for l in labels), not windows)
+                self.assertEqual('SKIP CI-script tests: the lint job runs on ubuntu-latest' in errors.getvalue(),
+                                 windows)
+
     # test-category: format-pin
     def test_hook_is_executable_and_cannot_silently_skip_checks(self):
         hook = ROOT / '.githooks/pre-push'
