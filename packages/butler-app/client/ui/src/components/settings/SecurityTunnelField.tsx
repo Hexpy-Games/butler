@@ -13,7 +13,7 @@ export function SecurityTunnelField({ tunnel, account, justEnabled, disabled, on
   onChange: (enabled: boolean) => void;
 }) {
   const copy = appCopy.settings.security;
-  const label = <>{copy.tunnel}<Tag>{appCopy.butlerAccount.plans.plus}</Tag></>;
+  const label = <>{copy.tunnel}<Tag tone="accent">{appCopy.butlerAccount.plans.plus}</Tag></>;
   if (tunnel.enabled || !account || (account.signed_in && account.entitlements.features.tunnel === true)) {
     return (
       <SettingsSwitch
