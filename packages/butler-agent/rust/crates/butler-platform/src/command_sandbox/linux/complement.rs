@@ -435,7 +435,10 @@ pub(super) fn project_write(
     // allow changing top-level protected names. Split ancestors of secrets.
     if mounted {
         let none = Denied::new(BTreeSet::new(), &[], mounts);
-        grant_complement(rules, root, &none, &deny_execute, rights)?;
+        let extra = policy.extra.iter().map(PathBuf::as_path);
+        for root in std::iter::once(root).chain(extra.filter(|path| *path != root)) {
+            grant_complement(rules, root, &none, &deny_execute, rights)?;
+        }
     } else {
         let mut blocked = policy.write_denied.clone();
         blocked.extend(policy.credentials.iter().cloned());
@@ -459,7 +462,11 @@ pub(super) fn project_write(
         policy
             .denied
             .iter()
-            .filter(|path| !mounted || !path.starts_with(root))
+            .filter(|path| {
+                !mounted
+                    || !(path.starts_with(root)
+                        || policy.extra.iter().any(|root| path.starts_with(root)))
+            })
             .filter(|path| {
                 path.file_name()
                     .is_some_and(|name| super::super::secret_name(&name.to_string_lossy()))

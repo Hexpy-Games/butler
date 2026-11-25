@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 pub struct Plan {
     /// Physical admitted project root.
     pub project: WinPath,
+    /// Other admitted writable folder roots.
+    pub extra: Vec<WinPath>,
     /// Physical Butler data root.
     pub data: WinPath,
     /// Sanitized host environment, before profile redirection.
@@ -70,15 +72,21 @@ impl Plan {
             environment::get(&self.host_environment, "SYSTEMROOT").ok_or("SYSTEMROOT required")?,
         )?;
         let mut write = vec![self.project.clone()];
+        write.extend(self.extra.iter().cloned());
         write.extend(scratch.clone());
         let mut read = self.tools.readonly.clone();
         read.push(system);
         read.push(self.project.join(".git")?);
+        for root in &self.extra {
+            read.push(root.join(".git")?);
+        }
         let mut deny = self.credentials.clone();
         deny.extend(self.tools.denied.clone());
         deny.push(self.project.join(".project-ledger")?);
         for secret in &self.secrets {
-            if !secret.is_within(&self.project) {
+            if !secret.is_within(&self.project)
+                && !self.extra.iter().any(|root| secret.is_within(root))
+            {
                 return Err("secret outside project");
             }
             if secret.as_str().rsplit('\\').next() == Some(".git") {
@@ -118,7 +126,10 @@ impl Plan {
             )?);
         }
         for grant in write.iter().chain(read) {
-            if self.project.is_within(grant) && grant != &self.project {
+            if std::iter::once(&self.project)
+                .chain(&self.extra)
+                .any(|root| root.is_within(grant) && grant != root)
+            {
                 return Err("project ancestor grant");
             }
             if grant.is_drive_root() {

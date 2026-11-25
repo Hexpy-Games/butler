@@ -1,5 +1,6 @@
 //! Linux P1/P4: real command boundary and public-chat approval admission.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod allowed_folders;
 mod boundaries;
 mod latency;
 mod mount_aliases;
