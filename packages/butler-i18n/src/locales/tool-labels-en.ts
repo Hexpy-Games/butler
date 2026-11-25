@@ -1,4 +1,8 @@
 export const additionalToolLabels = {
+  computer_list: "List computers",
+  computer_add: "Add computer",
+  computer_edit: "Edit computer",
+  computer_remove: "Remove computer",
   generate_image: "Create image",
   edit_image: "Edit image",
   browser_history_search: "Search browsing history",

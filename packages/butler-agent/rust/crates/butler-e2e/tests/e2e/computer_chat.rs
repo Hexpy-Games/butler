@@ -44,17 +44,17 @@ fn add_args() -> Value {
 }
 
 fn add_questions() -> Value {
-    let proposed = |field, title, label| {
+    let proposed = |field, eyebrow, title, label| {
         json!({
-            "id":format!("computer_add.{field}"),"eyebrow":"컴퓨터","title":title,"kind":"single",
+            "id":format!("computer_add.{field}"),"eyebrow":eyebrow,"title":title,"kind":"single",
             "allow_custom":true,"options":[{"id":"proposed","label":label,"recommended":true}]
         })
     };
     json!({"questions":[
-        proposed("name","컴퓨터 이름","Studio"),
-        proposed("address","SSH 주소 (~/.ssh/config 별칭 사용 가능)", ALIAS),
-        proposed("folder","작업 폴더","~"),
-        {"id":"computer_add.model","eyebrow":"컴퓨터","title":"그 컴퓨터에서 쓸 모델","kind":"single",
+        proposed("name","이름","컴퓨터 이름","Studio"),
+        proposed("address","주소","SSH 주소 (~/.ssh/config 별칭 사용 가능)", ALIAS),
+        proposed("folder","폴더","작업 폴더","~"),
+        {"id":"computer_add.model","eyebrow":"모델","title":"그 컴퓨터에서 쓸 모델","kind":"single",
             "allow_custom":false,"options":[
                 {"id":"model:follow","label":"이 기기와 같게"},
                 {"id":"model:chatgpt","label":"ChatGPT"},
@@ -300,7 +300,7 @@ async fn chat_edit_and_remove() -> Result<(), HarnessError> {
             .await?;
     let field = format!("computer_edit:{id}.folder");
     let card = pending(&s, &turn, json!({"questions":[{
-        "id":field,"eyebrow":"컴퓨터","title":"Studio의 작업 폴더","kind":"single","allow_custom":true,
+        "id":field,"eyebrow":"폴더","title":"Studio의 작업 폴더","kind":"single","allow_custom":true,
         "options":[{"id":"proposed","label":folder,"recommended":true}]
     }]})).await?;
     reply(

@@ -102,7 +102,14 @@ export function useLiveSessionEvents(): void {
       publishChatGptEvent(event);
       publishLibraryEvent(event);
       publishConnectorEvent(event);
-      publishComputerEvent(event, navigationReconciliation.requestRefresh);
+      publishComputerEvent(event, {
+        refreshNavigation: navigationReconciliation.requestRefresh,
+        recent: isRecentEvent(event),
+        openSettings: async (section) => {
+          await useButlerStore.getState().openSettings(section);
+          return useButlerStore.getState().view.kind === "settings";
+        },
+      });
       publishDocumentEvent(event);
       publishCanonEvent(event);
       publishCanonQueueEvent(event);

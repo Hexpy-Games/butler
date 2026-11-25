@@ -6,6 +6,7 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 import { computerAuthUrl, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { checkComputerSignInEvent } from "../support/computer-sign-in-event.ts";
 import { captureRemovedComputer } from "../support/removed-computer-smoke.ts";
 
 const language = process.env.COMPUTERS_SMOKE_LANGUAGE ?? "ko";
@@ -391,6 +392,27 @@ try {
   console.log(JSON.stringify({
     ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "delete-unreachable", "forget-memories", "layouts"], widths,
   }));
+
+  const eventPage = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+  try {
+    await server.signIn(eventPage);
+    await configurePage(eventPage, server, adminHeaders);
+    await checkComputerSignInEvent(eventPage, {
+      fake,
+      async serve(events) {
+        let sent = 0;
+        await eventPage.route("**/events/live**", async route => {
+          const event = events[sent++];
+          if (!event) return route.fulfill({ status: 204 });
+          await route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify(await event)}\n\n` });
+        });
+        await eventPage.goto(server.url);
+      },
+    });
+    console.log("Computers sign-in event checks passed");
+  } finally {
+    await eventPage.close();
+  }
 
   await captureRemovedComputer(browser, language);
 
