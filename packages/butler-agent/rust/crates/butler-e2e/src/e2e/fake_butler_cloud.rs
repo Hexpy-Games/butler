@@ -236,8 +236,7 @@ fn authenticated(
             {"id": "dev_fake", "name": "Butler", "platform": "macos", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": true},
             {"id": "dev_other", "name": "Other", "platform": "linux", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": false}
         ]})).into_response(),
-        (Method::DELETE, "/v1/tunnel")
-        | (Method::DELETE, "/v1/devices/dev_other")
+        (Method::DELETE, "/v1/tunnel" | "/v1/devices/dev_other")
         | (Method::POST, "/v1/auth/sign-out") => StatusCode::NO_CONTENT.into_response(),
         (Method::POST, "/v1/pages") => {
             let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);

@@ -57,28 +57,7 @@ pub(in crate::gateway::http) async fn pair_device_request(
     let key = super::pairing_limit::client_key(&request);
     let body = read_body_with_limit(request.into_body(), super::connect::MAX_FORM_BYTES).await?;
     let pair: PairRequest = serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
-    let noise_static: Option<[u8; 32]> = pair
-        .noise_static
-        .as_deref()
-        .map(|encoded| {
-            URL_SAFE_NO_PAD
-                .decode(encoded)
-                .ok()
-                .and_then(|bytes| bytes.try_into().ok())
-                .ok_or_else(|| {
-                    HttpError::public(400, "invalid_request", "Invalid Noise static key.")
-                })
-        })
-        .transpose()?;
-    if let Some(peer) = peer
-        && noise_static != Some(peer.remote_static)
-    {
-        return Err(HttpError::public(
-            403,
-            "noise_static_mismatch",
-            "Pair from the QR code on your computer.",
-        ));
-    }
+    let noise_static = validate_noise_static(pair.noise_static.as_deref(), peer)?;
     let name = pair.device_name.trim();
     let kind = DeviceKind::parse(&pair.platform).filter(|kind| *kind != DeviceKind::Browser);
     let Some(kind) = kind.filter(|_| {
@@ -119,6 +98,33 @@ pub(in crate::gateway::http) async fn pair_device_request(
         return Err(super::connect::rejected(state, &key));
     };
     paired_response(state, sessions, &pairing_id, name, &ip, kind, noise_static).await
+}
+
+fn validate_noise_static(
+    encoded: Option<&str>,
+    peer: Option<super::super::listeners::TunnelPeer>,
+) -> Result<Option<[u8; 32]>, HttpError> {
+    let noise_static = encoded
+        .map(|encoded| {
+            URL_SAFE_NO_PAD
+                .decode(encoded)
+                .ok()
+                .and_then(|bytes| bytes.try_into().ok())
+                .ok_or_else(|| {
+                    HttpError::public(400, "invalid_request", "Invalid Noise static key.")
+                })
+        })
+        .transpose()?;
+    if let Some(peer) = peer
+        && noise_static != Some(peer.remote_static)
+    {
+        return Err(HttpError::public(
+            403,
+            "noise_static_mismatch",
+            "Pair from the QR code on your computer.",
+        ));
+    }
+    Ok(noise_static)
 }
 
 async fn paired_response(
