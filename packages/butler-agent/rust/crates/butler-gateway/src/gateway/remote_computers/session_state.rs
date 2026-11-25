@@ -17,6 +17,17 @@ pub(in crate::gateway) struct SessionStateRow {
     pub attention_required: bool,
 }
 
+impl SessionStateRow {
+    pub(super) fn has_active_turn(&self) -> bool {
+        self.active_turn_state.as_deref().is_some_and(|state| {
+            !matches!(
+                state,
+                "delivered" | "cancelled" | "failed" | "runtime_fault"
+            )
+        })
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 pub(in crate::gateway) struct SessionStateCache {
     pub version: u64,
@@ -73,16 +84,7 @@ struct StateReply {
 
 async fn refresh(link: &Link, computer_id: &str) -> Result<bool, HttpError> {
     let (_guard, computer) = locked(&link.root, computer_id).await?;
-    let reply = relay::request(
-        &computer,
-        "GET",
-        "/remote/sessions/state",
-        Vec::new(),
-        link.cancel.clone(),
-    )
-    .await?;
-    let StateReply { sessions } =
-        serde_json::from_value(relay::data(reply)?).map_err(|_| HttpError::Internal)?;
+    let sessions = request(&computer, link.cancel.clone()).await?;
     let cache = SessionStateCache {
         version: 1,
         sessions: sessions
@@ -109,4 +111,21 @@ async fn refresh(link: &Link, computer_id: &str) -> Result<bool, HttpError> {
     })
     .await
     .map_err(|_| HttpError::Internal)?
+}
+
+pub(super) async fn request(
+    computer: &super::Computer,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Result<Vec<SessionStateRow>, HttpError> {
+    let reply = relay::request(
+        computer,
+        "GET",
+        "/remote/sessions/state",
+        Vec::new(),
+        cancel,
+    )
+    .await?;
+    let StateReply { sessions } =
+        serde_json::from_value(relay::data(reply)?).map_err(|_| HttpError::Internal)?;
+    Ok(sessions)
 }

@@ -1,5 +1,4 @@
 //! Durable application service behind the native App HTTP facade.
-
 mod assets;
 mod image_usage;
 mod initiated;
@@ -45,6 +44,7 @@ mod hooks;
 mod internal_continuation;
 mod keyed_locks;
 mod library;
+pub(super) mod removed_computer_sessions;
 pub use documents::AppDocumentCommand;
 mod still_delivery;
 pub use library::{AppLibraryChange, AppLibraryCommand, AppLibraryQuery};

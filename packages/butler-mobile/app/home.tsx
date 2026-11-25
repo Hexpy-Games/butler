@@ -186,13 +186,14 @@ function EpicRow({ epic }: { epic: EpicCard }) {
 
 function SessionRow({ session, locale, computerName, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; computerName?: string; onLongPress?: () => void }) {
   const copy = useMobileCopy();
+  const removedComputer = getAppCopy(useAppLocale()).computers.removedComputer;
   const title = session.title.trim() ? session.title : copy.conversations.untitled;
   const mark = sessionMark(session);
   return <ListRow icon={session.project_id ? icons.Notebook : icons.MessageSquare}
-    title={title} description={sessionSubtitle(session, computerName, copy.conversations)}
+    title={title} description={sessionSubtitle(session, computerName, copy.conversations, removedComputer)}
     descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())} onLongPress={onLongPress}
     trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
       : mark === "working" ? <Spinner label={copy.conversations.working} />
       : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : undefined}
-    navigates onPress={() => router.push({ pathname: "/chat/[id]", params: { id: session.id, title } })} />;
+    navigates onPress={() => router.push({ pathname: "/chat/[id]", params: { id: session.id, title, computer_id: session.computer_id, computer_name: session.computer_name } })} />;
 }

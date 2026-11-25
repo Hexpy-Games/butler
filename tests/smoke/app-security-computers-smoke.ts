@@ -6,6 +6,7 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 import { computerAuthUrl, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { captureRemovedComputer } from "../support/removed-computer-smoke.ts";
 
 const language = process.env.COMPUTERS_SMOKE_LANGUAGE ?? "ko";
 setAppCopyLanguage(language);
@@ -359,6 +360,8 @@ try {
   console.log(JSON.stringify({
     ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "delete-unreachable", "forget-memories", "layouts"], widths,
   }));
+
+  await captureRemovedComputer(browser, language);
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
   if (screenshots !== undefined) {

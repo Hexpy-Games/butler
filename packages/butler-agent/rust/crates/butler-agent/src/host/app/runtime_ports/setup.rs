@@ -260,6 +260,18 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move { memory.import_turn(computer_id, line).await })
     }
 
+    fn computer_session_turns(
+        &self,
+        computer_id: String,
+        runtime_session_id: String,
+    ) -> ApplicationFuture<Vec<butler_gateway::gateway::RemovedComputerTurn>> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            computer_memory::session_turns(this.validated_root()?, computer_id, runtime_session_id)
+                .await
+        })
+    }
+
     fn computer_memory_copy(&self) -> ApplicationFuture<serde_json::Value> {
         let memory = self.0.computer_memory.clone();
         Box::pin(async move { memory.copy().await })
