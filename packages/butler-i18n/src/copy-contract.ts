@@ -519,6 +519,13 @@ export interface MobileCopy {
   settings: {
     title: string;
     computer: string;
+    notifications: string;
+    notificationsFailed: string;
+    notificationsSignIn: string;
+    notificationsAllow: string;
+    notificationsPermissionFooter: string;
+    notificationsKindsTitle: string;
+    notificationKinds: Record<"needs_input" | "done" | "failed" | "schedule_blocked", string>;
     disconnect: string;
     disconnectTitle: string;
     disconnectBody: string;

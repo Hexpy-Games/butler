@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import { router } from "expo-router";
+import { createGatewayClient } from "../../../butler-protocol/src/client/index.ts";
+import { enablePush } from "@/notifications/push";
 import { thisDevice } from "./device";
 import { isLocalNetworkHost } from "./localNetwork";
 import { nativeFetch } from "./nativeFetch";
@@ -20,6 +22,9 @@ export async function pairAndOpenHome(origin: string, code: string): Promise<Pro
   } catch {
     return "failed";
   }
+  void enablePush(createGatewayClient({
+    origin, fetch: nativeFetch, token: () => result.pairing.deviceToken,
+  }), result.pairing.butlerId);
   if (router.canDismiss()) router.dismissAll();
   router.replace("/home");
   return null;

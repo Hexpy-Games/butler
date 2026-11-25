@@ -22,6 +22,18 @@ pub enum ButlerAccountRequest {
     RevokeDevice {
         id: String,
     },
+    /// Local only: true when signed in on this computer (no network call).
+    #[serde(skip)]
+    PushAvailable,
+    #[serde(skip)]
+    PushTokens {
+        tokens: Vec<String>,
+    },
+    #[serde(skip)]
+    Push {
+        messages: Vec<serde_json::Value>,
+        tokens: Vec<String>,
+    },
 }
 
 /// `404 butler_account_disabled`: the feature is off on this computer.

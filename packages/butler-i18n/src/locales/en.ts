@@ -615,6 +615,13 @@ export const enUsCopy: AppCopy = {
     settings: {
       title: "Settings",
       computer: "Computer",
+      notifications: "Notifications",
+      notificationsFailed: "Couldn't change notifications.",
+      notificationsSignIn: "Sign in to your Butler account on your computer to get notifications.",
+      notificationsAllow: "Allow Notifications",
+      notificationsPermissionFooter: "Allow notifications for Butler in Settings.",
+      notificationsKindsTitle: "Notify me about",
+      notificationKinds: { needs_input: "Needs your input", done: "Task done", failed: "Task failed", schedule_blocked: "Schedule stopped" },
       disconnect: "Disconnect",
       disconnectTitle: "Disconnect from this computer?",
       disconnectBody: "You'll need to pair again to use Butler.",

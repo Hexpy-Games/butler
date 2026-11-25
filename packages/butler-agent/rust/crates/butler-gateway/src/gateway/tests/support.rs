@@ -474,6 +474,15 @@ impl crate::gateway::GatewayDevices for TestApplication {
     fn save_device(&self, _: crate::gateway::PairedDevice) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    fn set_device_push_token(
+        &self,
+        _: String,
+        _: Option<String>,
+        _: Option<String>,
+        _: Option<String>,
+    ) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn revoke_devices(&self, _: Option<String>, _: u64) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }

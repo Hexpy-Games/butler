@@ -6,6 +6,7 @@
     reason = "E2E assertions"
 )]
 mod delegated;
+mod push;
 mod queries;
 mod regressions;
 mod reminders;
