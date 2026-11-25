@@ -277,6 +277,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"identity-site","title":"Identity fixture"}),
             ),
         ],
+        "Publish passkey" => vec![
+            (
+                "write_file",
+                json!({"path":"passkey-site/index.html","content":super::passkey::PAGE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"passkey-site","title":"Passkey fixture"}),
+            ),
+        ],
         "Publish devtools" => vec![
             (
                 "write_file",
@@ -379,6 +389,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
         for prompt in [
             "Publish images",
             "Publish identity",
+            "Publish passkey",
             "Publish broken",
             "Publish devtools",
             "Publish devtools long",
