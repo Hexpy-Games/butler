@@ -40,8 +40,16 @@ export function apiAuth(token: string, target: string): ProxyAuth {
   return { ok: true, path: target.slice(1 + token.length), setCookie: false };
 }
 
-export function forwardHeaders(headers: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(FORWARD.filter(name => headers[name] !== undefined).map(name => [name, headers[name]]));
+export function forwardHeaders(headers: Record<string, string>, content: boolean): Record<string, string> {
+  const out = Object.fromEntries(FORWARD.filter(name => headers[name] !== undefined).map(name => [name, headers[name]]));
+  if (content && headers.referer) {
+    try {
+      out.referer = new URL(headers.referer, "http://127.0.0.1").pathname;
+    } catch {
+      // Drop malformed Referer values.
+    }
+  }
+  return out;
 }
 
 /** Desktop response headers minus hop-by-hop, cookies and any CORS header; plus the HttpOnly bt cookie after a query-authorized request. */

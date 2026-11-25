@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { apiAuth, contentAuth, responseHeaders } from "./auth";
+import { apiAuth, contentAuth, forwardHeaders, responseHeaders } from "./auth";
 
 // test-category: security
 test("proxy accepts only the current token by query, cookie or API path, and sets the cookie once", () => {
@@ -13,4 +13,12 @@ test("proxy accepts only the current token by query, cookie or API path, and set
   expect(apiAuth(token, `/message-files/f1?bt=${token}`)).toEqual({ ok: false });
   expect(responseHeaders({ "content-type": "text/html", "access-control-allow-origin": "*", "set-cookie": "x=1", connection: "keep-alive" }, token))
     .toEqual({ "content-type": "text/html", "set-cookie": `bt=${token}; HttpOnly; SameSite=Strict; Path=/` });
+});
+
+// test-category: pure-logic
+test("content proxy forwards only the Referer pathname and drops malformed values", () => {
+  const headers = forwardHeaders({ referer: "http://127.0.0.1:1234/__o/abc/index.html?bt=SECRET" }, true);
+  expect(headers.referer).toBe("/__o/abc/index.html");
+  expect(JSON.stringify(headers)).not.toContain("SECRET");
+  expect(forwardHeaders({ referer: "http://[" }, true)).not.toHaveProperty("referer");
 });

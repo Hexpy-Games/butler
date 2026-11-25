@@ -23,7 +23,7 @@ async function serve(event: ProxyRequestEvent, ports: Ports, contentToken: strin
   inflight.set(event.id, controller);
   let started = false;
   try {
-    const headers = forwardHeaders(event.headers);
+    const headers = forwardHeaders(event.headers, content);
     if (!content) headers.authorization = `Bearer ${deviceToken}`;
     const response = await tunnelRequest(peer, { target: content ? "content" : "api", method: event.method, path: auth.path, headers, body: null, signal: controller.signal });
     ButlerProxy.respondHead(event.id, response.status, responseHeaders(response.headers, auth.setCookie ? contentToken : null));
