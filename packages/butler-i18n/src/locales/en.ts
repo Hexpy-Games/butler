@@ -617,7 +617,7 @@ export const enUsCopy: AppCopy = {
       computer: "Computer",
       notifications: "Notifications",
       notificationsFailed: "Couldn't change notifications.",
-      notificationsSignIn: "Sign in to your Butler account on your computer to use this.",
+      notificationsSignIn: "Sign in to your Butler account on your computer to get notifications.",
       notificationsAllow: "Allow Notifications",
       notificationsPermissionFooter: "Allow notifications for Butler in iOS Settings.",
       notificationsKindsTitle: "Notify me about",
