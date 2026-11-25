@@ -1,20 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AppState, Linking } from "react-native";
+import { getPermissionsAsync, type NotificationPermissionsStatus } from "expo-notifications";
+import { useFocusEffect } from "expo-router";
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { PUSH_KINDS, type PushKind } from "@/connection/pairings";
 import { pairingStore } from "@/connection/store";
 import { useConversation } from "@/conversation/live";
-import { ListGroup, showToast } from "@/ds";
-import { useMobileCopy } from "@/i18n";
+import { ListGroup, ListRow, showToast } from "@/ds";
+import { useAppLocale } from "@/i18n";
 import { disablePush, enablePush, setPushKinds } from "@/notifications/push";
 import { SettingsScreen } from "@/settings/layout";
 import { SwitchRow } from "@/settings/rows";
 
 export default function NotificationsSettings() {
-  const copy = useMobileCopy();
+  const app = getAppCopy(useAppLocale());
+  const copy = app.mobile;
   const { client, pairing } = useConversation();
   const [push, setPush] = useState(false);
   const [kinds, setKinds] = useState<PushKind[]>([...PUSH_KINDS]);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermissionsStatus | null>(null);
+  const refreshPermission = useCallback(() => getPermissionsAsync().then(setPermission, () => {}), []);
+  useFocusEffect(useCallback(() => {
+    void refreshPermission();
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "active") void refreshPermission();
+    });
+    return () => subscription.remove();
+  }, [refreshPermission]));
   useEffect(() => {
     void pairingStore.loadActive().then(active => {
       setPush(active?.pushEnabled === true);
@@ -25,7 +39,8 @@ export default function NotificationsSettings() {
     if (!client) return;
     void client.request<{ available: boolean }>("/devices/self/push").then(v => setAvailable(v.available), () => setAvailable(null));
   }, [client]);
-  const off = !client || !pairing || available === false;
+  const denied = permission?.status === "denied";
+  const needsSettings = denied && !permission.canAskAgain;
 
   async function toggle(on: boolean) {
     if (!client || !pairing) return;
@@ -35,6 +50,7 @@ export default function NotificationsSettings() {
       if (ok) setPush(on);
       else showToast({ message: copy.settings.notificationsFailed, tone: "warning" });
     } finally {
+      if (on) await refreshPermission();
       setBusy(false);
     }
   }
@@ -52,12 +68,14 @@ export default function NotificationsSettings() {
   }
 
   return <SettingsScreen title={copy.settings.notifications}>
-    <ListGroup footer={available === false ? copy.settings.notificationsSignIn : undefined}>
-      <SwitchRow title={copy.settings.notificationsReceive} value={push} disabled={off || busy} onChange={on => void toggle(on)} />
-    </ListGroup>
-    <ListGroup>
+    {needsSettings ? <ListGroup footer={copy.settings.notificationsPermissionFooter}>
+      <ListRow title={copy.settings.notificationsAllow} meta={app.automations.off} navigates onPress={() => void Linking.openSettings()} />
+    </ListGroup> : <ListGroup footer={available === false ? copy.settings.notificationsSignIn : undefined}>
+      <SwitchRow title={copy.settings.notificationsAllow} value={push} disabled={available === false || busy} onChange={on => void toggle(on)} />
+    </ListGroup>}
+    {push && available !== false && !denied ? <ListGroup label={copy.settings.notificationsKindsTitle}>
       {PUSH_KINDS.map(kind => <SwitchRow key={kind} title={copy.settings.notificationKinds[kind]}
-        value={kinds.includes(kind)} disabled={off || !push || busy} onChange={on => void toggleKind(kind, on)} />)}
-    </ListGroup>
+        value={kinds.includes(kind)} disabled={busy} onChange={on => void toggleKind(kind, on)} />)}
+    </ListGroup> : null}
   </SettingsScreen>;
 }
