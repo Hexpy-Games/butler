@@ -592,6 +592,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/security") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSecurity"));
   }
+  if (method === "PUT" && url.pathname === "/security/tunnel") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "setTunnel", parseBody(options.body)));
+  }
   if (url.pathname === "/security/pairing" && (method === "GET" || method === "POST")) {
     const action = method === "POST" ? "issuePairingCode" : "getPairingStatus";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));

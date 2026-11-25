@@ -71,6 +71,7 @@ test("actual preload sends every security action through main's security channel
     ["revokeButlerAccountDevice", { id: "Device_1" }, "revokeButlerAccountDevice", { id: "Device_1" }],
     ["getButlerBackup", undefined, "getButlerBackup", undefined],
     ["postButlerBackup", {}, "postButlerBackup", { payload: {} }],
+    ["setTunnel", { enabled: true }, "setTunnel", { payload: { enabled: true } }],
   ] as const;
   for (const [action, input] of preloadRoutes) expect(await bridge[action]!(input)).toEqual({ ok: true, data: {} });
   expect(calls).toEqual(preloadRoutes.map(([, , route, body]) => ["butler:security-request", body ? { route, body } : { route }]));

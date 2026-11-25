@@ -114,6 +114,7 @@ test("the security routes carry the admin header next to the bearer token", asyn
     [{ route: "getComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "GET", `/computers/${COMPUTER_ID}/oauth/flow_1`],
     [{ route: "cancelComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "POST", `/computers/${COMPUTER_ID}/oauth/flow_1/cancel`],
     [{ route: "getSecurity" }, "GET", "/security"],
+    [{ route: "setTunnel", body: { payload: { enabled: true } } }, "PUT", "/security/tunnel"],
     [{ route: "getButlerAccount" }, "GET", "/setup/butler-account"],
     [{ route: "postButlerAccount", body: { payload: {} } }, "POST", "/setup/butler-account"],
     [{ route: "signOutButlerAccount" }, "DELETE", "/setup/butler-account"],
