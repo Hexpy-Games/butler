@@ -163,7 +163,10 @@ impl ButlerAccount {
         }
     }
 
-    pub(crate) async fn status(&self, plan: Option<String>) -> Result<Value, GatewayApplicationError> {
+    pub(crate) async fn status(
+        &self,
+        plan: Option<String>,
+    ) -> Result<Value, GatewayApplicationError> {
         let Some(stored) = self.read().await? else {
             return Ok(json!({"signed_in": false}));
         };
