@@ -115,8 +115,9 @@ fn lexical(
     )
     .unwrap_or_default();
     let grams_json = serde_json::to_string(&query_grams).map_err(json_error)?;
+    let postings = crate::cognition::graph::postings_relation(db).map_err(db_error)?;
     let matched_sql = format!(
-        "SELECT DISTINCT p.node_id,p.source_id,p.surface_original FROM memory_alias_postings p \
+        "SELECT DISTINCT p.node_id,p.source_id,p.surface_original FROM {postings} p \
         JOIN memory_nodes e ON e.id=p.node_id JOIN memory_chunk_sources s ON s.source_id=p.source_id \
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision \
         LEFT JOIN memory_claims mc ON mc.node_id=e.id \
@@ -138,7 +139,7 @@ fn lexical(
         documents.push((id, lexical::folded_grams(&surface)));
     }
     let df = if super::current_millis() < deadline {
-        document_frequencies(db, project, as_of, &query_grams, &documents)?
+        document_frequencies(db, project, as_of, &query_grams, &documents, postings)?
     } else {
         HashMap::new()
     };
@@ -158,6 +159,7 @@ fn document_frequencies(
     as_of: &str,
     query_grams: &[String],
     documents: &[(String, Vec<String>)],
+    postings: &str,
 ) -> CognitionResult<HashMap<String, usize>> {
     let mut all_grams = Vec::new();
     let mut seen = HashSet::new();
@@ -175,7 +177,7 @@ fn document_frequencies(
         JOIN memory_nodes e ON e.id=a.node_id JOIN memory_chunk_sources s ON s.source_id=a.source_id \
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision \
         LEFT JOIN memory_claims mc ON mc.node_id=e.id WHERE {ELIGIBLE}) \
-        SELECT p.gram,COUNT(*) FROM memory_alias_postings p JOIN eligible d ON d.node_id=p.node_id AND d.source_id=p.source_id \
+        SELECT p.gram,COUNT(*) FROM {postings} p JOIN eligible d ON d.node_id=p.node_id AND d.source_id=p.source_id \
         WHERE p.gram IN (SELECT value FROM json_each(?3)) GROUP BY p.gram"
     );
     for gram in &all_grams {

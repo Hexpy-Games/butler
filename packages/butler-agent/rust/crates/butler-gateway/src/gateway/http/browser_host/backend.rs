@@ -137,7 +137,10 @@ pub(super) async fn headless_call(
     session: &str,
     count: usize,
 ) -> Result<Response, HttpError> {
-    let Some(headless) = state.headless.clone() else {
+    let (Some(headless), Some(origin)) = (
+        state.headless.clone(),
+        super::signed_in::content_origin(&state),
+    ) else {
         return response(count, json!({"status":"unavailable","reason":"no_browser"}));
     };
     let tab_id = frame["tab"].as_str().unwrap_or("").to_owned();
@@ -174,7 +177,7 @@ pub(super) async fn headless_call(
                 );
             }
             frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
-                &format!("http://127.0.0.1:{}", super::super::content::port(&state)),
+                &origin,
                 tab["url"].as_str().unwrap_or(""),
             );
             if state
@@ -200,9 +203,18 @@ pub(super) async fn headless_call(
         return response(count, result);
     }
     enforce_result_policy(&state, session, op, &mut result);
+    background(&headless, &tab_id, &mut result);
     super::assets::finish(&state, session, op, &mut result).await?;
     super::shots::keep(&state, session, &mut result).await?;
     response(count, result)
+}
+
+/// Butler's own headless browser has no window: the user sees none of its tabs.
+fn background(headless: &butler_runtime::browser::Headless, frame_tab: &str, result: &mut Value) {
+    let tab = result["tab"].as_str().unwrap_or(frame_tab).to_owned();
+    if headless.tab(&tab).is_some() {
+        result["seen_by_user"] = json!("background");
+    }
 }
 
 /// A browser holding all the tabs memory allows: the conversation's own tabs

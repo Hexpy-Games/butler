@@ -67,6 +67,7 @@ impl OauthFlows {
         force: bool,
         kind: SignInKind,
         redirect_port: Option<u16>,
+        callback_socket: Option<std::path::PathBuf>,
     ) -> OauthFlowView {
         let _serial = self.starting.lock().await;
         if force || kind != SignInKind::Default || redirect_port.is_some() {
@@ -89,7 +90,7 @@ impl OauthFlows {
                 ));
             }
         }
-        match Attempt::start(&self.configuration, kind, redirect_port).await {
+        match Attempt::start(&self.configuration, kind, redirect_port, callback_socket).await {
             Ok(attempt) => self.spawn(attempt),
             Err(code) => self.record(finished(OauthFlowStatus::Failed, None, Some(code))),
         }
@@ -157,6 +158,7 @@ impl OauthFlows {
         view.auth_url = Some(attempt.auth_url.clone());
         view.redirect_uri = Some(attempt.redirect_uri.clone());
         view.callback_port = attempt.callback_port;
+        view.callback_socket = attempt.callback_socket;
         let stop = CancellationToken::new();
         let context = FlowContext {
             flows: self.flows.clone(),
@@ -268,6 +270,7 @@ fn finished(
         auth_url: None,
         redirect_uri: None,
         callback_port: None,
+        callback_socket: false,
         label,
         error,
         plan_enabled: None,

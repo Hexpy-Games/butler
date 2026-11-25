@@ -17,23 +17,37 @@ pub(crate) async fn patch_app_config(
     settings.patch(data_root, installation, None, patch).await
 }
 
-/// The App gateway URL of the ready service that owns `data_root`, if any.
+pub(crate) enum AppEndpoint {
+    Tcp(String),
+    Remote(PathBuf),
+}
+
+/// The App gateway endpoint of the ready service that owns `data_root`, if any.
 /// A service that is still starting is waited for, up to `patience`.
 pub(crate) async fn running_app_endpoint(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
     patience: std::time::Duration,
-) -> Result<Option<String>, crate::host::HostError> {
+) -> Result<Option<AppEndpoint>, crate::host::HostError> {
     let deadline = std::time::Instant::now() + patience;
     loop {
         let Some(record) = control::verified_instance_async(data_root, installation).await? else {
             return Ok(None);
         };
         if record.state == "ready" || std::time::Instant::now() >= deadline {
-            return Ok((record.state == "ready" && record.app_enabled)
-                .then_some(record.app_endpoint)
-                .flatten()
-                .filter(|endpoint| !endpoint.is_empty()));
+            if record.state != "ready" || !record.app_enabled {
+                return Ok(None);
+            }
+            return Ok(match record.app_endpoint {
+                Some(endpoint) if !endpoint.is_empty() => Some(AppEndpoint::Tcp(endpoint)),
+                None if record
+                    .control_endpoint
+                    .is_some_and(|endpoint| endpoint.starts_with("unix:")) =>
+                {
+                    Some(AppEndpoint::Remote(data_root.join("remote/agent.sock")))
+                }
+                _ => None,
+            });
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
@@ -81,7 +95,7 @@ pub(crate) async fn memory_status(
     let record = control::verified_instance_async(data_root, installation)
         .await
         .ok()??;
-    crate::host::app::gateway_lifecycle::memory_status(&record)
+    crate::host::app::gateway_lifecycle::memory_status(data_root, &record)
         .await
         .ok()
 }

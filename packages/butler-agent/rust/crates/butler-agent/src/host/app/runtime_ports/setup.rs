@@ -3,6 +3,7 @@
 //! gateway's [`AppSetupPort`].
 
 pub(in crate::host::app) mod butler_account;
+mod push_relay;
 pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
@@ -14,6 +15,7 @@ mod oauth;
 mod readiness;
 
 use butler_platform::secrets::SecretText;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -247,6 +249,26 @@ impl AppSetupPort for AppSetup {
         })
     }
 
+    fn computer_environment(&self, id: String) -> ApplicationFuture<BTreeMap<String, SecretText>> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::computer_environment(&this.configuration, &id, &root).await
+        })
+    }
+
+    fn save_computer_environment(
+        &self,
+        id: String,
+        values: BTreeMap<String, SecretText>,
+    ) -> ApplicationFuture<()> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::save_computer_environment(&this.configuration, &id, &root, values).await
+        })
+    }
+
     fn delete_computer_key(&self, id: String) -> ApplicationFuture<()> {
         let this = self.0.clone();
         Box::pin(async move {
@@ -258,6 +280,18 @@ impl AppSetupPort for AppSetup {
     fn computer_import_turn(&self, computer_id: String, line: Vec<u8>) -> ApplicationFuture<bool> {
         let memory = self.0.computer_memory.clone();
         Box::pin(async move { memory.import_turn(computer_id, line).await })
+    }
+
+    fn computer_session_turns(
+        &self,
+        computer_id: String,
+        runtime_session_id: String,
+    ) -> ApplicationFuture<Vec<butler_gateway::gateway::RemovedComputerTurn>> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            computer_memory::session_turns(this.validated_root()?, computer_id, runtime_session_id)
+                .await
+        })
     }
 
     fn computer_memory_copy(&self) -> ApplicationFuture<serde_json::Value> {
@@ -363,7 +397,16 @@ impl AppSetupPort for AppSetup {
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
         Box::pin(async move {
-            if input.redirect_port.is_some() && !butler_models::models::sealed::is_enabled() {
+            let remote = butler_models::models::sealed::is_enabled();
+            if input.callback_socket && (!remote || input.redirect_port.is_none()) {
+                return Err(GatewayApplicationError::Public {
+                    status: 400,
+                    code: "invalid_request".into(),
+                    message: "callback_socket requires redirect_port on a remote computer.".into(),
+                    source: None,
+                });
+            }
+            if input.redirect_port.is_some() && !remote {
                 return Err(GatewayApplicationError::Public {
                     status: 400,
                     code: "invalid_request".into(),
@@ -371,9 +414,17 @@ impl AppSetupPort for AppSetup {
                     source: None,
                 });
             }
+            let callback_socket = input
+                .callback_socket
+                .then(|| this.data_root.join("remote/oauth.sock"));
             Ok(this
                 .oauth
-                .start(input.force, input.kind, input.redirect_port)
+                .start(
+                    input.force,
+                    input.kind,
+                    input.redirect_port,
+                    callback_socket,
+                )
                 .await)
         })
     }

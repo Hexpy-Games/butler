@@ -1,5 +1,41 @@
 use super::*;
 
+pub(super) fn folder_mutation_with_ineligible_cwd() -> (AccessRequest, AccessDecision) {
+    use crate::workspace::{ScopeRoots, classify_targets};
+
+    let root = std::env::temp_dir().join(format!("butler-access-{}", uuid::Uuid::new_v4()));
+    let data = root.join("data");
+    let cwd = data.join("workspace");
+    let folder = root.join("allowed");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(&folder).unwrap();
+    let target = folder.join("new.txt");
+    let roots = ScopeRoots {
+        allowed_folders: &[folder],
+        attachments: &[],
+        project: Some(&cwd),
+        butler_data: &data,
+        protected_ledger_roots: &[],
+        installation_root: None,
+    };
+    let kind = CommandMutation {
+        sandbox: CommandSandbox::ProjectAndFolders,
+    };
+    let targets = [".", &target.to_string_lossy()];
+    assert_eq!(classify_targets(&roots, &cwd, &targets), AllowedFolder);
+    let scope = command_target_scope(&roots, &cwd, &targets, kind);
+    std::fs::remove_dir_all(root).unwrap();
+    (
+        AccessRequest {
+            kind,
+            risk: ApprovalRisk::Medium,
+            scope,
+            taint: TurnTaint::Clean,
+        },
+        Ask(GrantUse::Honor),
+    )
+}
+
 pub(super) fn boundaries() {
     for mode in [AskAlways, AskExceptReads, Auto] {
         let exempt: Vec<_> = ToolName::ALL

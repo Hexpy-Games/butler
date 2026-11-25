@@ -40,8 +40,8 @@ pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: Cancel
         state.previews.shutdown();
     }));
 }
-pub(super) fn port(state: &HttpState) -> u16 {
-    state.remote.content_addr().port()
+pub(super) fn port(state: &HttpState) -> Option<u16> {
+    state.remote.content_addr().map(|address| address.port())
 }
 fn now() -> u64 {
     std::time::SystemTime::now()
@@ -76,7 +76,7 @@ fn content_host(state: &HttpState, value: &str) -> bool {
         .content_hosts
         .iter()
         .any(|h| h.eq_ignore_ascii_case(value))
-        || (authority.port_u16() == Some(port(state))
+        || (port(state).is_some_and(|port| authority.port_u16() == Some(port))
             && (name == "localhost"
                 || name
                     .parse::<std::net::IpAddr>()
@@ -130,7 +130,8 @@ async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, Ht
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
     let (cap, path) = path.split_once('/').ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let (id, revision) = capability::verify(&token, port(state), cap, now()).ok_or_else(refused)?;
+    let (id, revision) = capability::verify(&token, port(state).ok_or_else(refused)?, cap, now())
+        .ok_or_else(refused)?;
     if let Some(rest) = id.strip_prefix("remote.") {
         return remote::serve(state, rest, revision, path).await;
     }
@@ -327,9 +328,10 @@ pub(super) fn signed_view(
     entry: &str,
     revisions: Vec<u64>,
 ) -> Result<Response, HttpError> {
-    let origin = view_origin(state, request)?;
+    let port = port(state).ok_or_else(refused)?;
+    let origin = view_origin(state, request, port)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let cap = capability::sign(&token, port(state), id, revision, now());
+    let cap = capability::sign(&token, port, id, revision, now());
     let base = origin.as_deref().unwrap_or("http://tunnel.invalid");
     let mut url = url::Url::parse(&format!("{base}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
@@ -369,7 +371,11 @@ pub(super) fn admit_ui_frames(state: &HttpState, response: &mut Response) {
     }
 }
 
-fn view_origin(state: &HttpState, request: &Request<Body>) -> Result<Option<String>, HttpError> {
+fn view_origin(
+    state: &HttpState,
+    request: &Request<Body>,
+    port: u16,
+) -> Result<Option<String>, HttpError> {
     if request
         .extensions()
         .get::<super::listeners::TunnelPeer>()
@@ -397,7 +403,7 @@ fn view_origin(state: &HttpState, request: &Request<Body>) -> Result<Option<Stri
                     .is_ok_and(|a| a.host() == authority.host())
             }));
     let origin = if local {
-        format!("http://{}:{}", authority.host(), port(state))
+        format!("http://{}:{port}", authority.host())
     } else {
         let content = remote.exposure.content_hosts.first().ok_or_else(|| {
             HttpError::public(409, "content_host_required", "Set a content host.")
@@ -426,9 +432,10 @@ pub(super) async fn check_view(
     }
     let rev = output.revisions.last().ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let cap = capability::sign(&token, port(state), &output.output_id, rev.revision, now());
-    let mut url = url::Url::parse(&format!("http://127.0.0.1:{}/__o/{cap}/", port(state)))
-        .map_err(|_| refused())?;
+    let port = port(state).ok_or_else(refused)?;
+    let cap = capability::sign(&token, port, &output.output_id, rev.revision, now());
+    let mut url =
+        url::Url::parse(&format!("http://127.0.0.1:{port}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
         .map_err(|()| refused())?
         .pop_if_empty()

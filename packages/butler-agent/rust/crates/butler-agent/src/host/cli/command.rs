@@ -221,6 +221,9 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
     if args.first().is_some_and(|a| a == "--remote-loopback") {
         return super::remote_relay::loopback(&args[1..]).await;
     }
+    if args.first().is_some_and(|a| a == "--remote-callback") {
+        return super::remote_relay::callback(&args[1..]).await;
+    }
     if args.first().is_some_and(|a| a == "--remote-stream") {
         return super::remote_stream::stream(&args[1..]).await;
     }

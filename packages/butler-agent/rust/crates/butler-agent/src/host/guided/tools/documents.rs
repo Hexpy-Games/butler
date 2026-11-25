@@ -6,7 +6,7 @@ use butler_runtime::documents::{self as markdown, Replacement};
 use butler_turn::btcc::{
     ApprovalExemptAction, GuidedInvocation, ModelRoundToolCall, ToolExecutionError,
 };
-use reqwest::Method;
+use http::Method;
 use serde_json::{Value, json};
 pub(super) fn supports(name: &str) -> bool {
     matches!(name, "document_create" | "document_read" | "document_edit")

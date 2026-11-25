@@ -7,13 +7,13 @@ use butler_turn::btcc::BtccError;
 use crate::host::app::gateway_lifecycle::{AppGatewayLifecycle, GatewayControlServer};
 use crate::host::service::ingress::IngressDispatcher;
 use crate::host::service::shutdown_trace::measure;
-use crate::host::{AgentRuntime, ServiceConfiguration, SystemIdentity};
+use crate::host::{
+    ActiveAppEndpoint, AgentRuntime, ServiceConfiguration, SystemIdentity, app::self_api::SelfApi,
+};
 
 pub(super) async fn deliver_parent_results(
-    client: &butler_log::http::Client,
+    endpoint: &ActiveAppEndpoint,
     subsessions: &butler_turn::btcc::SubsessionService,
-    base: &str,
-    auth: &butler_gateway::gateway::LocalAuthConfig,
 ) -> Result<bool, BtccError> {
     let repository = subsessions.repository();
     let mut retry_pending = false;
@@ -35,23 +35,29 @@ pub(super) async fn deliver_parent_results(
             retry_pending = true;
             continue;
         }
-        let body = serde_json::to_string(&pending.input).map_err(|error| {
+        let body = serde_json::to_value(&pending.input).map_err(|error| {
             failure("app_subsession_result_invalid", error.to_string()).with_source(error)
         })?;
-        let mut request = client
-            .post(format!("{base}/internal/subsession-result"))
-            .header("content-type", "application/json")
-            .body(body);
-        if auth.required {
-            let token = auth.token().ok_or_else(|| {
-                failure(
-                    "app_local_auth_unconfigured",
-                    "App local auth is not configured",
-                )
-            })?;
-            request = request.bearer_auth(token);
+        let Some(snapshot) = endpoint.snapshot() else {
+            retry_pending = true;
+            continue;
+        };
+        if snapshot.local_auth.required && snapshot.local_auth.token().is_none() {
+            return Err(failure(
+                "app_local_auth_unconfigured",
+                "App local auth is not configured",
+            ));
         }
-        let Ok(response) = request.send().await else {
+        let Ok(response) = SelfApi::new(endpoint)
+            .request(
+                http::Method::POST,
+                "/internal/subsession-result",
+                Some(&body),
+                None,
+                None,
+            )
+            .await
+        else {
             retry_pending = true;
             continue;
         };
@@ -279,7 +285,7 @@ pub(super) async fn open_runtime(
     let environment = ProcessEnvironment::capture(&config.data_root, user_home, &os_release);
     let worker_profiles = Arc::new(crate::host::AppWorkerProfileReader::new(
         app_endpoint.clone(),
-    )?);
+    ));
     Ok(Arc::new(
         AgentRuntime::open(
             RuntimePaths {

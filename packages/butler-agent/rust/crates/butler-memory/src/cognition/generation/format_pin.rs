@@ -119,6 +119,7 @@ async fn generation_files_and_results_keep_their_pre_typing_bytes() {
     pin_descriptor_swap_guards(&coordinator, &environment).await;
     pin_historical_documents();
     pin_vacuum_snapshot();
+    pin_graph_open_wal();
 }
 
 /// Empty initialization: manifest and descriptor.
@@ -273,6 +274,12 @@ fn pin_vacuum_snapshot() {
         .map(Result::unwrap)
         .collect();
     assert_eq!(rows, vec![(1, "one".into()), (2, "two".into())]);
+    assert_eq!(
+        copied
+            .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+            .unwrap(),
+        "wal"
+    );
     assert_eq!(fs::read(&source).unwrap(), before);
     assert!(super::swap::vacuum_snapshot(&source, &target).is_err());
     assert_eq!(
@@ -282,4 +289,35 @@ fn pin_vacuum_snapshot() {
             .unwrap(),
         2
     );
+}
+
+/// The read-write graph open moves a rollback-journal file to WAL.
+fn pin_graph_open_wal() {
+    let data = Root::new();
+    let path = data.0.join("graph.sqlite");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let mode: String = db
+        .query_row("PRAGMA journal_mode=DELETE", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "delete");
+    db.close().unwrap();
+    let snapshot = crate::cognition::graph::GraphRepository::open_read_snapshot(&path).unwrap();
+    // Read sqlite_schema through the snapshot to take the lock after deferred BEGIN.
+    snapshot.obsolete_alias_index().unwrap();
+    let started = std::time::Instant::now();
+    let graph = crate::cognition::graph::GraphRepository::open(&path).unwrap();
+    assert!(started.elapsed() < crate::cognition::GRAPH_BUSY_TIMEOUT);
+    let mode: String = rusqlite::Connection::open(&path)
+        .unwrap()
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "delete");
+    drop(graph);
+    drop(snapshot);
+    drop(crate::cognition::graph::GraphRepository::open(&path).unwrap());
+    let mode: String = rusqlite::Connection::open(&path)
+        .unwrap()
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
 }

@@ -1,12 +1,15 @@
-//! Private loopback control protocol for the logical App lifecycle.
+//! Private control protocol for the logical App lifecycle.
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    io::{AsyncRead, AsyncWrite},
     task::JoinHandle,
     time::timeout,
 };
@@ -21,6 +24,9 @@ use butler_turn::btcc::StorageEffectJournal;
 use super::{AppGatewayLifecycle, GatewayControlCommand};
 
 mod accept;
+mod transport;
+
+use transport::{read_frame, write_frame};
 #[cfg(feature = "e2e-fixtures")]
 mod shutdown_order;
 
@@ -35,6 +41,7 @@ pub(crate) type ServiceStopRequester = Arc<dyn Fn() + Send + Sync>;
 
 pub(crate) struct GatewayControlServer {
     endpoint: String,
+    socket: Option<PathBuf>,
     token: String,
     shutdown: CancellationToken,
     task: Option<JoinHandle<()>>,
@@ -83,16 +90,10 @@ impl GatewayControlServer {
         installation: ResolvedInstallation,
         nonce: String,
         owners: ControlOwners,
+        remote_socket: Option<&Path>,
     ) -> Result<Self, crate::host::HostError> {
-        let listener = TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .map_err(|source| {
-                crate::host::HostError::new("gateway_control_bind_failed").with_source(source)
-            })?;
-        let address = listener.local_addr().map_err(|source| {
-            crate::host::HostError::new("gateway_control_bind_failed").with_source(source)
-        })?;
-        let endpoint = address.to_string();
+        let socket = remote_socket.map(|_| data_root.join("remote/control.sock"));
+        let (listener, endpoint) = transport::Listener::bind(socket.as_deref()).await?;
         let token = uuid::Uuid::new_v4().to_string();
         let shutdown = CancellationToken::new();
         let context = Arc::new(ControlContext {
@@ -104,9 +105,10 @@ impl GatewayControlServer {
             effects: owners.effects,
             stop: owners.stop,
         });
-        let task = tokio::spawn(accept::run(listener, context, shutdown.clone()));
+        let task = tokio::spawn(listener.serve(context, shutdown.clone()));
         Ok(Self {
             endpoint,
+            socket,
             token,
             shutdown,
             task: Some(task),
@@ -135,29 +137,33 @@ impl GatewayControlServer {
         // The accept owner cancels and joins every connection before releasing
         // its context. Abort remains a fallback if that owner cannot finish.
         let result = match timeout(IO_TIMEOUT, &mut task).await {
-            Ok(result) => result,
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(source)) if source.is_cancelled() => Ok(()),
+            Ok(Err(source)) => {
+                Err(crate::host::HostError::new("gateway_control_task_failed").with_source(source))
+            }
             Err(source) => {
                 task.abort();
                 let _ = task.await;
                 crate::host::service::shutdown_trace::event("control_join_timeout");
-                return Err(
+                Err(
                     crate::host::HostError::new("gateway_control_shutdown_timeout")
                         .with_source(source),
-                );
+                )
             }
         };
-        result.or_else(|source| {
-            if source.is_cancelled() {
-                Ok(())
-            } else {
-                Err(crate::host::HostError::new("gateway_control_task_failed").with_source(source))
-            }
-        })
+        if let Some(socket) = self.socket {
+            let removed = tokio::fs::remove_file(socket).await;
+            result?;
+            removed.map_err(crate::host::HostError::from_error)
+        } else {
+            result
+        }
     }
 }
 
 async fn serve_one(
-    stream: &mut TcpStream,
+    stream: &mut (impl AsyncRead + AsyncWrite + Unpin),
     context: &Arc<ControlContext>,
 ) -> Result<(), crate::host::HostError> {
     let read = read_frame::<ControlRequest>(stream);
@@ -296,6 +302,7 @@ fn restart_outcome(value: Option<&str>) -> Result<&'static str, crate::host::Hos
 }
 
 pub(crate) async fn report_restart_handoff(
+    data_root: &Path,
     record: &crate::host::service::instance::InstanceRecord,
     key: &str,
     outcome: &str,
@@ -305,7 +312,7 @@ pub(crate) async fn report_restart_handoff(
         "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"restart_handoff_result",
         "intent_id":key,"outcome":outcome,
     });
-    send(record, request, "restart_handoff_result_failed")
+    send(data_root, record, request, "restart_handoff_result_failed")
         .await
         .map(|_| ())
 }
@@ -313,21 +320,24 @@ pub(crate) async fn report_restart_handoff(
 /// Sends `service_stop` to the instance `record` names, after the caller
 /// announced the stop in the DATA stop intent (see [`stop_service`]).
 pub(crate) async fn request_service_stop(
+    data_root: &Path,
     record: &crate::host::service::instance::InstanceRecord,
 ) -> Result<(), crate::host::HostError> {
     let request = json!({
         "schema":CONTROL_SCHEMA,"nonce":record.nonce,"command":"service_stop",
         "intent_id":record.nonce,
     });
-    send(record, request, "service_stop_failed")
+    send(data_root, record, request, "service_stop_failed")
         .await
         .map(|_| ())
 }
 
 pub(crate) async fn memory_status(
+    data_root: &Path,
     record: &crate::host::service::instance::InstanceRecord,
 ) -> Result<Value, crate::host::HostError> {
     let response = send(
+        data_root,
         record,
         json!({"schema":CONTROL_SCHEMA, "nonce":record.nonce, "command":"status"}),
         "memory_status_unavailable",
@@ -337,13 +347,10 @@ pub(crate) async fn memory_status(
 }
 
 /// Sends `request` (without its token, which comes from `record`) to the
-/// loopback control endpoint `record` publishes; a refused command is its
+/// control endpoint `record` publishes; a refused command is its
 /// error code, or `failed`.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "authenticated loopback framed control protocol; not HTTP"
-)]
 async fn send(
+    data_root: &Path,
     record: &crate::host::service::instance::InstanceRecord,
     mut request: Value,
     failed: &str,
@@ -352,26 +359,14 @@ async fn send(
         .control_endpoint
         .as_deref()
         .ok_or("gateway_control_unavailable")?;
-    let address: SocketAddr = endpoint.parse().map_err(|source| {
-        crate::host::HostError::new("gateway_control_identity_invalid").with_source(source)
-    })?;
-    if !address.ip().is_loopback() {
-        return Err("gateway_control_identity_invalid".into());
-    }
+    let target = transport::Target::parse(endpoint, data_root)?;
     request["token"] = Value::from(
         record
             .control_token
             .as_deref()
             .ok_or("gateway_control_unavailable")?,
     );
-    let mut stream = timeout(IO_TIMEOUT, TcpStream::connect(address))
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_timeout").with_source(source)
-        })?
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_unavailable").with_source(source)
-        })?;
+    let mut stream = target.connect().await?;
     timeout(IO_TIMEOUT, write_frame(&mut stream, &request))
         .await
         .map_err(|source| {
@@ -402,48 +397,6 @@ fn lifecycle_error_parts(message: &str) -> (&str, &str) {
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
         })
         .unwrap_or(("gateway_lifecycle_failed", message))
-}
-
-async fn read_frame<T: for<'de> Deserialize<'de>>(
-    stream: &mut TcpStream,
-) -> Result<T, crate::host::HostError> {
-    let length = stream.read_u32().await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
-    })? as usize;
-    if length == 0 || length > MAX_FRAME_BYTES {
-        return Err("gateway_control_request_invalid".into());
-    }
-    let mut bytes = vec![0; length];
-    stream.read_exact(&mut bytes).await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
-    })?;
-    serde_json::from_slice(&bytes).map_err(|source| {
-        crate::host::HostError::new("gateway_control_request_invalid").with_source(source)
-    })
-}
-
-async fn write_frame<T: Serialize>(
-    stream: &mut TcpStream,
-    value: &T,
-) -> Result<(), crate::host::HostError> {
-    let bytes = serde_json::to_vec(value).map_err(|source| {
-        crate::host::HostError::new("gateway_control_response_invalid").with_source(source)
-    })?;
-    if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
-        return Err("gateway_control_response_invalid".into());
-    }
-    stream
-        .write_u32(u32::try_from(bytes.len()).unwrap_or(u32::MAX))
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-        })?;
-    stream.write_all(&bytes).await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-    })?;
-    stream.flush().await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-    })
 }
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {

@@ -29,7 +29,6 @@ pub(super) struct PollOwners<'a> {
     pub(super) progress: Arc<ProgressPublisher>,
     pub(super) config: &'a ServiceConfiguration,
     pub(super) subsessions: &'a Arc<butler_turn::btcc::SubsessionService>,
-    pub(super) parent_client: &'a butler_log::http::Client,
     pub(super) app_endpoint: &'a ActiveAppEndpoint,
     pub(super) readiness: &'a ServiceReadiness,
     pub(super) logs: ServiceLogMode,
@@ -51,7 +50,6 @@ pub(super) async fn poll_service(
         progress,
         config,
         subsessions,
-        parent_client,
         app_endpoint,
         readiness,
         logs,
@@ -65,7 +63,6 @@ pub(super) async fn poll_service(
     let mut maintenance = JoinSet::new();
     maintenance.spawn(run_service_maintenance(
         progress.clone(),
-        parent_client.clone(),
         subsessions.clone(),
         app_endpoint.clone(),
         maintenance_stop,

@@ -201,12 +201,10 @@ pub(super) fn compare(case: &str, requests: &[Value]) -> Result<(), HarnessError
                 branch["tools_sha256"].as_str().unwrap(),
                 "{case} turn={index} round={round} section=tools_sha256"
             );
-            for line in branch["history"].as_array().unwrap() {
-                assert!(
-                    main["history"].as_array().unwrap().contains(line),
-                    "{case} turn={index} round={round} history={line}"
-                );
-            }
+            assert_eq!(
+                main["history"], branch["history"],
+                "{case} turn={index} round={round} history"
+            );
         }
     }
     Ok(())

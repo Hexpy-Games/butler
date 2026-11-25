@@ -37,6 +37,14 @@ struct State {
     blobs: Mutex<BTreeSet<String>>,
     page: Mutex<Option<(String, u64)>>,
     tunnel: mpsc::UnboundedSender<WebSocket>,
+    push: Mutex<FakePush>,
+}
+
+#[derive(Default)]
+struct FakePush {
+    registered: BTreeSet<String>,
+    sends: Vec<Value>,
+    gone: Option<String>,
 }
 
 pub struct FakeButlerCloud {
@@ -59,6 +67,7 @@ impl FakeButlerCloud {
             blobs: Mutex::new(BTreeSet::new()),
             page: Mutex::new(None),
             tunnel: sender,
+            push: Mutex::default(),
         });
         let router = Router::new()
             .fallback(route)
@@ -102,6 +111,23 @@ impl FakeButlerCloud {
             .plan
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = plan.to_owned();
+    }
+
+    pub fn push_sends(&self) -> Vec<Value> {
+        self.state
+            .push
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .sends
+            .clone()
+    }
+
+    pub fn set_push_gone(&self, token: &str) {
+        self.state
+            .push
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .gone = Some(token.to_owned());
     }
 
     /// Flips the last byte of every stored chunk; calling it again undoes it.
@@ -238,6 +264,36 @@ fn authenticated(
         ]})).into_response(),
         (Method::DELETE, "/v1/tunnel" | "/v1/devices/dev_other")
         | (Method::POST, "/v1/auth/sign-out") => StatusCode::NO_CONTENT.into_response(),
+        (Method::PUT, "/v1/push/tokens") => {
+            let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+            let mut push = state.push.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            push.registered = input["tokens"].as_array().into_iter().flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect();
+            StatusCode::NO_CONTENT.into_response()
+        }
+        (Method::POST, "/v1/push/send") => {
+            let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+            let mut push = state.push.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            push.sends.push(input.clone());
+            let mut sent = 0;
+            let mut gone = Vec::new();
+            let mut not_registered = Vec::new();
+            for token in input["messages"].as_array().into_iter().flatten()
+                .filter_map(|message| message["to"].as_str())
+            {
+                if !push.registered.contains(token) {
+                    not_registered.push(token);
+                } else if push.gone.as_deref() == Some(token) {
+                    gone.push(token);
+                    push.registered.remove(token);
+                } else {
+                    sent += 1;
+                }
+            }
+            Json(json!({"sent": sent, "gone": gone, "not_registered": not_registered})).into_response()
+        }
         (Method::POST, "/v1/pages") => {
             let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
             let mut page = state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner);

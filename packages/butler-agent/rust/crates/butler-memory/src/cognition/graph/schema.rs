@@ -1,8 +1,11 @@
 //! The graph schema and its migrations.
 
+mod alias_postings;
 mod base;
 mod migration;
 mod source_hash;
+
+pub(in crate::cognition) use alias_postings::compact_file as compact_alias_postings;
 
 use rusqlite::{Connection, OptionalExtension};
 
@@ -29,6 +32,7 @@ pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<
     migration::nullable_source_ids(connection)?;
     base::create(connection)?;
     base::ensure_historical_columns(connection)?;
+    alias_postings::ensure(connection)?;
     migration::legacy_failures(connection, now)?;
     migration::interrupted_failures(connection, now)?;
     migration::provider_pause_failures(connection, now)?;
@@ -40,6 +44,7 @@ pub(super) fn recover_interrupted_failures(
     connection: &mut Connection,
     now: &str,
 ) -> CognitionResult<()> {
+    alias_postings::recover(connection)?;
     migration::interrupted_failures(connection, now)?;
     migration::provider_pause_failures(connection, now)
 }

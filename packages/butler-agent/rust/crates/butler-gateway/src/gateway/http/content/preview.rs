@@ -25,7 +25,13 @@ pub(in crate::gateway::http) fn url(
     }
     Ok(format!(
         "{origin}/__p/{}",
-        capability::sign(&key(state)?, super::port(state), id, 0, super::now())
+        capability::sign(
+            &key(state)?,
+            super::port(state).ok_or_else(refused)?,
+            id,
+            0,
+            super::now()
+        )
     ))
 }
 pub(super) async fn serve(
@@ -37,8 +43,13 @@ pub(super) async fn serve(
     }
     let cap =
         cookie(&request).ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let (id, _) = capability::verify(&key(&state)?, super::port(&state), &cap, super::now())
-        .ok_or_else(refused)?;
+    let (id, _) = capability::verify(
+        &key(&state)?,
+        super::port(&state).ok_or_else(refused)?,
+        &cap,
+        super::now(),
+    )
+    .ok_or_else(refused)?;
     let target = state.previews.target(&id).ok_or_else(refused)?;
     let websocket = request
         .headers()
@@ -89,8 +100,13 @@ fn bootstrap(state: &HttpState, request: &Request<Body>, cap: &str) -> Result<Re
     if request.method() != axum::http::Method::GET {
         return Err(refused());
     }
-    let (id, _) = capability::verify(&key(state)?, super::port(state), cap, super::now())
-        .ok_or_else(refused)?;
+    let (id, _) = capability::verify(
+        &key(state)?,
+        super::port(state).ok_or_else(refused)?,
+        cap,
+        super::now(),
+    )
+    .ok_or_else(refused)?;
     if state.previews.target(&id).is_none() {
         return Err(refused());
     }
@@ -220,7 +236,8 @@ pub(in crate::gateway::http) fn view(
         .strip_prefix("/previews/")
         .and_then(|s| s.strip_suffix("/view"))
         .ok_or_else(refused)?;
-    let origin = super::view_origin(state, request)?.ok_or_else(refused)?;
+    let port = super::port(state).ok_or_else(refused)?;
+    let origin = super::view_origin(state, request, port)?.ok_or_else(refused)?;
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {
@@ -237,6 +254,6 @@ pub(in crate::gateway::http) fn owner_id(
 ) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     let cap = url.path().strip_prefix("/__p/")?;
-    let (id, _) = capability::verify(&key(state).ok()?, super::port(state), cap, super::now())?;
+    let (id, _) = capability::verify(&key(state).ok()?, super::port(state)?, cap, super::now())?;
     state.previews.owned(session, &id).then_some(id)
 }

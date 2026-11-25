@@ -67,6 +67,9 @@ pub(super) struct TunnelPeer {
     pub(super) remote_static: [u8; 32],
 }
 
+#[derive(Clone)]
+pub(super) struct InProcessPeer;
+
 pub(super) fn spawn_local(
     listener: LocalListener,
     socket: RemoteSocket,
@@ -124,8 +127,8 @@ pub(super) struct RemoteSnapshot {
 
 /// The gateway's exposure beyond loopback, changed by Settings → Security.
 pub(super) struct RemoteAccess {
-    primary: SocketAddr,
-    content_addr: SocketAddr,
+    primary: Option<SocketAddr>,
+    content_addr: Option<SocketAddr>,
     current: Mutex<RemoteState>,
     /// Serializes changes (persist, then apply) and connection-code rotation.
     pub(super) changes: tokio::sync::Mutex<()>,
@@ -140,8 +143,8 @@ struct RemoteState {
 
 impl RemoteAccess {
     pub(super) fn new(
-        primary: SocketAddr,
-        content_addr: SocketAddr,
+        primary: Option<SocketAddr>,
+        content_addr: Option<SocketAddr>,
         allowed_hosts: Vec<String>,
     ) -> Self {
         let snapshot = RemoteSnapshot {
@@ -164,11 +167,11 @@ impl RemoteAccess {
     }
 
     /// The loopback listener's address.
-    pub(super) fn primary(&self) -> SocketAddr {
+    pub(super) fn primary(&self) -> Option<SocketAddr> {
         self.primary
     }
 
-    pub(super) fn content_addr(&self) -> SocketAddr {
+    pub(super) fn content_addr(&self) -> Option<SocketAddr> {
         self.content_addr
     }
 
@@ -194,9 +197,12 @@ impl RemoteAccess {
             current.snapshot.content_listeners.clear();
             current.snapshot.lan_authorities.clear();
             current.snapshot.bind_errors.clear();
-        } else if !was_enabled && exposure.remote_access_enabled {
+        } else if !was_enabled
+            && exposure.remote_access_enabled
+            && let (Some(primary), Some(content)) = (self.primary, self.content_addr)
+        {
             let closed = state.shutdown.child_token();
-            let bound = self.bind_lan(state, &closed);
+            let bound = Self::bind_lan(state, &closed, primary, content.port());
             current.snapshot.lan_listeners = bound.lan_listeners;
             current.snapshot.content_listeners = bound.content_listeners;
             current.snapshot.lan_authorities = bound.lan_authorities;
@@ -213,16 +219,21 @@ impl RemoteAccess {
 
     /// Binds `ip:port` for every LAN address (unless the loopback listener
     /// already listens on every interface) and names them.
-    fn bind_lan(&self, state: &Arc<HttpState>, closed: &CancellationToken) -> RemoteSnapshot {
-        let port = self.primary.port();
-        let every_interface = self.primary.ip().is_unspecified();
+    fn bind_lan(
+        state: &Arc<HttpState>,
+        closed: &CancellationToken,
+        primary: SocketAddr,
+        content_port: u16,
+    ) -> RemoteSnapshot {
+        let port = primary.port();
+        let every_interface = primary.ip().is_unspecified();
         let mut bound = RemoteSnapshot::default();
         for ip in lan::lan_addresses() {
             let address = SocketAddr::new(ip, port);
             if !every_interface {
                 match bind(address) {
                     Ok(listener) => {
-                        let content_address = SocketAddr::new(ip, super::content::port(state));
+                        let content_address = SocketAddr::new(ip, content_port);
                         let content_listener = match bind(content_address) {
                             Ok(listener) => listener,
                             Err(error) => {

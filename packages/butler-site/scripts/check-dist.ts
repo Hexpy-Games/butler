@@ -3,12 +3,13 @@
  * Checks the Pages artifact (dist/) after `bun run build`: the CNAME for the
  * configured domain, `/` and every old /docs/ page forwarding into /help/,
  * each locale's manual (/help/, /en/help/) with its <html lang> and its own
- * search index, the site-wide 404.html loading the DS redirect helper, and
- * the DS Viewer at /ds/ with no CNAME or 404.html of its own.
+ * search index, both privacy policy pages with their <html lang>, the
+ * site-wide 404.html loading the DS redirect helper, and the DS Viewer at
+ * /ds/ with no CNAME or 404.html of its own.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { DS_REDIRECT_HELPER, designSystemRoot, docsRoot } from "../src/site/nav";
+import { DS_REDIRECT_HELPER, designSystemRoot, docsRoot, privacyHref } from "../src/site/nav";
 import { LOCALES } from "../src/site/sections";
 import { SITE_ROOT } from "./check-token-sync";
 import { resolveDeployTarget } from "./deploy-target";
@@ -60,6 +61,8 @@ export function checkDist(dir: string, { base, domain }: Target): string[] {
       if (!read(path)?.includes(`<html lang="${locale}"`)) problems.push(`${path}: is not <html lang="${locale}">`);
     }
     if (localePages.length > 1 && !searchIndexes.includes(locale)) problems.push(`pagefind: no ${locale} search index`);
+    const privacy = `${privacyHref("/", locale).slice(1)}index.html`;
+    if (!read(privacy)?.includes(`<html lang="${locale}"`)) problems.push(`${privacy}: missing or not <html lang="${locale}"> (the ${locale} privacy policy)`);
   }
 
   const dsHelper = `${designSystemRoot(base)}${DS_REDIRECT_HELPER}`;
@@ -81,5 +84,5 @@ if (import.meta.main) {
     for (const problem of problems) console.error(`  ${problem}`);
     process.exit(1);
   }
-  console.log("Site dist check passed: /, /help/, /en/help/, /docs/ redirects, 404, per-locale search, /ds/ and CNAME.");
+  console.log("Site dist check passed: /, /help/, /en/help/, /privacy/, /en/privacy/, /docs/ redirects, 404, per-locale search, /ds/ and CNAME.");
 }

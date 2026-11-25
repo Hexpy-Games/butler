@@ -207,12 +207,25 @@ pub(super) fn local_client(client: Option<&Client>) -> Result<&Client, HttpError
 
 fn view(state: &HttpState) -> Result<SecurityView, HttpError> {
     let remote = state.remote.snapshot();
-    let mut bind_addresses = vec![state.remote.primary().to_string()];
+    let mut bind_addresses: Vec<_> = state
+        .remote
+        .primary()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     bind_addresses.extend(remote.lan_listeners.iter().map(ToString::to_string));
-    let mut content_addresses = vec![state.remote.content_addr().to_string()];
+    let mut content_addresses: Vec<_> = state
+        .remote
+        .content_addr()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     content_addresses.extend(remote.content_listeners.iter().map(ToString::to_string));
     let connection_code = None;
-    let lan_urls = links::connection_urls(&remote, state.security.port());
+    let lan_urls = state
+        .security
+        .port()
+        .map_or_else(Vec::new, |port| links::connection_urls(&remote, port));
     Ok(SecurityView {
         tunnel: state.tunnel.as_ref().map(super::tunnel::Tunnel::view),
         remote_access_enabled: remote.exposure.remote_access_enabled,
@@ -312,6 +325,13 @@ pub(super) fn prepare(
     }
     if let Some(hosts) = patch.content_hosts {
         exposure.content_hosts = hosts;
+    }
+    if exposure.remote_access_enabled && state.remote.primary().is_none() {
+        return Err(HttpError::public(
+            409,
+            "remote_access_unavailable",
+            "LAN access is unavailable on this computer.",
+        ));
     }
     if exposure
         .content_hosts

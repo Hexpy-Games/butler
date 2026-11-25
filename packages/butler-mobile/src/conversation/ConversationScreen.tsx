@@ -28,8 +28,8 @@ import { useElapsed } from "./useElapsed";
 import { ActivityTimeline, LiveTurnWork } from "./ActivityHistory";
 import { projectActivities } from "./activityProjection";
 
-export function ConversationScreen({ id, title, project, group, initialText = "" }: {
-  id?: string; title: string; project?: string; group?: string; initialText?: string;
+export function ConversationScreen({ id, title, project, group, initialText = "", computerRemoved }: {
+  id?: string; title: string; project?: string; group?: string; initialText?: string; computerRemoved?: boolean;
 }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
@@ -75,7 +75,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view ? <TurnStatus view={view} hasDecision={hasDecision} anchors={anchors} /> : null}
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
-    <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
+    <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision} computerRemoved={computerRemoved}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh}
       onHeightChange={(height, covered) => { setDockHeight(height); setKeyboard(covered); }}
       onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }}

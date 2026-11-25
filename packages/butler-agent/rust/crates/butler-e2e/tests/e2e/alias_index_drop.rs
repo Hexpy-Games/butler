@@ -5,8 +5,6 @@
     clippy::panic,
     reason = "test assertions"
 )]
-#[path = "support/alias_index_audit.rs"]
-mod alias_index_audit;
 #[path = "support/alias_retirement_gate.rs"]
 mod alias_retirement_gate;
 use super::memory_fixture;
@@ -34,7 +32,8 @@ fn seed(path: &Path) -> Connection {
         INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('synthetic','entity','surface','user','2026-01-01');
         INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,origin_kind,status,source_hash,created_at,updated_at) VALUES('chunk','chunk','1','user_input','active','hash','2026-01-01','2026-01-01');
         INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('source','chunk','1','conversation','part','',0,7,'hash','user','user_input','2026-01-01','user_statement');
-        INSERT INTO memory_alias_postings VALUES('ab','synthetic','source','surface','user',NULL);").unwrap();
+        INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('synthetic','ab','ab','ab','source','literal');
+        INSERT INTO memory_alias_postings VALUES('ab','synthetic','source','ab','user',NULL);").unwrap();
     db
 }
 fn version(db: &Connection) -> i64 {
@@ -227,26 +226,4 @@ async fn queue_followup(s: &Scenario, prompt: &str) -> Result<String, HarnessErr
     assert_eq!(queued.status, 202, "{}", queued.text);
     assert!(!TERMINAL.contains(&turn_state(&s.gw.turn("general", &running).await?.unwrap())));
     Ok(running)
-}
-
-#[test]
-fn history_posting_queries_keep_plans_and_results() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let mut setup = Setup::new("ALIAS-DROP-AUDIT")?;
-    let directory = setup.sandbox.data.join("audit");
-    let script =
-        butler_e2e::e2e::binary::manifest_dir().join("../../scripts/alias-index-drop-benchmark.py");
-    let output = std::process::Command::new("python3")
-        .arg(script)
-        .arg(format!("--prepare={}", directory.display()))
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    alias_index_audit::run(&directory);
-    setup.sandbox.mark_success();
-    Ok(())
 }

@@ -12,13 +12,19 @@ use lancedb::{
         Index,
         scalar::{BTreeIndexBuilder, BitmapIndexBuilder},
     },
-    table::{OptimizeAction, OptimizeOptions},
+    table::{CompactionOptions, OptimizeAction, OptimizeOptions},
 };
 
 #[cfg(feature = "e2e-fixtures")]
 mod fixtures;
 
-/// Fragments a table may hold before writers compact it.
+/// Rows a compacted fragment holds. Compaction merges only fragments below
+/// this size (plus, by Lance's default `materialize_deletions`, fragments with
+/// over 10% deleted rows), so its cost is bounded by the small tail, not the
+/// table size.
+pub(super) const TARGET_ROWS_PER_FRAGMENT: usize = 8192;
+/// Trailing fragments smaller than [`TARGET_ROWS_PER_FRAGMENT`] a table may hold
+/// before writers compact them.
 pub(super) const FRAGMENT_LIMIT: usize = 32;
 /// Versions kept for rollback: the newest ones, plus any that carry a tag.
 /// Older versions are pruned, because a table restored to a version older
@@ -49,28 +55,48 @@ fn wanted_indexes() -> [(&'static str, Index); 3] {
     ]
 }
 
-/// Compacts the table when it holds more than [`FRAGMENT_LIMIT`] fragments.
-/// Returns whether it did.
+/// Compacts the trailing small fragments, where appends land, when more than
+/// [`FRAGMENT_LIMIT`] exist. Returns whether any fragment was rewritten.
 pub(super) async fn compact_if_fragmented(table: &Table) -> lancedb::Result<bool> {
-    let fragments = table.stats().await?.fragment_stats.num_fragments;
-    if fragments <= FRAGMENT_LIMIT {
+    let Some(dataset) = table.dataset() else {
+        return Ok(false);
+    };
+    let tail = dataset
+        .get()
+        .await?
+        .get_fragments()
+        .iter()
+        .rev()
+        .take_while(|fragment| {
+            fragment
+                .metadata()
+                .physical_rows
+                .is_none_or(|rows| rows < TARGET_ROWS_PER_FRAGMENT)
+        })
+        .count();
+    if tail <= FRAGMENT_LIMIT {
         return Ok(false);
     }
     let started = std::time::Instant::now();
     let action = OptimizeAction::Compact {
-        options: Default::default(),
+        options: CompactionOptions {
+            target_rows_per_fragment: TARGET_ROWS_PER_FRAGMENT,
+            ..Default::default()
+        },
         remap_options: None,
     };
     #[cfg(feature = "e2e-fixtures")]
     let (action, _hold) = fixtures::instrument(action);
-    table.optimize(action).await?;
+    let stats = table.optimize(action).await?;
     if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
         butler_core::diagnostic!(
             "[memory-vector] compact_ms={:.3}",
             started.elapsed().as_secs_f64() * 1000.0
         );
     }
-    Ok(true)
+    Ok(stats
+        .compaction
+        .is_some_and(|metrics| metrics.fragments_removed > 0))
 }
 
 /// Removes every version older than the newest [`RETAINED_VERSIONS`]; tagged
@@ -94,7 +120,14 @@ pub(super) async fn prune_old_versions(table: &Table) -> lancedb::Result<u64> {
             error_if_tagged_old_versions: Some(false),
         })
         .await?;
-    Ok(stats.prune.map_or(0, |removed| removed.old_versions))
+    let removed = stats.prune.map_or(0, |removed| removed.old_versions);
+    if std::env::var("BUTLER_MEMORY_SYNC_TRACE").as_deref() == Ok("1") {
+        butler_core::diagnostic!(
+            "[memory-vector] versions_pruned={removed} version={}",
+            table.version().await?
+        );
+    }
+    Ok(removed)
 }
 
 /// Creates the scalar indexes the table lacks and folds rows written since
@@ -122,10 +155,17 @@ pub(super) async fn ensure_indexes(table: &Table) -> lancedb::Result<usize> {
     Ok(created)
 }
 
-/// One full maintenance pass.
+/// One full maintenance pass. Prunes before compacting so a deadline that
+/// stops a long compaction cannot skip it, and again after a compaction so
+/// superseded versions do not accumulate. The fragments a compaction just
+/// rewrote stay on disk while the retained versions still reference them, so
+/// the steady state is about two copies of the small tail.
 pub(crate) async fn maintain(table: &Table) -> lancedb::Result<Maintained> {
+    let mut versions_pruned = prune_old_versions(table).await?;
     let compacted = compact_if_fragmented(table).await?;
-    let versions_pruned = prune_old_versions(table).await?;
+    if compacted {
+        versions_pruned += prune_old_versions(table).await?;
+    }
     let indexes_created = ensure_indexes(table).await?;
     Ok(Maintained {
         compacted,

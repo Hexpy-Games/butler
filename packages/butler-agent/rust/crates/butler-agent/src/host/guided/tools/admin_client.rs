@@ -1,14 +1,16 @@
 //! Main-only authenticated app transport.
 use super::GuidedTools;
-use butler_log::http::{Client, RequestBuilder};
-use reqwest::Method;
+use crate::host::{
+    ActiveAppEndpoint,
+    app::self_api::{SelfApi, SelfApiError, SelfResponse},
+};
+use http::Method;
 use serde_json::{Value, json};
+use tokio::time::Instant;
 
 #[derive(Clone)]
 pub(super) struct AdminClient {
-    pub(super) client: Client,
-    pub(super) base: String,
-    pub(super) bearer: String,
+    pub(super) endpoint: std::sync::Arc<ActiveAppEndpoint>,
     admin: String,
 }
 
@@ -26,31 +28,23 @@ impl AdminClient {
         .await
         .ok()?
         .ok()?;
-        let client = owner
-            .browser_http
-            .get_or_try_init(|| async {
-                tokio::task::spawn_blocking(|| butler_log::http::loopback().build())
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
-                    .ok_or(())
-            })
-            .await
-            .ok()?
-            .clone();
+        endpoint.local_auth.token()?;
         Some(Self {
-            client,
-            base: endpoint.base_url,
-            bearer: endpoint.local_auth.token()?.to_string(),
+            endpoint: owner.app_endpoint.clone(),
             admin: admin["secret"].as_str()?.into(),
         })
     }
 
-    pub(super) fn request(&self, method: Method, path: &str) -> RequestBuilder {
-        self.client
-            .request(method, format!("{}{path}", self.base))
-            .bearer_auth(&self.bearer)
-            .header("x-butler-admin", &self.admin)
+    pub(super) async fn request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        deadline: Option<Instant>,
+    ) -> Result<SelfResponse, SelfApiError> {
+        SelfApi::new(&self.endpoint)
+            .request(method, path, body, Some(&self.admin), deadline)
+            .await
     }
 
     pub(super) async fn data(
@@ -60,15 +54,13 @@ impl AdminClient {
         body: Option<&Value>,
     ) -> Result<Value, Value> {
         let unavailable = || json!({"code":"gateway_unavailable","message":"Could not reach the Butler gateway."});
-        let request = self.request(method, path);
-        let request = if let Some(body) = body {
-            request.json(body)
-        } else {
-            request
-        };
-        let response = request.send().await.map_err(|_| unavailable())?;
+        let response = self
+            .request(method, path, body, None)
+            .await
+            .map_err(|_| unavailable())?;
         let success = response.status().is_success();
-        let mut envelope = response.json::<Value>().await.map_err(|_| unavailable())?;
+        let bytes = response.bytes().await.map_err(|_| unavailable())?;
+        let mut envelope: Value = serde_json::from_slice(&bytes).map_err(|_| unavailable())?;
         if success {
             Ok(envelope["data"].take())
         } else {

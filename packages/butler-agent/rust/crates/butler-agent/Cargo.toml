@@ -41,7 +41,9 @@ butler-turn = { path = "../butler-turn" }
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
 base64.workspace = true
+axum.workspace = true
 bytes.workspace = true
+http.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 zeroize.workspace = true

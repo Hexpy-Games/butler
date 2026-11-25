@@ -68,7 +68,7 @@ pub(super) async fn run_until_stopped(
         crate::host::service::data_reset::recover(explicit_data, &user_home, &installation).await?;
     let config = support::capture_configuration(explicit_data, &user_home, &installation).await?;
     let listener = if config.app.enabled {
-        Some(crate::host::AppServer::bind(&config.app.host, config.app.port).await?)
+        crate::host::AppServer::bind(&config.app, config.app.port).await?
     } else {
         None
     };
@@ -147,9 +147,7 @@ async fn restore_configuration(
         {
             drop(listener.take());
             if restored.app.enabled {
-                listener = Some(
-                    crate::host::AppServer::bind(&restored.app.host, restored.app.port).await?,
-                );
+                listener = crate::host::AppServer::bind(&restored.app, restored.app.port).await?;
             }
         }
         config = restored;

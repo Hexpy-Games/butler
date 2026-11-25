@@ -58,7 +58,7 @@ pub(in crate::gateway::http) struct DeviceRegistry {
 impl DeviceRegistry {
     pub(in crate::gateway::http) async fn load(
         application: Arc<dyn GatewayApplication>,
-        port: u16,
+        port: Option<u16>,
         shutdown: CancellationToken,
     ) -> Result<Self, HttpError> {
         let butler_id = application.butler_id().await?;
@@ -83,13 +83,14 @@ impl DeviceRegistry {
                 (entry.device.id.clone(), entry)
             })
             .collect();
+        let suffix = port.map_or_else(String::new, |port| format!("_{port}"));
         Ok(Self {
             application,
             entries: RwLock::new(Arc::new(entries)),
             changes: tokio::sync::Mutex::new(()),
             shutdown,
-            cookie_name: format!("butler_session_{port}"),
-            host_cookie_name: format!("__Host-butler_session_{port}"),
+            cookie_name: format!("butler_session{suffix}"),
+            host_cookie_name: format!("__Host-butler_session{suffix}"),
             butler_id,
             #[cfg(feature = "e2e-fixtures")]
             clock_offset: AtomicU64::new(0),

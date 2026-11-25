@@ -433,6 +433,15 @@ try {
     await checkCardTargetsAndViewer(page, 1440, "light");
     await checkCardTargetsAndViewer(page, 390, "dark");
     await checkLeniencyAndExpand(page);
+
+    const url = "http://example.com/source";
+    const markdown = { ...message(null), text: `[Read the source](${url})`, answer_blocks: [] };
+    currentFixture = { messages: [markdown] };
+    await page.goto(`${base}?visual=components&theme=light&locale=${locale}`);
+    await page.getByRole("link", { name: "Read the source", exact: true }).click();
+    await page.waitForFunction(() => ((window as Window & { browserTabs?: unknown[] }).browserTabs ?? []).length === 1);
+    assert.deepEqual(await browserTabs(page), [{ id: "t1", owner: `conversation:${markdown.chat_id}`, url }]);
+    assert.deepEqual(await page.evaluate(() => (window as Window & { openedLinks?: string[] }).openedLinks), []);
   }
   assert.deepEqual(errors, [], "no uncaught renderer errors");
   const result = { stage, ok: true, screenshots: stage === "after" ? 40 : 16, geometry, interactions: calls.map(call => call.path), modelCalls: 0 };

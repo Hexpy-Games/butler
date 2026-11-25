@@ -17,9 +17,9 @@ import { documentContent, documentKindLabel } from "./documents";
 
 export type ChatComposerHandle = { send(text?: string): Promise<void> };
 
-export function ChatComposer({ ref, id, project, group, view, hasDecision, text, setText, onPending,
+export function ChatComposer({ ref, id, project, group, view, hasDecision, computerRemoved, text, setText, onPending,
   refreshQueue, onHeightChange, onSend, backdrop, accessory }: {
-  ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
+  ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean; computerRemoved?: boolean;
   text: string; setText(text: string): void; onPending(text: string | null): void;
   refreshQueue(): Promise<void>; onHeightChange(height: number, keyboard: number): void; onSend(): void;
   backdrop?: { color: string; visible: boolean }; accessory?: React.ReactNode;
@@ -38,7 +38,7 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
   const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
   const hasReferences = attachments.items.some(item => item.status === "ready" && item.reference);
   const uploading = attachments.items.some(item => item.status === "uploading");
-  const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision;
+  const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision && !computerRemoved;
   const { busy, setBusy, send } = useMessageSend({ id, project, group, text, setText, ready, attachments,
     activeTurn: !!turn, canSend, onPending, onSend, refreshQueue, controls: model.controls });
   useImperativeHandle(ref, () => ({ send }));
@@ -50,9 +50,10 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
     finally { setBusy(false); }
   };
   return <ComposerDock backdrop={backdrop} onHeightChange={onHeightChange} accessory={accessory}>
-    <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
+    <Composer value={text} onChangeText={setText} placeholder={computerRemoved ? appCopy.computers.removedComputerSend : copy.chat.placeholder} canSend={canSend}
       mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={() => { void send(); }} onStop={stop}
-      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
+      sendLabel={copy.chat.send} stopLabel={copy.chat.stop}
+      attach={computerRemoved ? undefined : { label: copy.chat.attach, onPress: () => setSheet("attach") }}
       attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
         key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" && item.uri ? { uri: item.uri } : undefined,
         extension: item.reference ? documentKindLabel(item.reference.source.kind, appCopy)

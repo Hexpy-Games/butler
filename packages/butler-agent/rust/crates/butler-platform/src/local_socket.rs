@@ -15,6 +15,16 @@ pub fn bind(path: &Path) -> io::Result<LocalListener> {
     use std::fs::{self, Permissions};
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 
+    #[cfg(target_os = "macos")]
+    const MAX_PATH_BYTES: usize = 103;
+    #[cfg(not(target_os = "macos"))]
+    const MAX_PATH_BYTES: usize = 107;
+    if path.as_os_str().len() > MAX_PATH_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("remote_socket_path_too_long: {}", path.display()),
+        ));
+    }
     if let Some(parent) = path.parent() {
         crate::secure_fs::create_private_dir_all(parent)?;
     }

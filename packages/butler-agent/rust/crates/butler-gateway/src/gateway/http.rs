@@ -15,11 +15,13 @@ mod documents;
 #[cfg(feature = "e2e-fixtures")]
 mod image_fixtures;
 mod image_models;
+mod in_process;
 mod library;
 mod pending_asks;
 mod publishing;
 mod start;
-pub(super) use start::{Listeners, serve};
+pub use in_process::{InProcessError, InProcessGateway};
+pub(super) use start::{Listeners, prepare, serve};
 mod access_log;
 mod agent_import;
 mod automations;
@@ -54,6 +56,7 @@ mod remote_sessions;
 mod remote_transcripts;
 mod retry;
 mod router;
+mod routes;
 #[cfg(feature = "test-support")]
 pub(crate) use router::templates as route_templates;
 mod security;
@@ -112,7 +115,7 @@ const DEFAULT_PAGE_LIMIT: usize = 200;
 pub(super) use body::read_body_with_limit;
 use body::{MAX_REQUEST_BODY_SIZE, declared_body_too_large, payload_too_large_response};
 
-struct HttpState {
+pub(super) struct HttpState {
     tunnel: Option<tunnel::Tunnel>,
     agent_version: String,
     browser: Arc<browser_host::Hub>,
@@ -221,7 +224,11 @@ async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Respon
             request
                 .extensions()
                 .get::<listeners::LocalSocketPeer>()
-                .is_some(),
+                .is_some()
+                || request
+                    .extensions()
+                    .get::<listeners::InProcessPeer>()
+                    .is_some(),
         )
     };
     let origin = match origin {
@@ -294,6 +301,12 @@ async fn authorized_route(
     if request.method() == Method::DELETE && request.uri().path() == security::DEVICE_SELF_PATH {
         return security::revoke_self_request(&state, grant.access, request.headers()).await;
     }
+    if request.method() == Method::PUT && request.uri().path() == security::DEVICE_PUSH_PATH {
+        return security::set_push_request(&state, grant.access, request).await;
+    }
+    if request.method() == Method::GET && request.uri().path() == security::DEVICE_PUSH_PATH {
+        return security::push_status_request(&state, grant.access).await;
+    }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -311,6 +324,10 @@ async fn authorized_route(
                 .extensions()
                 .get::<listeners::LocalSocketPeer>()
                 .is_some()
+                || request
+                    .extensions()
+                    .get::<listeners::InProcessPeer>()
+                    .is_some()
                 || security::is_local_client(peer, request.headers(), origin)),
         admin: !tunnel_peer && !device_token && state.security.is_admin(request.headers()),
         keys: grant.keys,

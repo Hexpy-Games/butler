@@ -35,6 +35,19 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
         fn computer_key(&self, _: String) -> ApplicationFuture<SecretText> {
             unsupported()
         }
+        fn computer_environment(
+            &self,
+            _: String,
+        ) -> ApplicationFuture<BTreeMap<String, SecretText>> {
+            unsupported()
+        }
+        fn save_computer_environment(
+            &self,
+            _: String,
+            _: BTreeMap<String, SecretText>,
+        ) -> ApplicationFuture<()> {
+            unsupported()
+        }
         fn delete_computer_key(&self, _: String) -> ApplicationFuture<()> {
             unsupported()
         }

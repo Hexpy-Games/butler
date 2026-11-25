@@ -1310,6 +1310,7 @@ export interface SessionViewBridgeError {
   existing?: import("../../../../../butler-protocol/src/canon-contracts.ts").CanonTag;
   current?: { revision: number };
   hook_reason?: string;
+  line?: number;
   schema: "butler.app.bridge-error.v1";
   code: string;
   status?: number;

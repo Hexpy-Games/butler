@@ -32,6 +32,8 @@ export interface BrowserSnapshot {
   restored: boolean; enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];
 }
 export interface BrowserFrame { tab: string; seq: number; bytes: Uint8Array; masked: boolean }
+export type BrowserDownloadEntry = { id: string; name: string; path: string; url: string; bytes: number; total: number;
+  state: "progress" | "done" | "failed" | "cancelled"; time: string };
 interface BrowserBridge {
   onFrame: (tabId: string, handler: (frame: BrowserFrame) => void, widthPx?: number) => () => void;
   call: (op: string, input?: unknown) => Promise<unknown>;
@@ -40,6 +42,7 @@ interface BrowserBridge {
   onElementDrag: (handler: (event: ElementDragEvent) => void) => () => void;
   onSelectionAction: (handler: (event: { op: string; elements: PickedElement[] }) => void) => () => void;
   onDownload?: (handler: (event: { type: string; session: string; reason?: string }) => void) => () => void;
+  onDownloads?: (handler: (items: BrowserDownloadEntry[]) => void) => () => void;
   onHistory?: (handler: () => void) => () => void;
   onStill?: (handler: (receipt: { id: string; session: string }) => void) => () => void;
   onAddress: (handler: () => void) => () => void;
@@ -56,7 +59,6 @@ export function connectBrowser() {
     const store = useButlerStore.getState();
     if (!publicBrowserOwner(`conversation:${event.session}`, store.navigation)) return;
     if (event.type === "download_completed") {
-      if (store.activeChatId === event.session) void store.refreshSessionView(event.session, { snapshot: true });
       notifyStatus(appCopy.browser.downloadSaved);
     } else {
       const label = event.reason === "download_file_limit" ? appCopy.browser.downloadFileLimit
@@ -83,10 +85,11 @@ export function connectBrowser() {
         current.setView({ kind: "browser" });
         void browserCall("activate", { id: requested.id });
       }
-      if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
+      if (requested && session) {
+        // The conversation's pane opens on the tab; it shows now if that conversation is on screen, else when the user goes there.
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
-        void browserCall("activate", { id: requested.id });
+        if (current.view.kind === "session" && current.activeChatId === session) void browserCall("activate", { id: requested.id });
       }
     }
   });
@@ -134,7 +137,7 @@ export async function openConversationBrowser(session: string, requestedTab?: st
 export async function focusBrowserTab(id: string, sessionId: string, fallback: string) {
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
-  else void openLink(fallback);
+  else void openConversationLink(fallback, sessionId);
 }
 
 /**

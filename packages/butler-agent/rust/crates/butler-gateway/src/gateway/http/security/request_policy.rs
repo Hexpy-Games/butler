@@ -74,22 +74,24 @@ impl RequestPolicy {
     /// configured), the operator's extra host names and, while remote access
     /// is on, the LAN authorities (`ip:port`, `<name>.local:port`).
     pub(in crate::gateway::http) fn new(
-        local_addr: SocketAddr,
+        local_addr: Option<SocketAddr>,
         allowed_hosts: &[String],
         dev_origins: Option<&str>,
         lan_authorities: &[String],
     ) -> Self {
-        let port = local_addr.port();
+        let port = local_addr.map(|address| address.port());
         let mut policy = Self {
             hosts: HashSet::new(),
             local_origins: HashSet::from([APP_ORIGIN.to_owned()]),
             remote_origins: HashSet::new(),
         };
-        for name in LOOPBACK_NAMES {
-            policy.allow_plain_http(&format!("{name}:{port}"), true);
+        if let Some(address) = local_addr {
+            for name in LOOPBACK_NAMES {
+                policy.allow_plain_http(&format!("{name}:{}", address.port()), true);
+            }
+            let bound_loopback = address.ip().to_canonical().is_loopback();
+            policy.allow_plain_http(&address.to_string(), bound_loopback);
         }
-        let bound_loopback = local_addr.ip().to_canonical().is_loopback();
-        policy.allow_plain_http(&local_addr.to_string(), bound_loopback);
         for authority in lan_authorities {
             policy.allow_plain_http(authority, false);
         }
@@ -107,11 +109,14 @@ impl RequestPolicy {
 
     /// No trusted browser origin may use the bound content port, on any host.
     pub(in crate::gateway) fn validate_content_origin(
-        local_addr: SocketAddr,
-        content_addr: SocketAddr,
+        local_addr: Option<SocketAddr>,
+        content_addr: Option<SocketAddr>,
         allowed_hosts: &[String],
         dev_origins: Option<&str>,
     ) -> std::io::Result<()> {
+        let Some(content_addr) = content_addr else {
+            return Ok(());
+        };
         let api = Self::new(local_addr, allowed_hosts, dev_origins, &[]);
         for origin in api.local_origins.iter().chain(&api.remote_origins) {
             let port = url::Url::parse(origin)
@@ -140,16 +145,18 @@ impl RequestPolicy {
     /// `name` answers Host `name` and `name:<bound port>`; `name:port`
     /// answers exactly that. Both schemes are allowed as origins, so a TLS
     /// reverse proxy in front of the gateway works.
-    fn allow_configured_host(&mut self, entry: &str, port: u16) {
+    fn allow_configured_host(&mut self, entry: &str, port: Option<u16>) {
         let entry = entry.trim().to_ascii_lowercase();
         if entry.is_empty() || entry.contains(['/', '@', '?', '#', ' ']) {
             return;
         }
-        let authorities = if has_port(&entry) {
-            vec![entry]
-        } else {
-            vec![format!("{entry}:{port}"), entry]
-        };
+        let mut authorities = Vec::new();
+        if let Some(port) = port
+            && !has_port(&entry)
+        {
+            authorities.push(format!("{entry}:{port}"));
+        }
+        authorities.push(entry);
         for authority in authorities {
             self.remote_origins.insert(format!("http://{authority}"));
             self.remote_origins.insert(format!("https://{authority}"));

@@ -75,12 +75,13 @@ pub(in crate::gateway::http) fn message_file_view(
                 && id[5..].bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
         })
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let origin = view_origin(state, request)?.unwrap_or_default();
+    let port = port(state).ok_or_else(refused)?;
+    let origin = view_origin(state, request, port)?.unwrap_or_default();
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
     let cap = capability::sign(
         &token,
-        port(state),
+        port,
         &format!("remote.{computer}.message-file-{id}"),
         0,
         issued,

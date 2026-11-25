@@ -158,13 +158,21 @@ async fn start_app_gateway(
 ) -> Result<(), BtccError> {
     gateway.start_initial(&config.app, listener).await?;
     if let Some(active) = endpoint.snapshot() {
+        let endpoint = match active.base_url {
+            Some(url) => format!("address={url}"),
+            None => config
+                .app
+                .remote_socket()
+                .map_or_else(String::new, |socket| {
+                    format!("socket={}", socket.path.display())
+                }),
+        };
         if local_auth_unconfigured(&active.local_auth) {
             logs.problem(&format!(
-                "[native-app] refusing clients address={} code=local_auth_unconfigured",
-                active.base_url
+                "[native-app] refusing clients {endpoint} code=local_auth_unconfigured"
             ));
         } else {
-            logs.write(&format!("[native-app] ready address={}", active.base_url));
+            logs.write(&format!("[native-app] ready {endpoint}"));
         }
     }
     Ok(())
@@ -210,10 +218,6 @@ async fn serve(
     } = admission::prepare(&runtime, config, writer.clone(), instance, stop).await?;
     startup.phase("admission");
 
-    let parent_client = butler_log::http::loopback()
-        .redirect(butler_log::http::RedirectPolicy::none())
-        .build()
-        .map_err(io)?;
     let foreground_lease = capture_foreground_lease(instance)?;
     let readiness = support::publish_readiness(config).await?;
     let gateway = Arc::new(AppGatewayLifecycle::new(
@@ -251,7 +255,6 @@ async fn serve(
                 progress: progress.clone(),
                 config,
                 subsessions: &runtime.subsessions,
-                parent_client: &parent_client,
                 app_endpoint: &app_endpoint,
                 readiness: &readiness,
                 logs,
@@ -322,6 +325,10 @@ async fn start_control(
         config.installation.clone(),
         instance.nonce().to_owned(),
         control_owners(gateway, runtime, stop),
+        config
+            .app
+            .remote_socket()
+            .map(|socket| socket.path.as_path()),
     )
     .await
     {
@@ -378,7 +385,7 @@ async fn mark_ready(
     instance
         .mark_ready(
             active.is_some(),
-            active.as_ref().map(|active| active.base_url.clone()),
+            active.as_ref().and_then(|active| active.base_url.clone()),
             active
                 .as_ref()
                 .is_some_and(|active| active.local_auth.required),

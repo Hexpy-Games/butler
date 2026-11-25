@@ -53,7 +53,9 @@ async fn computer_add_checks_the_users_known_hosts_then_lists_and_removes()
     let (other_ed25519, other_ecdsa) = (other_ed25519?, other_ecdsa?);
     let known_hosts = home.join(".ssh/known_hosts");
     let host = json!({"address":"127.0.0.1", "port":sshd.port, "key_file":key});
-    let add = json!({"name":"Remote", "address":"127.0.0.1", "port":sshd.port, "key_file":key, "folder":home});
+    let folder = home.join("work");
+    fs::create_dir(&folder)?;
+    let add = json!({"name":"Remote", "address":"127.0.0.1", "port":sshd.port, "key_file":key, "folder":folder});
     let setup = setup.env(
         butler_platform::remote_ssh::CONFIG_FIXTURE,
         user_ssh_config(&home)?.to_string_lossy(),

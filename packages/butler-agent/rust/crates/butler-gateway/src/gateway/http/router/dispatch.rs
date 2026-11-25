@@ -159,6 +159,7 @@ async fn remote_routes(
         "/remote/memory/pending" => remote_memory::pending(state, request).await,
         "/remote/memory/pending/ack" => remote_memory::ack(state, request).await,
         "/remote/sessions" => remote_account::create_session(state, request).await,
+        "/remote/environment" => remote_account::environment(request).await,
         _ => remote_account::unlock(request).await,
     }
 }

@@ -52,7 +52,10 @@ pub(super) async fn route(
             connection(&state, root, &method, p).await?
         }
         (Method::DELETE, path) if path.starts_with("/computers/") => {
-            (StatusCode::OK, delete(&state, root, path).await?)
+            let force = query(request.uri())
+                .get("force")
+                .is_some_and(|value| value == "true");
+            (StatusCode::OK, delete(&state, root, path, force).await?)
         }
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
@@ -82,10 +85,16 @@ async fn add(
     request: Request<Body>,
     root: &std::path::Path,
 ) -> Result<(StatusCode, serde_json::Value), HttpError> {
-    let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
     let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
-    let computer = remote_computers::add(root, input, state.shutdown.clone()).await?;
+    let computer = remote_computers::add(
+        &state.application.setup()?,
+        root,
+        input,
+        state.shutdown.clone(),
+    )
+    .await?;
     publish_changed(
         state,
         computer.id(),
@@ -122,6 +131,7 @@ async fn start(
         root,
         path,
         true,
+        false,
         &state.agent_version,
         state.shutdown.clone(),
     )
@@ -150,7 +160,7 @@ async fn edit(
         .strip_prefix("/computers/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let bytes = read_body_with_limit(request.into_body(), 256 * 1024).await?;
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
     let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
     let (computer, target_changed) = remote_computers::edit(
@@ -185,12 +195,14 @@ async fn delete(
     state: &HttpState,
     root: &std::path::Path,
     path: &str,
+    force: bool,
 ) -> Result<serde_json::Value, HttpError> {
     let data = remote_computers::change(
         &state.application.setup()?,
         root,
         path,
         false,
+        force,
         &state.agent_version,
         state.shutdown.clone(),
     )

@@ -67,13 +67,41 @@ try {
     await waitBrowser(() => app.main("globalThis.pickSaved.length === 2 && globalThis.browserAgentSubject.nativeCovers === 0"), "both crops saved");
     for (const [index, crop] of crops.entries()) assert.deepEqual(readFileSync(join(evidence, `crop-${index}.jpg`)), Buffer.from(crop.split(",")[1]!, "base64"));
     await app.call("pick", { id: tab, value: false });
+    const userDir = join(evidence, "user-downloads");
+    await app.main(`${requireElectron}.app.setPath('downloads', ${JSON.stringify(userDir)})`);
+    const completedBeforeUser = (await events()).filter(e => e.type === "download_completed").length;
+    const conversation = tab;
+    await app.call("control", { id: tab, holder: "user" });
+    await download("mine.txt", "conversation download");
+    await waitBrowser(() => app.main("globalThis.browserAgentSubject.downloads.list()[0]?.state === 'done'"), "conversation user download finished");
+    const mine = await app.call<string>("create", { url: app.url });
+    await waitBrowser(() => app.main(`${subject(mine)}.status === 'idle' && ${subject(mine)}.view?.webContents.getTitle() === 'Browser fixture'`), "my tab fixture");
+    tab = mine;
+    await download("mine.txt", "my download");
+    await waitBrowser(() => app.main("globalThis.browserAgentSubject.downloads.list()[0]?.name === 'mine (1).txt' && globalThis.browserAgentSubject.downloads.list()[0].state === 'done'"), "my tab download finished");
+    const userDownloads = [join(userDir, "mine.txt"), join(userDir, "mine (1).txt")];
+    assert.equal(readFileSync(userDownloads[0]!, "utf8"), "conversation download");
+    assert.equal(readFileSync(userDownloads[1]!, "utf8"), "my download");
+    assert.equal((await events()).filter(e => e.type === "download_completed").length, completedBeforeUser);
+    assert.equal(await app.main("globalThis.browserAgentSubject.nativeCovers"), 0);
+    assert.equal(await app.main("globalThis.pickSaved.length"), crops.length);
+    await app.main("globalThis.browserAgentSubject.downloads.persistence");
+    const userData = await app.main<string>(`${requireElectron}.app.getPath('userData')`);
+    const history = JSON.parse(readFileSync(join(userData, "browser-downloads", "history.json"), "utf8")) as Array<{ name: string }>;
+    assert.deepEqual(history.map(entry => entry.name), ["mine (1).txt", "mine.txt"]);
+
+    tab = conversation;
+    await app.call("activate", { id: tab });
+    await app.call("control", { id: tab, holder: "agent" });
     const invoice = "%PDF-1.4\nInvoice 42\n%%EOF\n";
     await download("invoice.pdf", invoice);
-    await waitBrowser(async () => (await events()).some(e => e.type === "download_completed"), "invoice download output");
+    await waitBrowser(async () => (await events()).some(e => e.type === "download_completed"), "invoice download finished");
     const receipt = (await events()).find(e => e.type === "download_completed")!;
-    const artifacts = await app.gateway.api<{ artifacts: Array<{ id: string }> }>("/artifacts?session_id=general");
-    assert.ok(artifacts.artifacts.some(a => a.id === receipt.output_id));
-    assert.equal(readFileSync(join(app.gateway.butlerData, receipt.path!), "utf8"), invoice);
+    assert.equal(receipt.output_id, undefined);
+    const artifacts = await app.gateway.api<{ artifacts: Array<{ title: string }> }>("/artifacts?session_id=general");
+    assert.ok(artifacts.artifacts.every(a => a.title !== "invoice.pdf"));
+    const workspace = await app.main<string>(`globalThis.browserAgentSubject.downloadRequest({ op: "prepare", session: "general", tab: ${JSON.stringify(tab)} }).then(c => c.workspace_path)`);
+    assert.equal(readFileSync(join(workspace, receipt.path!), "utf8"), invoice);
     const canonical = await app.gateway.api<any>("/session-view?session_id=general");
     const stream = await app.gateway.api<any>("/events?limit=10");
     writeFileSync(join(evidence, "download-projection.json"), JSON.stringify({
@@ -81,7 +109,7 @@ try {
       artifacts: canonical.artifacts?.map((a: any) => a.title), events: stream.events?.map((e: any) => ({ type: e.type })),
     }, null, 2));
     await download("program.exe", "MZ-do-not-open");
-    await waitBrowser(async () => (await events()).filter(e => e.type === "download_completed").length === 2, "executable retained as output");
+    await waitBrowser(async () => (await events()).filter(e => e.type === "download_completed").length === 2, "executable download finished");
     assert.deepEqual(await app.main("globalThis.downloadOpened"), []);
     const oversized = createServer((_request, response) => {
       response.writeHead(200, { "content-disposition": 'attachment; filename="too-large.bin"', "content-length": "100000001" });
@@ -96,14 +124,29 @@ try {
     await app.main("globalThis.browserAgentSubject.downloads.totals['conversation:general']=500000000");
     await download("over-session.txt", "limit");
     await waitBrowser(async () => (await events()).some(e => e.reason === "download_session_limit"), "500 MB session limit event");
-    await waitBrowser(() => app.page.expression("document.body.innerText.includes('invoice.pdf')"), "download output appears in current conversation");
-    await app.shot("invoice-output", true);
-    const mine = await app.call<string>("create", { url: app.url });
-    await waitBrowser(() => app.main(`${subject(mine)}.status === 'idle'`), "my tab fixture");
-    await app.main(`(()=>{const s=${subject(mine)}.view.webContents.session;globalThis.myDialog=false;s.prependOnceListener('will-download',(_event,item)=>{const original=item.setSaveDialogOptions.bind(item);item.setSaveDialogOptions=options=>{globalThis.myDialog=options.defaultPath==='mine.txt';original(options);item.setSavePath(${JSON.stringify(join(evidence, "mine.txt"))})}})})()`);
-    tab = mine; await download("mine.txt", "my download");
-    await waitBrowser(() => app.main("globalThis.myDialog === true && globalThis.browserAgentSubject.nativeCovers === 0"), "my tab retains save dialog policy");
-    writeFileSync(join(evidence, "acceptance.json"), JSON.stringify({ functional: true, clipboardQualified: clipboardReadback || clipboardPaste, events: await events(), crops: crops.length, clipboardReadback, clipboardPaste, executableOpened: false, myTabDialog: true }, null, 2));
+
+    const stalled = createServer((_request, response) => {
+      response.writeHead(200, { "content-disposition": 'attachment; filename="stalled.bin"', "content-length": "100000001" });
+      response.flushHeaders(); response.write(Buffer.alloc(64 * 1024));
+    });
+    await new Promise<void>(done => stalled.listen(0, "127.0.0.1", done));
+    const stalledAddress = stalled.address() as { port: number };
+    try {
+      await app.main(`${subject(mine)}.view.webContents.downloadURL(${JSON.stringify(`http://127.0.0.1:${stalledAddress.port}/`)})`);
+      await waitBrowser(() => app.main("globalThis.browserAgentSubject.downloads.list()[0]?.name === 'stalled.bin' && globalThis.browserAgentSubject.downloads.list()[0].state === 'progress'"), "stalled user download in progress");
+      const current = await app.main<Array<{ id: string }>>("globalThis.browserAgentSubject.downloads.list()");
+      const next = await app.main<Array<{ name: string; state: string }>>("(async()=>{const d = globalThis.browserAgentSubject.downloads; await d.persistence; const next = new d.constructor(globalThis.browserAgentSubject, d.directory); return next.list();})()");
+      assert.equal(next.length, current.length);
+      assert.equal(next[0]?.name, "stalled.bin");
+      assert.equal(next[0]?.state, "failed");
+      await app.main(`globalThis.browserAgentSubject.downloads.cancelEntry(${JSON.stringify(current[0]!.id)})`);
+    } finally { stalled.closeAllConnections(); await new Promise<void>(done => stalled.close(() => done())); }
+    await nativeAligned(app);
+    await app.click("Downloads");
+    await waitBrowser(() => app.page.expression("document.body.innerText.includes('mine (1).txt') && document.body.innerText.includes('invoice.pdf')"), "user and agent downloads in the popover");
+    await waitBrowser(() => app.main(`${subject(tab)}.covered && (${subject(tab)}.attached !== ${app.win} || !${subject(tab)}.view.getVisible())`), "downloads popover covers the native page");
+    await app.shot("downloads-popover", true);
+    writeFileSync(join(evidence, "acceptance.json"), JSON.stringify({ functional: true, clipboardQualified: clipboardReadback || clipboardPaste, events: await events(), crops: crops.length, clipboardReadback, clipboardPaste, executableOpened: false, userDownloads }, null, 2));
   }
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), lastMain: app.lastMain(), selection: await app.main("({commands:globalThis.selectionCommands,writes:globalThis.copyWrites,picks:globalThis.browserAgentSubject.tabs.get(globalThis.browserAgentSubject.activeId)?.selections?.map(s=>s.text)})").catch(() => null), events: await events().catch(() => []) }));

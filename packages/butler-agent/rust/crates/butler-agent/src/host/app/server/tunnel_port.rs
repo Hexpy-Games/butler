@@ -68,7 +68,7 @@ impl GatewayTunnelPort for AppTunnelPort {
     fn plan(&self) -> ApplicationFuture<Option<String>> {
         let account = self.account.clone();
         Box::pin(async move {
-            let status = account.status().await?;
+            let status = account.status(None).await?;
             Ok(status["entitlements"]["plan"].as_str().map(str::to_owned))
         })
     }

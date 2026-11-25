@@ -6,6 +6,7 @@ ipcRenderer.on("butler:text-size", (_event, factor) => {
 // Capture links before nested message menus; non-web schemes keep their handlers.
 for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
   const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+  if (type === "click" && link?.closest("[data-butler-link-session]")) return;
   const value = link?.href ?? (type === "contextmenu" ? event.composedPath()
     .find(node => node instanceof HTMLElement && node.hasAttribute("data-butler-link"))?.getAttribute("data-butler-link") : null);
   if (!value || !/^https?:/iu.test(value)) return;
@@ -85,6 +86,7 @@ function bridgeErrorEnvelope(error) {
     ...(code === "tag_exists" && error?.existing ? { existing: error.existing } : {}),
     ...(Number.isSafeInteger(error?.current?.revision) ? { current: { revision: error.current.revision } } : {}),
     code,
+    ...(Number.isSafeInteger(error?.line) ? { line: error.line } : {}),
     ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
     ...(code === "session_cursor_resync_required"
@@ -293,6 +295,7 @@ async function requestJson(path, options = {}) {
     error.code = body?.error?.code ?? "request_failed";
     error.status = response.status;
     if (error.code === "tag_exists" && body?.error?.existing) error.existing = body.error.existing;
+    if (Number.isSafeInteger(body?.error?.line)) error.line = body.error.line;
     if (Number.isSafeInteger(body?.error?.current?.revision)) error.current = { revision: body.error.current.revision };
     throw error;
   }
@@ -785,19 +788,14 @@ const butlerApp = Object.freeze({
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
     method: "POST", body: "{}",
   }),
-  getButlerBackup: () => requestBridgeResult("/setup/butler-backup"),
-  postButlerBackup: (request) => requestBridgeResult("/setup/butler-backup", {
-    method: "POST", body: JSON.stringify(request ?? {}),
-  }),
-  getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
-  postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
-    method: "POST", body: JSON.stringify(request ?? {}),
-  }),
-  signOutButlerAccount: () => requestBridgeResult("/setup/butler-account", { method: "DELETE" }),
-  listButlerAccountDevices: () => requestBridgeResult("/setup/butler-account/devices"),
-  revokeButlerAccountDevice: ({ id } = {}) => requestBridgeResult(`/setup/butler-account/devices/${encodeURIComponent(id ?? "")}`, {
-    method: "DELETE",
-  }),
+  getButlerBackup: () => requestSecurity("getButlerBackup"),
+  postButlerBackup: (request) => requestSecurity("postButlerBackup", { payload: request ?? {} }),
+  getButlerAccount: () => requestSecurity("getButlerAccount"),
+  postButlerAccount: (request) => requestSecurity("postButlerAccount", { payload: request ?? {} }),
+  setButlerAccountDevPlan: ({ plan }) => requestSecurity("postButlerAccount", { payload: { action: "dev_plan", plan } }),
+  signOutButlerAccount: () => requestSecurity("signOutButlerAccount"),
+  listButlerAccountDevices: () => requestSecurity("listButlerAccountDevices"),
+  revokeButlerAccountDevice: ({ id } = {}) => requestSecurity("revokeButlerAccountDevice", { id }),
   getPublishing: () => requestBridgeResult("/publishing"),
   listPublishedPages: () => requestBridgeResult("/publishing/pages"),
   unpublishPage: ({ id } = {}) => requestBridgeResult(`/publishing/pages/${encodeURIComponent(id ?? "")}`, { method: "DELETE" }),
@@ -1468,7 +1466,7 @@ const butlerApp = Object.freeze({
   listComputers: () => requestSecurity("listComputers"),
   checkComputerHostKey: (payload) => requestSecurity("checkComputerHostKey", { payload }),
   addComputer: (payload) => requestSecurity("addComputer", { payload }),
-  deleteComputer: ({ id } = {}) => requestSecurity("deleteComputer", { id }),
+  deleteComputer: ({ id, force } = {}) => requestSecurity("deleteComputer", { id, force }),
   startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
   getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
   reconnectComputer: ({ id } = {}) => requestSecurity("reconnectComputer", { id }),
@@ -1808,6 +1806,11 @@ contextBridge.exposeInMainWorld("butlerBrowser", {
     const listener = (_event, value) => handler(value);
     ipcRenderer.on("butler-browser:download", listener);
     return () => ipcRenderer.removeListener("butler-browser:download", listener);
+  },
+  onDownloads(handler) {
+    const listener = (_event, value) => handler(value);
+    ipcRenderer.on("butler-browser:downloads", listener);
+    return () => ipcRenderer.removeListener("butler-browser:downloads", listener);
   },
   onElementDrag(handler) {
     const listener = (_event, value) => handler(value);

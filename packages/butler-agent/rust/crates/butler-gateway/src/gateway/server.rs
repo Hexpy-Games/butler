@@ -5,7 +5,9 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use super::{GatewayApplication, GatewaySecurityStore, LocalAuthConfig, RemoteSocket, http};
+use super::{
+    GatewayApplication, GatewaySecurityStore, InProcessGateway, LocalAuthConfig, RemoteSocket, http,
+};
 use butler_platform::local_socket;
 
 /// Listener configuration for [`serve_gateway`].
@@ -49,7 +51,7 @@ pub struct GatewayConfig {
     /// Butler's own headless browser, used while no App is attached. `None`
     /// turns it off (calls without an App answer `no_browser`).
     pub headless_browser: Option<HeadlessBrowserConfig>,
-    /// Remote mode: also serve the API on this socket file; `None` in normal mode.
+    /// Remote mode: serve the API on this socket file; `None` in normal mode.
     pub remote_socket: Option<RemoteSocket>,
 }
 
@@ -96,21 +98,26 @@ impl Default for GatewayConfig {
 }
 
 pub struct GatewayServer {
-    local_addr: SocketAddr,
-    content_addr: SocketAddr,
+    local_addr: Option<SocketAddr>,
+    content_addr: Option<SocketAddr>,
     shutdown: CancellationToken,
+    in_process: InProcessGateway,
     task: Option<JoinHandle<std::io::Result<()>>>,
 }
 
 impl GatewayServer {
     /// The loopback (primary) listener's address.
-    pub fn local_addr(&self) -> SocketAddr {
+    pub fn local_addr(&self) -> Option<SocketAddr> {
         self.local_addr
     }
 
     /// The bound content listener, including any ephemeral fallback.
-    pub fn content_addr(&self) -> SocketAddr {
+    pub fn content_addr(&self) -> Option<SocketAddr> {
         self.content_addr
+    }
+
+    pub fn in_process(&self) -> InProcessGateway {
+        self.in_process.clone()
     }
 
     /// Refuse new HTTP work without closing application storage or waiting for handlers.
@@ -140,19 +147,25 @@ impl Drop for GatewayServer {
 /// Serves `listener` (the loopback listener), and the LAN listeners when
 /// remote access is enabled.
 pub async fn serve_gateway(
-    listener: TcpListener,
+    listener: Option<TcpListener>,
     application: Arc<dyn GatewayApplication>,
     mut config: GatewayConfig,
 ) -> std::io::Result<GatewayServer> {
     validate_content_hosts(&mut config)?;
-    let local_addr = listener.local_addr()?;
-    let content_listener = bind_content(local_addr, config.content_port).await?;
+    let local_addr = listener.as_ref().map(TcpListener::local_addr).transpose()?;
+    let content_listener = match local_addr {
+        Some(address) => Some(bind_content(address, config.content_port).await?),
+        None => None,
+    };
     let local_listener = config
         .remote_socket
         .as_ref()
         .map(|socket| local_socket::bind(&socket.path).map(|listener| (listener, socket.clone())))
         .transpose()?;
-    let content_addr = content_listener.local_addr()?;
+    let content_addr = content_listener
+        .as_ref()
+        .map(TcpListener::local_addr)
+        .transpose()?;
     http::RequestPolicy::validate_content_origin(
         local_addr,
         content_addr,
@@ -160,22 +173,37 @@ pub async fn serve_gateway(
         config.dev_cors_origin.as_deref(),
     )?;
     let shutdown = CancellationToken::new();
+    let state = match http::prepare(
+        application,
+        config,
+        shutdown.clone(),
+        local_addr,
+        content_addr,
+    )
+    .await
+    {
+        Ok(state) => state,
+        Err(error) => {
+            shutdown.cancel();
+            return Err(error);
+        }
+    };
+    let in_process = InProcessGateway::new(state.clone(), shutdown.clone());
     let task = http::serve(
         http::Listeners {
             main: listener,
             content: content_listener,
             local: local_listener,
         },
-        application,
-        config,
+        state,
         shutdown.clone(),
-        local_addr,
-        content_addr,
+        in_process.clone(),
     );
     Ok(GatewayServer {
         local_addr,
         content_addr,
         shutdown,
+        in_process,
         task: Some(task),
     })
 }

@@ -113,6 +113,8 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         .env("BUTLER_E2E_APP_NOW", T)
         .start()
         .await?;
+    s.provider()?
+        .set_chat_responder(memory_stubs::daily_briefing);
     s.provider()?.set_memory_responder(|_| {
         let text = json!({"status":"processed","entities":[],"items":[],"attributes":[]}).to_string();
         let item = json!({"type":"message","id":"msg_meaning","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]});
@@ -285,9 +287,10 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     assert_eq!(complete["removal_pending"], true);
     assert_eq!(complete["retire_after"], "2026-11-27T12:00:00.000Z");
     s.agent.terminate().await?;
+    // The fixed clock stays 10 s before retire_after, so no startup pass is due; only the in-process hold timer can reclaim the generation.
     s.agent
         .launch
-        .set_env("BUTLER_E2E_APP_NOW", "2026-11-28T12:00:00.000Z");
+        .set_env("BUTLER_E2E_APP_NOW", "2026-11-27T11:59:50.000Z");
     s.gw = s.agent.start_again().await?;
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
@@ -299,6 +302,6 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         }
     })
     .await
-    .expect("retired generation is reclaimed on the later startup")?;
+    .expect("retired generation is reclaimed by the in-process hold timer")?;
     s.finish().await
 }

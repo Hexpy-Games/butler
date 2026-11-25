@@ -29,6 +29,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
+- A disabled Native Select shows the same disabled surface and text tone as a disabled Input or Select, whether it is read only or busy; give the reason in a Tooltip in app code.
 
 ## Wrong use cases
 - Do not use Native Select as a domain-specific component with embedded feature logic; create a domain component under `src/components` and compose this component instead.

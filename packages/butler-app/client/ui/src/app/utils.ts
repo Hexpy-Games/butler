@@ -838,7 +838,7 @@ export function activeTurnProgressSnapshot(
   return null;
 }
 
-function isActiveTurnProgressSnapshot(snapshot: TurnProgressSnapshot): boolean {
+export function isActiveTurnProgressSnapshot(snapshot: TurnProgressSnapshot): boolean {
   const state = snapshot.state ?? "";
   if (state.length > 0) return !isTerminalProgressState(state);
   return (snapshot.safe_progress_rows ?? []).some(

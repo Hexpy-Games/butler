@@ -6,6 +6,7 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 import { computerAuthUrl, computerFixtures, createComputersFake } from "../support/computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
+import { captureRemovedComputer } from "../support/removed-computer-smoke.ts";
 
 const language = process.env.COMPUTERS_SMOKE_LANGUAGE ?? "ko";
 setAppCopyLanguage(language);
@@ -13,6 +14,8 @@ const copy = appCopy.computers;
 const common = appCopy.common;
 const widths = [320, 375, 390, 430, 768, 1440];
 const fake = createComputersFake();
+const environmentText = "APP_MODE=development\nLOG_LEVEL=info";
+const variables = (dialog: Locator) => dialog.locator("#computer-environment-text");
 const section = (page: Page) => page.locator('[data-settings-section-id="computers"]');
 const button = (scope: Page | Locator, name: string) => scope.getByRole("button", { name, exact: true });
 const addDialog = (page: Page) => page.locator('[data-test-class="computer-add-dialog"]');
@@ -63,7 +66,8 @@ async function captureStates(page: Page, output: string, variant: string) {
   await screenshot("A1-empty", section(page));
   await button(section(page), copy.add).click();
   const dialog = addDialog(page);
-  const submit = button(dialog, copy.form.submit);
+  const submit = button(dialog, copy.form.submit).and(dialog.locator('button[type="submit"]'));
+  assert.equal(await variables(dialog).inputValue(), "");
   await screenshot("A3-form", dialog);
 
   const name = copy.form.namePlaceholder;
@@ -72,6 +76,7 @@ async function captureStates(page: Page, output: string, variant: string) {
   await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
   await dialog.locator("#computer-port").fill("22");
   await dialog.locator("#computer-key-file").fill(copy.form.keyFilePlaceholder);
+  await variables(dialog).fill(environmentText);
   let release!: () => void;
   fake.startHold = new Promise<void>((resolve) => { release = resolve; });
   try {
@@ -88,8 +93,23 @@ async function captureStates(page: Page, output: string, variant: string) {
   await dialog.waitFor({ state: "hidden" });
   await button(row(page, name), copy.edit).click();
   await assertVisible(dialog, copy.form.editTitle);
+  const environment = copy.form.environment;
+  assert.equal(await variables(dialog).inputValue(), environmentText);
+  const savedSecret = dialog.getByPlaceholder(environment.saved);
+  assert.equal(await savedSecret.inputValue(), "");
   await screenshot("E2-edit", dialog);
+  await savedSecret.fill("example-only");
+  await screenshot("E4-environment", dialog);
+
   const save = button(dialog, copy.form.save);
+  await variables(dialog).fill("APP_MODE=development\nLOG_LEVEL");
+  fake.failNext("edit", "computer_env_line_invalid", 2);
+  await save.click();
+  await assertVisible(dialog, copy.errors.environment.lineInvalid(2));
+  assert.equal(await variables(dialog).evaluate((node) => node === document.activeElement), true);
+  await screenshot("E5-environment-error", dialog);
+  await variables(dialog).fill(environmentText);
+  await savedSecret.fill("");
   fake.failNext("edit", "computer_host_different");
   await save.click();
   await assertVisible(dialog.locator('[data-settings-field]:has(#computer-address)'), copy.errors.otherComputer);
@@ -143,6 +163,13 @@ async function captureStates(page: Page, output: string, variant: string) {
   await screenshot("A8-delete", deleteDialog);
   await deleteDialog.getByRole("checkbox", { name: copy.removeDialog.forget }).click();
   await screenshot("A8-delete-forget", deleteDialog);
+  await button(deleteDialog, common.cancel).click();
+  await button(row(page, unreachable!.name), copy.removeComputer(unreachable!.name)).click();
+  await deleteDialog.getByRole("checkbox", { name: copy.removeDialog.forget }).click();
+  fake.failNext("delete", "computer_unreachable");
+  await button(deleteDialog, copy.removeDialog.confirm).click();
+  await assertVisible(deleteDialog, copy.removeDialog.unreachableTitle);
+  await screenshot("A9-delete-unreachable", deleteDialog);
   return captures;
 }
 
@@ -166,10 +193,11 @@ try {
     });
     await page.route(`${server.url}**`, async (route) => {
       const request = route.request();
-      const path = new URL(request.url()).pathname;
+      const url = new URL(request.url());
+      const path = url.pathname;
       const method = request.method();
       if (path.startsWith("/computers") || (method === "GET" && path === "/credentials")) {
-        await route.fulfill(await fake.respond({ method, path, body: request.postDataJSON() }));
+        await route.fulfill(await fake.respond({ method, path: path + url.search, body: request.postDataJSON() }));
         return;
       }
       const headers = { ...request.headers(), ...(path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders) };
@@ -193,7 +221,7 @@ try {
   assert(await button(section(page), copy.add).isVisible());
   await button(section(page), copy.add).click();
   const dialog = addDialog(page);
-  const submit = button(dialog, copy.form.submit);
+  const submit = button(dialog, copy.form.submit).and(dialog.locator('button[type="submit"]'));
   assert(await submit.isDisabled());
   await submit.hover({ force: true });
   await assertVisible(page.getByRole("tooltip"), copy.form.required);
@@ -215,6 +243,7 @@ try {
   await dialog.locator("#computer-folder").fill(folder);
   await dialog.locator("#computer-port").fill("22");
   await dialog.locator("#computer-key-file").fill(keyFile);
+  await variables(dialog).fill(environmentText);
   fake.startHold = new Promise<void>((resolve) => { releaseStart = resolve; });
   const startRequest = page.waitForRequest((request) => /^\/computers\/[^/]+\/start$/u.test(new URL(request.url()).pathname));
   await submit.click();
@@ -222,7 +251,7 @@ try {
   assert.equal(await page.getByRole("alertdialog").count(), 0);
   assert.deepEqual(lastCall("POST", "/computers/host-key")?.body, { address, port: 22, key_file: keyFile });
   assert.deepEqual(lastCall("POST", "/computers")?.body, {
-    name, address, port: 22, key_file: keyFile, folder, model_source: "follow",
+    name, address, port: 22, key_file: keyFile, folder, model_source: "follow", environment: [], environment_text: environmentText,
   });
   await assertVisible(dialog.getByRole("status"), copy.form.preparing);
   assert.equal(await dialog.locator("input:disabled").count(), 5);
@@ -244,13 +273,24 @@ try {
     assert.equal(await dialog.locator(`#computer-${field}`).inputValue(), value);
   }
   await assertVisible(dialog.getByRole("combobox").first(), copy.model.options.follow);
+  assert.equal(await variables(dialog).inputValue(), environmentText);
+  assert.equal(await dialog.getByPlaceholder(copy.form.environment.saved).inputValue(), "");
   const editedName = `${name} 2`;
   await dialog.locator("#computer-name").fill(editedName);
   const save = button(dialog, copy.form.save);
+  for (const [line, message, field] of [
+    [2, copy.errors.environment.lineReserved(2), "#computer-environment-text"],
+    [undefined, copy.errors.environment.reserved, "#computer-environment"],
+  ] as const) {
+    fake.failNext("edit", "computer_env_name_reserved", line);
+    await save.click();
+    await assertVisible(dialog, message);
+    assert.equal(await dialog.locator(field).evaluate((node) => node === document.activeElement), true);
+  }
   await save.click();
   await dialog.waitFor({ state: "hidden" });
   assert.deepEqual(lastCall("PUT", computerPath)?.body, {
-    name: editedName, address, port: 22, key_file: keyFile, folder, model_source: "follow",
+    name: editedName, address, port: 22, key_file: keyFile, folder, model_source: "follow", environment: [{ name: "API_TOKEN" }], environment_text: environmentText,
   });
 
   await button(row(page, editedName), copy.edit).click();
@@ -329,10 +369,16 @@ try {
   await button(row(page, unreachable!.name), copy.removeComputer(unreachable!.name)).click();
   await forget.click();
   assert.equal(await forget.getAttribute("aria-checked"), "true");
-  const reset = page.waitForResponse((response) => new URL(response.url()).pathname === resetPath);
+  fake.failNext("delete", "computer_unreachable");
   await button(deleteDialog, removal.confirm).click();
+  await assertVisible(deleteDialog, removal.unreachableTitle);
+  await assertVisible(deleteDialog, removal.unreachableBody);
+  assert.equal(await forget.count(), 0);
+  assert(!fake.calls.some(({ path }) => path === resetPath));
+  const reset = page.waitForResponse((response) => new URL(response.url()).pathname === resetPath);
+  await button(deleteDialog, removal.forceConfirm).click();
   assert.equal((await reset).status(), 202);
-  const deleted = fake.calls.findIndex(({ method, path }) => method === "DELETE" && path === `/computers/${unreachable!.id}`);
+  const deleted = fake.calls.findIndex(({ method, path }) => method === "DELETE" && path === `/computers/${unreachable!.id}?force=true`);
   const resetCall = fake.calls.findIndex(({ method, path }) => method === "POST" && path === resetPath);
   assert(deleted >= 0 && resetCall > deleted);
   const resetBody = fake.calls[resetCall]!.body as { operation_id: string; inventory_revision: number };
@@ -343,8 +389,10 @@ try {
   await verifyLayouts(page);
   assert.equal(server.stubModelCalls.length, 0);
   console.log(JSON.stringify({
-    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "forget-memories", "layouts"], widths,
+    ok: true, checks: ["empty", "required", "home-folder", "preparing", "model-default", "chatgpt", "edit", "failures", "statuses", "delete", "delete-unreachable", "forget-memories", "layouts"], widths,
   }));
+
+  await captureRemovedComputer(browser, language);
 
   const screenshots = process.env.BUTLER_SMOKE_SCREENSHOTS;
   if (screenshots !== undefined) {
@@ -353,8 +401,8 @@ try {
     await page.close();
     let captures = 0;
     for (const [locale, variants] of [
-      ["ko", [["light", "desktop", 1280, 900], ["dark", "desktop", 1280, 900], ["light", "mobile", 375, 812]]],
-      ["en", [["light", "desktop", 1280, 900]]],
+      ["ko", [["light", "desktop", 1280, 1200], ["dark", "desktop", 1280, 1200], ["light", "mobile", 375, 1280], ["dark", "mobile", 375, 1280]]],
+      ["en", [["light", "desktop", 1280, 1200], ["light", "mobile", 375, 1280]]],
     ] as const) {
       setAppCopyLanguage(locale);
       const captureServer = await createNativeAppServer({

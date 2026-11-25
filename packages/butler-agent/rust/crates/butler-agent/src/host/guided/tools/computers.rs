@@ -3,12 +3,13 @@ mod card;
 
 use super::{GuidedTools, admin_client::AdminClient, dispatch::encoded};
 use butler_core::{json::JsonDocument, tool_protocol::ToolName};
+use butler_models::models::parse_computer_environment;
 use butler_turn::btcc::{
     AccessDecision, AuthorityExecutionInput, BtccError, CapabilityKind, GuidedInvocation,
     ModelRoundToolCall, RequestOutcome, ToolExecutionError, TurnTaint, UserQuestionResponse,
     UserQuestions, question_request_ref,
 };
-use reqwest::Method;
+use http::Method;
 use serde_json::{Value, json};
 
 pub(super) fn supports(name: &str) -> bool {
@@ -134,22 +135,44 @@ async fn list(owner: &GuidedTools) -> Result<Value, Value> {
         .iter()
         .filter_map(|credential| Some((credential["id"].as_str()?, credential["label"].as_str()?)))
         .collect();
-    let computers: Vec<_> = rows(&data, "computers").iter().map(|computer| {
-        let source = &computer["model_source"];
-        let model = if let Some(id) = source["key"].as_str() {
-            let label = labels.get(id).copied().unwrap_or("missing");
-            format!("key:{label}")
-        } else {
-            source.as_str().unwrap_or("none").to_owned()
-        };
-        json!({
-            "id":computer["id"], "name":computer["name"], "address":computer["address"],
-            "port":computer["port"], "key_file":computer["key_file"], "folder":computer["folder"],
-            "ai_connected":computer["ai_connected"], "stops_on_logout":computer["stops_on_logout"],
-            "model":model
+    let computers: Vec<_> = rows(&data, "computers")
+        .iter()
+        .map(|computer| {
+            let source = &computer["model_source"];
+            let model = if let Some(id) = source["key"].as_str() {
+                let label = labels.get(id).copied().unwrap_or("missing");
+                format!("key:{label}")
+            } else {
+                source.as_str().unwrap_or("none").to_owned()
+            };
+            let mut view = computer_view(computer);
+            view["model"] = json!(model);
+            view
         })
-    }).collect();
+        .collect();
     Ok(json!({"ok":true,"computers":computers}))
+}
+
+fn computer_view(computer: &Value) -> Value {
+    let variables = computer["environment_text"]
+        .as_str()
+        .and_then(|text| parse_computer_environment(text, &Default::default()).ok())
+        .map(|entries| entries.into_keys().collect::<Vec<_>>())
+        .unwrap_or_default();
+    json!({
+        "id":computer["id"], "name":computer["name"], "address":computer["address"],
+        "port":computer["port"], "key_file":computer["key_file"], "folder":computer["folder"],
+        "ai_connected":computer["ai_connected"], "stops_on_logout":computer["stops_on_logout"],
+        "variables":variables, "secrets":rows(computer, "environment"),
+    })
+}
+
+fn mutation_view(computer: &Value) -> Value {
+    let mut view = computer_view(computer);
+    for field in ["os", "arch", "glibc", "added_at", "model_source"] {
+        view[field] = computer[field].clone();
+    }
+    view
 }
 
 async fn admin(owner: &GuidedTools) -> Result<AdminClient, Value> {

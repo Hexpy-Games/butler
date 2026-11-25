@@ -24,7 +24,10 @@
 
 use std::time::Duration;
 
-use reqwest::Method;
+use http::Method;
+use tokio::time::Instant;
+
+use crate::host::app::self_api::{SelfApi, SelfApiError};
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -412,18 +415,23 @@ async fn app_json_at(
     if auth.required && auth.token().is_none() {
         return Err(unsent("app_local_auth_unconfigured"));
     }
-    let mut request = butler_log::http::loopback()
-        .build()
-        .map_err(|_| unsent("app_gateway_unavailable"))?
-        .request(method, format!("{}{route}", current.base_url))
-        .query(query)
-        .timeout(Duration::from_secs(60));
-    if let Some(token) = auth.token() {
-        request = request.bearer_auth(token);
+    let mut path = route.to_owned();
+    if !query.is_empty() {
+        path.push('?');
+        path.push_str(
+            &url::form_urlencoded::Serializer::new(String::new())
+                .extend_pairs(query)
+                .finish(),
+        );
     }
-    if let Some(body) = body {
-        request = request.json(body);
-    }
+    let api = SelfApi::new(endpoint);
+    let request = api.request(
+        method,
+        &path,
+        body,
+        None,
+        Some(Instant::now() + Duration::from_secs(60)),
+    );
     let unknown = AppCallError {
         code: "wallpaper_outcome_unknown",
         sent: true,
@@ -431,17 +439,22 @@ async fn app_json_at(
     let response = tokio::select! {
         biased;
         () = signal.cancelled() => return Err(unknown),
-        response = request.send() => response.map_err(|_| unknown)?,
+        response = request => response.map_err(|error| match error {
+            SelfApiError::Unavailable => unsent("app_gateway_unavailable"),
+            SelfApiError::Unknown => unknown,
+        })?,
     };
     let status = response.status().as_u16();
     let decoded = tokio::select! {
         biased;
         () = signal.cancelled() => return Err(unknown),
-        decoded = response.json::<Value>() => decoded,
+        bytes = response.bytes() => bytes,
     };
     decoded
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .map(|body| (status, body))
-        .map_err(|_| AppCallError {
+        .ok_or(AppCallError {
             code: "wallpaper_response_invalid",
             sent: true,
         })

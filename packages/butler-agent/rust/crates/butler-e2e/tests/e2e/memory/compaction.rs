@@ -17,6 +17,8 @@ const OLD: &str = "Always end replies with good day.";
 const LATEST: &str = "Always format dates as YYYY-MM-DD.";
 const SAVE_OLD: &str = "Remember this instruction: always end replies with good day.";
 const SAVE_NEW: &str = "Remember this instruction: always format dates as YYYY-MM-DD.";
+/// lance_maintenance::RETAINED_VERSIONS: versions a prune keeps.
+const RETAINED_VERSIONS: u64 = 32;
 
 #[tokio::test]
 async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
@@ -35,6 +37,7 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
     let old = instruction(&s, OLD).await?;
     s.agent.terminate().await?;
     let seeded = inspect("fragment", &s.sandbox.data).await?;
+    assert_eq!(seeded["full_fragment_ids"].as_array().unwrap().len(), 1);
     assert!(seeded["fragments"].as_u64().unwrap() > 32);
     s.agent
         .launch
@@ -105,18 +108,36 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
                 .any(|channel| channel == "vector"))
     );
     memory_stubs::vectors_complete(&s.sandbox.data, 6).await?;
-    wait_compacted(&s).await?;
+    wait_logged(&s, "compact_ms=").await?;
+    let pruned = wait_logged(&s, "versions_pruned=").await?;
+    let pruned_at: u64 = pruned
+        .rsplit("version=")
+        .next()
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
     let after = inspect("inspect", &s.sandbox.data).await?;
+    let written_since = after["version"].as_u64().unwrap() - pruned_at;
+    assert!(
+        after["versions"].as_u64().unwrap() <= RETAINED_VERSIONS + written_since,
+        "compaction must prune the versions it superseded: {pruned}"
+    );
+    assert_eq!(
+        after["full_fragment_ids"], seeded["full_fragment_ids"],
+        "compaction rewrote a full fragment"
+    );
     for (key, row) in before["rows"].as_object().unwrap() {
         assert_eq!(&after["rows"][key], row, "compaction lost or changed {key}");
     }
     assert_rows_and_latest(&s.sandbox.data, &after)?;
     assert_instructions(&s, &saved, &latest).await?;
     eprintln!(
-        "COMPACTION fragments_before={} rows_before={} rows_after={} write_ms={write_ms} forget_ms={forget_ms} shutdown_ms={} held_until_shutdown=true latest_content=true",
+        "COMPACTION fragments_before={} rows_before={} rows_after={} versions={} write_ms={write_ms} forget_ms={forget_ms} shutdown_ms={} held_until_shutdown=true latest_content=true",
         before["fragments"],
         before["row_count"],
         after["row_count"],
+        after["versions"],
         shutdown.as_millis()
     );
     s.finish().await
@@ -205,21 +226,24 @@ async fn wait_held(path: &Path) -> Result<(), HarnessError> {
     Ok(())
 }
 
-async fn wait_compacted(s: &Scenario) -> Result<(), HarnessError> {
+async fn wait_logged(s: &Scenario, marker: &str) -> Result<String, HarnessError> {
     let mut log = tokio::fs::File::open(s.sandbox.logs.join("agent-3.log")).await?;
     tokio::time::timeout(Duration::from_secs(90), async {
         let mut appended = String::new();
         loop {
             log.read_to_string(&mut appended).await?;
-            if appended.contains("compact_ms=") {
-                break;
+            if let Some(line) = appended
+                .split_inclusive('\n')
+                .filter_map(|line| line.strip_suffix('\n'))
+                .find(|line| line.contains(marker))
+            {
+                break Ok(line.to_owned());
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
-        Ok::<_, HarnessError>(())
     })
     .await
-    .expect("restart must complete physical compaction")
+    .unwrap_or_else(|_| panic!("restart must log {marker}"))
 }
 
 fn assert_rows_and_latest(data: &Path, after: &Value) -> Result<(), HarnessError> {
@@ -241,7 +265,7 @@ fn assert_rows_and_latest(data: &Path, after: &Value) -> Result<(), HarnessError
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(
         after["row_count"],
-        rows.len() + 33,
+        rows.len() + 33 + 8192,
         "missing or extra committed vector rows"
     );
     let mut latest = false;

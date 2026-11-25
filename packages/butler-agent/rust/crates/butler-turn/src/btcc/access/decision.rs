@@ -1,7 +1,10 @@
 use super::{AccessMode, ApprovalExemptAction};
 use crate::btcc::ApprovalRisk;
+use crate::workspace::{ScopeRoots, classify_targets};
 use butler_core::tool_protocol::ToolName;
+use butler_platform::secure_fs::path_is_within;
 use serde_json::{Map, Value};
+use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CapabilityKind {
@@ -168,6 +171,39 @@ pub fn decide(mode: &AccessMode, request: AccessRequest) -> AccessDecision {
         _ => Ask(GrantUse::Honor),
     }
 }
+/// Classify a command's cwd and targets for admission.
+pub fn command_target_scope(
+    roots: &ScopeRoots<'_>,
+    cwd: &Path,
+    targets: &[&str],
+    kind: CapabilityKind,
+) -> TargetScope {
+    let scope = classify_targets(roots, cwd, targets);
+    if scope == TargetScope::AllowedFolder
+        && matches!(
+            kind,
+            CapabilityKind::CommandMutation {
+                sandbox: CommandSandbox::ProjectAndFolders
+            }
+        )
+    {
+        // Multi-root launch excludes projects inside the data directory.
+        let cwd_roots = ScopeRoots {
+            project: roots
+                .project
+                .filter(|project| !path_is_within(project, roots.butler_data)),
+            ..*roots
+        };
+        if !matches!(
+            classify_targets(&cwd_roots, cwd, &["."]),
+            TargetScope::ProjectFolder | TargetScope::AllowedFolder
+        ) {
+            return TargetScope::Outside;
+        }
+    }
+    scope
+}
+
 /// Whether `decide` reads the target scope of `kind` under `mode`; callers
 /// classify the filesystem only then.
 pub fn needs_scope(mode: &AccessMode, kind: CapabilityKind) -> bool {

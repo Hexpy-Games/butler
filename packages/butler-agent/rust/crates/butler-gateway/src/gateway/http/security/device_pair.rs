@@ -2,7 +2,7 @@
 //! `connect` for browsers.
 use super::super::{HttpError, HttpState, error::json, read_body_with_limit};
 use crate::gateway::{
-    DeviceKind,
+    ButlerAccountRequest, DeviceKind, GatewayApplicationError, PUSH_KINDS,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
 };
 use axum::{
@@ -18,6 +18,14 @@ use std::sync::Arc;
 
 pub(in crate::gateway::http) const DEVICE_PAIR_PATH: &str = "/devices/pair";
 pub(in crate::gateway::http) const DEVICE_SELF_PATH: &str = "/devices/self";
+pub(in crate::gateway::http) const DEVICE_PUSH_PATH: &str = "/devices/self/push";
+
+#[derive(Deserialize)]
+struct PushRequest {
+    token: Option<String>,
+    lang: Option<Value>,
+    kinds: Option<Value>,
+}
 
 #[derive(Deserialize)]
 struct PairRequest {
@@ -197,4 +205,101 @@ pub(in crate::gateway::http) async fn revoke_self_request(
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NO_CONTENT;
     Ok(response)
+}
+
+pub(in crate::gateway::http) async fn set_push_request(
+    state: &Arc<HttpState>,
+    access: super::Access,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    if access != super::Access::DeviceToken {
+        return Err(HttpError::public(
+            403,
+            "device_token_required",
+            "Only a paired device can register for notifications.",
+        ));
+    }
+    let id = state
+        .devices
+        .token_device_id(request.headers())
+        .ok_or_else(|| {
+            HttpError::public(
+                401,
+                "local_auth_required",
+                "Butler App local auth is required.",
+            )
+        })?;
+    let body = read_body_with_limit(request.into_body(), 1024).await?;
+    let PushRequest { token, lang, kinds } =
+        serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
+    if token.as_deref().is_some_and(|token| !expo_token(token)) {
+        return Err(HttpError::public(
+            400,
+            "invalid_request",
+            "token must be an Expo push token.",
+        ));
+    }
+    let lang = token
+        .as_ref()
+        .and(lang.as_ref())
+        .and_then(Value::as_str)
+        .filter(|lang| matches!(*lang, "ko" | "en"))
+        .map(str::to_owned);
+    let kinds = token
+        .as_ref()
+        .and(kinds.as_ref())
+        .and_then(Value::as_array)
+        .map(|kinds| {
+            PUSH_KINDS
+                .iter()
+                .filter(|known| kinds.iter().any(|kind| kind.as_str() == Some(**known)))
+                .copied()
+                .collect::<Vec<_>>()
+                .join(",")
+        });
+    state
+        .application
+        .set_device_push_token(id, token, lang, kinds)
+        .await?;
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NO_CONTENT;
+    Ok(response)
+}
+
+pub(in crate::gateway::http) async fn push_status_request(
+    state: &Arc<HttpState>,
+    access: super::Access,
+) -> Result<Response, HttpError> {
+    if access != super::Access::DeviceToken {
+        return Err(HttpError::public(
+            403,
+            "device_token_required",
+            "Only a paired device can view notification availability.",
+        ));
+    }
+    let data = match state
+        .application
+        .setup()?
+        .butler_account(ButlerAccountRequest::PushAvailable)
+        .await
+    {
+        Ok(value) => value,
+        Err(GatewayApplicationError::Public {
+            status: 404, code, ..
+        }) if code == "butler_account_disabled" => {
+            serde_json::json!({"available": false})
+        }
+        Err(error) => return Err(error.into()),
+    };
+    super::super::setup::envelope(StatusCode::OK, data)
+}
+
+fn expo_token(value: &str) -> bool {
+    value.len() <= 256
+        && value
+            .strip_prefix("ExponentPushToken[")
+            .or_else(|| value.strip_prefix("ExpoPushToken["))
+            .and_then(|inner| inner.strip_suffix(']'))
+            .is_some_and(|inner| !inner.is_empty())
+        && !value.chars().any(|c| c.is_whitespace() || c.is_control())
 }

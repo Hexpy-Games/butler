@@ -12,7 +12,10 @@ import { SettingsPage } from "./SettingsFormComponents";
 export function AccountSettings() {
   useAppLocale();
   const account = useButlerAccount();
-  const backup = useButlerBackup(account.status?.signed_in ? account.status.account.id : undefined);
+  const backup = useButlerBackup(
+    account.status?.signed_in ? account.status.account.id : undefined,
+    account.status?.signed_in ? account.status.entitlements.plan : undefined,
+  );
   const [signInOpen, setSignInOpen] = useState(false);
   const published = usePublishedPages();
   const now = useMinuteClock(account.devices.length > 0);

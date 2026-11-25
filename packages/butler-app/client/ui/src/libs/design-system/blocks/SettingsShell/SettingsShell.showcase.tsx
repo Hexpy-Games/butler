@@ -1,5 +1,8 @@
 import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { ButtonContainer } from "../../components/ButtonContainer";
+import { IconButton } from "../../components/IconButton";
+import { Minus, Square, X } from "../../components/Icons";
 import { Input } from "../../components/Input";
 import { Switch } from "../../components/Switch";
 import { FormSection } from "../FormSection";
@@ -24,12 +27,14 @@ const copy = {
     generalDescription: "Configure language, timezone, conversation input, and search defaults.",
     notifications: "Notifications", language: "Language", smartGroups: "Smart groups", replies: "New replies",
     server: "Server URL",
+    minimize: "Minimize window", maximize: "Maximize window", close: "Close window",
   },
   "ko-KR": {
     general: "일반", region: "언어 및 지역", servers: "서버", mcp: "MCP", mcpDescription: "MCP 서버와 연결 정보를 관리합니다.",
     generalDescription: "언어, 시간대, 대화 입력과 검색 기본값을 설정합니다.",
     notifications: "알림", language: "언어", smartGroups: "스마트 그룹", replies: "새 답변",
     server: "서버 URL",
+    minimize: "창 최소화", maximize: "창 최대화", close: "창 닫기",
   },
 } as const;
 
@@ -40,6 +45,13 @@ function Page({ locale, page, onPage }: ShowcaseRenderContext & { page: "general
   return (
     <div className={styles.showcaseFrame}>
       <SettingsShell
+        windowControls={
+          <ButtonContainer size="icon-sm">
+            <IconButton label={text.minimize} onClick={() => {}}><Minus size="md" /></IconButton>
+            <IconButton label={text.maximize} onClick={() => {}}><Square size="sm" /></IconButton>
+            <IconButton label={text.close} onClick={() => {}}><X size="md" /></IconButton>
+          </ButtonContainer>
+        }
         pageTitle={title}
         pageDescription={description}
         pageKey={page}

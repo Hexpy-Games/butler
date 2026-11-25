@@ -40,6 +40,13 @@ const SECURITY_ROUTES = Object.freeze({
   // PATCH /settings only when it carries `security`; other settings go
   // through the preload as before.
   updateSecuritySettings: { method: "PATCH", path: "/settings" },
+  getButlerAccount: { method: "GET", path: "/setup/butler-account" },
+  postButlerAccount: { method: "POST", path: "/setup/butler-account", payload: true },
+  signOutButlerAccount: { method: "DELETE", path: "/setup/butler-account" },
+  listButlerAccountDevices: { method: "GET", path: "/setup/butler-account/devices" },
+  revokeButlerAccountDevice: { method: "DELETE", path: "/setup/butler-account/devices", credential: true },
+  getButlerBackup: { method: "GET", path: "/setup/butler-backup" },
+  postButlerBackup: { method: "POST", path: "/setup/butler-backup", payload: true },
   // Connections: the mail password passes through main to the Agent's keychain store only.
   listPlugins: { method: "GET", path: "/plugins" },
   inspectBundledPlugin: { method: "POST", path: "/plugins/inspect", payload: true, bundled: true },
@@ -184,7 +191,9 @@ export async function requestSecurityRoute(
   try {
     await ensureReady();
     const bearer = await authHeaders();
-    const response = await fetch(new URL(path, serverUrl), {
+    const url = new URL(path, serverUrl);
+    if (input?.route === "deleteComputer" && input.body.force === true) url.searchParams.set("force", "true");
+    const response = await fetch(url, {
       method: route.method,
       headers: {
         ...(needsBody ? { "content-type": "application/json" } : {}),

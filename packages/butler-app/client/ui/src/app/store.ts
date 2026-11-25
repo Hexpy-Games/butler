@@ -123,7 +123,7 @@ import {
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
 } from "./conversation-progress";
 import { isServerBackedSessionId } from "./sessionIds.ts";
-import { turnProgressOf } from "./turnProgress.ts";
+import { pruneStaleServerTurnProgress, turnProgressOf } from "./turnProgress.ts";
 import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
@@ -878,9 +878,9 @@ function applySessionView(
       ? mergeMessages(sameSessionMessages, messageListView.messages ?? [])
       : (messageListView.messages ?? []);
   const boundedMessages = boundedSessionMessages(sourceMessages);
-  const turnProgress = pruneReplacedClientTurnProgress(
-    mergedTurnProgress,
-    boundedMessages,
+  const turnProgress = pruneStaleServerTurnProgress(
+    pruneReplacedClientTurnProgress(mergedTurnProgress, boundedMessages),
+    view.latest_turn?.id,
   );
   const messages = freezeMessageWorkBlocks(boundedMessages.map((message) => {
     const previous = previousById.get(message.id);

@@ -21,7 +21,7 @@ pub(super) fn validate(
         let raw = frame["args"]["url"].as_str().unwrap_or("").to_owned();
         let content = url::Url::parse(&raw).ok().filter(|u| {
             u.host_str() == Some("127.0.0.1")
-                && u.port() == Some(super::super::content::port(state))
+                && super::super::content::port(state).is_some_and(|port| u.port() == Some(port))
                 && u.scheme() == "http"
                 && u.username().is_empty()
                 && u.password().is_none()
@@ -33,10 +33,10 @@ pub(super) fn validate(
             None => butler_runtime::browser::public_url(&raw)
                 .map_err(|_| error(400, "navigation_denied"))?,
         };
-        frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
-            &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-            url.as_str(),
-        );
+        if let Some(origin) = super::signed_in::content_origin(state) {
+            frame["args"]["policy"] =
+                butler_runtime::browser::navigation_policy(&origin, url.as_str());
+        }
         if let Some(id) = super::super::content::preview::owner_id(state, session, &raw) {
             frame["args"]["preview_id"] = json!(id);
         }

@@ -19,7 +19,8 @@ export function markComputerUnreachable(id: string | undefined, error: unknown) 
   }
 }
 
-export function publishComputerEvent(event: TimelineEvent) {
+export function publishComputerEvent(event: TimelineEvent, refreshNavigation: () => void) {
+  if (event.type === "computers.changed") refreshNavigation();
   if (event.type !== "remote.connection_changed") return;
   const payload = event.payload as { computer_id?: unknown; state?: unknown } | undefined;
   if (typeof payload?.computer_id === "string" && typeof payload.state === "string") {
