@@ -15,7 +15,7 @@ export function closeOutputChecks() {
   reports.clear();
 }
 
-function allowed(url, origin, frame = true) {
+export function allowed(url, origin, frame = true) {
   try {
     const target = new URL(url);
     return target.origin === origin && (!frame || target.pathname.startsWith("/__o/"));

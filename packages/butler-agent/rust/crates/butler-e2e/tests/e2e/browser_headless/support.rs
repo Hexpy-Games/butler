@@ -346,6 +346,20 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
             ),
         ],
         "Publish parallel" => super::parallel::publish_calls(),
+        "Publish vite" => {
+            let mut calls = Vec::new();
+            for (name, content) in super::guard::VITE {
+                calls.push((
+                    "write_file",
+                    json!({"path":format!("vite-site/{name}"),"content":content,"create_parents":true}),
+                ));
+            }
+            calls.push((
+                "output_publish",
+                json!({"path":"vite-site","title":"Vite fixture"}),
+            ));
+            calls
+        }
         "Publish shop" => vec![
             (
                 "write_file",
@@ -387,6 +401,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish shop",
             "Publish parallel",
             "Publish dead frames",
+            "Publish vite",
             "Open fixture",
             "Observe fixture",
             "Act fixture",

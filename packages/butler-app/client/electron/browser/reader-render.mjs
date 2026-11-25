@@ -2,11 +2,13 @@ import { configureWebSession } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { guardUrl } from "./guard.mjs";
 import { settle } from "./observe.mjs";
+import { allowed } from "./output-check.mjs";
 
 // The reader's render step (web_read) in a hidden page: a fresh in-memory
 // profile, no dialogs, permissions, popups or downloads, and every request
 // behind the navigation guard (public http(s), or Butler's own outputs;
-// data:/blob: subresources).
+// data:/blob: subresources). Requests other than navigations may use any
+// path on Butler's output origin.
 const MAX_HTML = 8 * 1024 * 1024;
 const SETTLE = `new Promise(done=>{let timer;const end=()=>{observer.disconnect();clearTimeout(cap);done(true)};
   const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(end,500)});
@@ -26,7 +28,7 @@ function guard(contents, profile, policy, denied) {
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
   profile.webRequest.onBeforeRequest((details, callback) => {
     const frame = ["mainFrame", "subFrame"].includes(details.resourceType);
-    if (!frame && /^(data|blob):/u.test(details.url)) { callback({}); return; }
+    if (!frame && (/^(data|blob):/u.test(details.url) || allowed(details.url, policy.content_origin, false))) { callback({}); return; }
     void guardUrl(details.url, profile, policy).then(allowed => {
       if (!allowed && frame) denied();
       callback({ cancel: !allowed });
