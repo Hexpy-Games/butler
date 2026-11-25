@@ -17,11 +17,11 @@ if [[ ! -e "$APP" ]]; then
   (
     cd "$SRC"
     unset GITHUB_REF_NAME
+    unset LIBRARY_PATH
     export CARGO_TARGET_DIR="$HOME/ButlerDemo/target"
     bun install --frozen-lockfile --ignore-scripts
     npm --prefix packages/butler-app/client/ui run build
-    python3 packages/butler-agent/rust/scripts/prepare-static-ort.py --require-prebuilt
-    env -u LIBRARY_PATH cargo build --manifest-path packages/butler-agent/rust/Cargo.toml --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+    rm -rf -- "$build/app-out"
     bun run release:app:package -- --platform=darwin-arm64 --out "$build/app-out"
     ditto -x -k "$build/app-out/"*.zip "$build/app"
     rm -rf -- "$build/app-out"
@@ -49,7 +49,7 @@ mkdir -p "$root/home" "$root/data" "$root/codex" "$root/electron"
 if lsof -nP -iTCP:19765 -sTCP:LISTEN >/dev/null 2>&1; then
   echo "포트 19765 사용 중: 기존 데모를 먼저 종료하세요."; exit 1
 fi
-cat > "$root/.build-run.sh" <<'RUN'
+cat > "$root/.build-run.sh.new" <<'RUN'
 #!/bin/bash
 root=$1 app=$2
 shift 2
@@ -69,5 +69,6 @@ echo $! > "$root/build-app.pid"
 wait $!
 kill -TERM $gw 2>/dev/null; wait $gw 2>/dev/null
 RUN
+mv -- "$root/.build-run.sh.new" "$root/.build-run.sh"
 nohup bash "$root/.build-run.sh" "$root" "$APP" "$@" >/dev/null 2>&1 &
 echo "버틀러 테스트 빌드를 띄웁니다. 이 창은 닫아도 됩니다."
