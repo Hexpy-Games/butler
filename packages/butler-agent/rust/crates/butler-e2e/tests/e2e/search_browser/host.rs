@@ -165,8 +165,10 @@ impl Host {
                     "html_base64":base64::engine::general_purpose::STANDARD.encode(format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>")))})
             }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
-            ("tab.read", Some(tab)) => json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,"seen_by_user":self.seen(&tab["id"]),
-                "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>"))}),
+            ("tab.read", Some(tab)) => {
+                json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,"seen_by_user":self.seen(&tab["id"]),
+                "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>"))})
+            }
             ("tab.observe", Some(tab)) => {
                 json!({"status":"ok","tab":tab["id"],"obs":"o1","epoch":1,"url":url,"seen_by_user":self.seen(&tab["id"]),
                 "frames":[{"id":"f0","url":url,"class":"main"}],
