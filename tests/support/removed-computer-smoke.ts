@@ -7,9 +7,10 @@ import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { computerFixtures } from "./computers-fixtures.ts";
 import { createNativeAppServer, type NativeAppServerHandle } from "./native-app-server.ts";
 
-const title = "지난 대화";
-const question = "작업 폴더를 확인해 주세요.";
-const answer = "작업 폴더를 확인했습니다.";
+const fixtures = [
+  { file: "removed-computer-transfer.ndjson", title: "지난 대화", question: "작업 폴더를 확인해 주세요.", answer: "작업 폴더를 확인했습니다.", tools: false },
+  { file: "removed-computer-transfer-tools.ndjson", title: "작업 기록", question: "Complete the file update.", answer: "Checked.", tools: true },
+];
 const output = "/tmp/removed-computer-screens";
 
 // The browser and main gateway are real. Replay the other machine at the SSH
@@ -80,14 +81,20 @@ export async function captureRemovedComputer(browser: Browser, language: string)
     });
     const secret: string = JSON.parse(readFileSync(join(data, "app/runtime/auth/local-admin.json"), "utf8")).secret;
     const headers = { "x-butler-admin": secret };
-    const { session } = await server.api<{ session: { session_hint: string } }>("/sessions", {
-      method: "POST", body: JSON.stringify({ kind: "chat", title, computer_id: computer.id }),
-    });
-    const [line, end] = readFileSync(new URL("../fixtures/removed-computer-transfer.ndjson", import.meta.url), "utf8").trimEnd().split("\n");
-    const turn = JSON.parse(line!);
-    // The main allocates the remote session id when it creates the chat.
-    turn.external_session_id = session.session_hint;
-    writeFileSync(join(scratch, "transcripts.ndjson"), `${JSON.stringify(turn)}\n${end}\n`);
+    const turns: string[] = [];
+    let end = "";
+    for (const { file, title } of fixtures) {
+      const { session } = await server.api<{ session: { session_hint: string } }>("/sessions", {
+        method: "POST", body: JSON.stringify({ kind: "chat", title, computer_id: computer.id }),
+      });
+      const [line, cursor] = readFileSync(new URL(`../fixtures/${file}`, import.meta.url), "utf8").trimEnd().split("\n");
+      const turn = JSON.parse(line!);
+      // The main allocates the remote session id when it creates the chat.
+      turn.external_session_id = session.session_hint;
+      turns.push(JSON.stringify(turn));
+      end = cursor!;
+    }
+    writeFileSync(join(scratch, "transcripts.ndjson"), `${turns.join("\n")}\n${end}\n`);
     const removed = await server.api(`/computers/${computer.id}`, { method: "DELETE", headers });
     assert.deepEqual(removed, { deleted: true, remote_cleaned: true });
     const copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
@@ -95,13 +102,15 @@ export async function captureRemovedComputer(browser: Browser, language: string)
     for (const theme of ["light", "dark"]) {
       await server.api("/settings", { method: "PATCH", headers, body: JSON.stringify({ appearance_theme: theme }) });
       for (const [width, height] of [[1280, 900], [375, 812]] as const) {
-        const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
-        try {
-          await server.signIn(page);
-          await page.goto(server.url);
-          await captureConversation(page, copy, theme, width);
-        } finally {
-          await page.close();
+        for (const fixture of fixtures) {
+          const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
+          try {
+            await server.signIn(page);
+            await page.goto(server.url);
+            await captureConversation(page, copy, theme, width, fixture);
+          } finally {
+            await page.close();
+          }
         }
       }
     }
@@ -113,7 +122,10 @@ export async function captureRemovedComputer(browser: Browser, language: string)
   }
 }
 
-async function captureConversation(page: Page, copy: ReturnType<typeof getAppCopy>, theme: string, width: number) {
+async function captureConversation(
+  page: Page, copy: ReturnType<typeof getAppCopy>, theme: string, width: number,
+  { title, question, answer, tools }: (typeof fixtures)[number],
+) {
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   const shot = async (name: string) => {
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
@@ -125,7 +137,7 @@ async function captureConversation(page: Page, copy: ReturnType<typeof getAppCop
   if (width === 375) await showSidebar.click();
   const row = page.locator('[data-test-class="tree-row"]').filter({ hasText: title });
   await row.getByText(copy.computers.removedComputer, { exact: true }).waitFor();
-  await shot("R1-list-after-delete");
+  if (!tools) await shot("R1-list-after-delete");
   const [response] = await Promise.all([
     page.waitForResponse((reply) => new URL(reply.url()).pathname === "/session-view"),
     row.click(),
@@ -147,7 +159,12 @@ async function captureConversation(page: Page, copy: ReturnType<typeof getAppCop
 
   const preview = page.locator("[data-slot='composer-compact-preview']");
   assert.equal(await preview.textContent(), copy.computers.removedComputerSend);
-  await shot("R2-removed-conversation");
+  if (tools) {
+    await page.locator('[data-test-class="toggle-turn-activity-disclosure"]').click();
+    await page.locator('[data-test-class~="turn-work-tool-group"] > button').click();
+    assert.equal(await page.locator('[data-test-class="turn-work-tool-detail-row"]').count(), 2);
+  }
+  await shot(tools ? "R2-removed-conversation-tools" : "R2-removed-conversation");
 
   if (await preview.isVisible()) await preview.click();
   await page.locator("[data-expanded='true'] [data-slot='composer-expanded-body']")

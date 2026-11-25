@@ -1,8 +1,12 @@
 //! A computer's finished canonical turn and its source change watermark.
-use super::{messages, turns, *};
+use super::{
+    admission::sanitizer::{safe_input_label, safe_optional},
+    messages, turns, *,
+};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 
 #[derive(Serialize, Deserialize)]
 pub struct TransferMark {
@@ -17,7 +21,21 @@ pub struct TransferTurn {
     pub external_session_id: String,
     pub turn: TransferTurnRow,
     pub messages: Vec<TransferMessage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_steps: Vec<TransferToolStep>,
     pub outcome: TransferOutcome,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TransferToolStep {
+    pub tool_call_id: String,
+    pub ord: u32,
+    pub safe_tool_name: Option<String>,
+    pub safe_label: Option<String>,
+    pub safe_input_label: Option<String>,
+    pub status: Option<String>,
+    pub started_at: String,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -167,15 +185,14 @@ impl AgentConversationStore {
                 row.id.clone(),
                 &row.started_at,
             )?;
-            for message in turn.messages {
-                let created_at = message.created_at.clone();
-                messages::append_in_transaction(
-                    &tx,
-                    clock.as_ref(),
-                    message.into_input(&turn.session_id, &row.id),
-                    &created_at,
-                )?;
-            }
+            import_turn_contents(
+                &tx,
+                clock.as_ref(),
+                &turn.session_id,
+                &row.id,
+                turn.messages,
+                turn.tool_steps,
+            )?;
             let outcome = turn.outcome.into_input(turn.session_id, row.id.clone());
             let completed = row.completed_at.as_ref().unwrap_or(&row.started_at);
             turns::finalize_in_transaction(
@@ -194,6 +211,67 @@ impl AgentConversationStore {
         })
         .await
     }
+}
+
+fn import_turn_contents(
+    db: &rusqlite::Connection,
+    clock: &dyn ConversationIdentityClock,
+    session_id: &str,
+    turn_id: &str,
+    messages: Vec<TransferMessage>,
+    steps: Vec<TransferToolStep>,
+) -> ConversationResult<()> {
+    for message in messages {
+        let created_at = message.created_at.clone();
+        messages::append_in_transaction(
+            db,
+            clock,
+            message.into_input(session_id, turn_id),
+            &created_at,
+        )?;
+    }
+    import_tool_steps(db, turn_id, session_id, steps)
+}
+
+fn import_tool_steps(
+    db: &rusqlite::Connection,
+    turn_id: &str,
+    session_id: &str,
+    steps: Vec<TransferToolStep>,
+) -> ConversationResult<()> {
+    let mut seen = HashSet::new();
+    for step in steps {
+        if step.tool_call_id.is_empty()
+            || step.tool_call_id.len() > 256
+            || !matches!(
+                step.status.as_deref(),
+                None | Some("completed" | "failed" | "cancelled")
+            )
+            || step.started_at.is_empty()
+            || !seen.insert(step.tool_call_id.clone())
+        {
+            continue;
+        }
+        db.execute(
+            "INSERT OR IGNORE INTO conversation_tool_steps
+             (turn_id, session_id, tool_call_id, ord, safe_tool_name, safe_label, safe_input_label,
+              status, started_at, completed_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            rusqlite::params![
+                turn_id,
+                session_id,
+                step.tool_call_id,
+                step.ord,
+                safe_optional(step.safe_tool_name.map(Value::String).as_ref()),
+                safe_optional(step.safe_label.map(Value::String).as_ref()),
+                safe_input_label(step.safe_input_label.as_deref()),
+                step.status,
+                step.started_at,
+                step.completed_at,
+            ],
+        )
+        .map_err(ConversationError::sqlite)?;
+    }
+    Ok(())
 }
 
 impl TransferMessage {

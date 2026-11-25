@@ -16,6 +16,7 @@ mod source;
 mod source_changes;
 mod summaries;
 mod text_projection;
+mod tool_steps;
 pub mod transfer;
 mod turn_outcome;
 mod turns;
@@ -44,7 +45,8 @@ pub use source::{
     decode_message_scalars, scalar_for_part,
 };
 pub use text_projection::{ToolParts, text_for_message, text_for_part};
-pub use transfer::{TransferMark, TransferTurn};
+pub(crate) use tool_steps::ToolStepWrite;
+pub use transfer::{TransferMark, TransferToolStep, TransferTurn};
 pub use types::*;
 
 /// Hash already loaded canonical messages with the existing summary source contract.

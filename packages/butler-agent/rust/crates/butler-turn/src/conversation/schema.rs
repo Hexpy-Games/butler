@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
-pub(super) const VERSION: u64 = 8;
+pub(super) const VERSION: u64 = 9;
 
 const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -20,6 +20,15 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
   id TEXT PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, actor TEXT NOT NULL,
   status TEXT NOT NULL, request_id TEXT, started_at TEXT NOT NULL, completed_at TEXT,
   UNIQUE (session_id, seq),
+  FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS conversation_tool_steps (
+  turn_id TEXT NOT NULL, session_id TEXT NOT NULL, tool_call_id TEXT NOT NULL,
+  ord INTEGER NOT NULL, safe_tool_name TEXT, safe_label TEXT, safe_input_label TEXT,
+  status TEXT CHECK (status IN ('completed','failed','cancelled')),
+  started_at TEXT NOT NULL, completed_at TEXT,
+  PRIMARY KEY (turn_id, tool_call_id),
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE,
   FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS conversation_messages (

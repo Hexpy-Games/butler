@@ -256,6 +256,9 @@ async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), Harness
         .await?;
     assert_eq!(turn_state(&paused), "waiting_for_form");
     assert_eq!(script.requests.lock().unwrap().len(), 2);
+    let before = super::tool_steps::stored_steps(&s.sandbox.data, &id)?;
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].status, None);
     let cards = s.gw.approval_requests("general").await?;
     let reference = cards[0]["request_ref"].as_str().unwrap();
     let reply =
@@ -269,6 +272,13 @@ async fn approval_resume_preserves_actor_feedback_counts() -> Result<(), Harness
         s.gw.wait_terminal("general", &id, Duration::from_secs(20))
             .await?;
     assert_eq!(turn_state(&done), "delivered");
+    let after = super::tool_steps::stored_steps(&s.sandbox.data, &id)?;
+    assert_eq!(after.len(), 1);
+    assert_eq!(
+        (&after[0].call_id, after[0].ord),
+        (&before[0].call_id, before[0].ord)
+    );
+    assert_eq!(after[0].status.as_deref(), Some("completed"));
     assert_eq!(
         script.requests.lock().unwrap().len(),
         6,
