@@ -6,6 +6,7 @@ ipcRenderer.on("butler:text-size", (_event, factor) => {
 // Capture links before nested message menus; non-web schemes keep their handlers.
 for (const type of ["click", "contextmenu"]) globalThis.window?.addEventListener(type, event => {
   const link = event.composedPath().find(node => node instanceof HTMLAnchorElement);
+  if (type === "click" && link?.closest("[data-butler-link-session]")) return;
   const value = link?.href ?? (type === "contextmenu" ? event.composedPath()
     .find(node => node instanceof HTMLElement && node.hasAttribute("data-butler-link"))?.getAttribute("data-butler-link") : null);
   if (!value || !/^https?:/iu.test(value)) return;
