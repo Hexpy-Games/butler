@@ -23,9 +23,25 @@ impl GraphRepository {
             .busy_timeout(GRAPH_BUSY_TIMEOUT)
             .map_err(db_error)?;
         connection.set_transaction_behavior(rusqlite::TransactionBehavior::Immediate);
-        // journal_mode persists in the file: this moves an older rollback-journal
-        // graph to WAL once. A busy switch is retried on the next open.
-        let _ = connection.pragma_update(None, "journal_mode", "WAL");
+        // A read transaction can block the switch. Fail immediately and retry on
+        // the next open instead of stalling each open for five seconds.
+        connection.busy_timeout(Duration::ZERO).map_err(db_error)?;
+        match connection
+            .pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get::<_, String>(0))
+        {
+            Ok(mode) if mode.eq_ignore_ascii_case("wal") => {}
+            Ok(mode) => {
+                butler_core::diagnostic!("[memory-graph-wal] journal_mode switch deferred: {mode}");
+            }
+            Err(error) => {
+                butler_core::diagnostic!(
+                    "[memory-graph-wal] journal_mode switch deferred: {error}"
+                );
+            }
+        }
+        connection
+            .busy_timeout(GRAPH_BUSY_TIMEOUT)
+            .map_err(db_error)?;
         Ok(Self {
             connection: Some(connection),
             _reader_pin: path.parent().map(pins::pin),

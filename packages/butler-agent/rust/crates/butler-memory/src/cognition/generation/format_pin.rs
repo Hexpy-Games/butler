@@ -301,6 +301,19 @@ fn pin_graph_open_wal() {
         .unwrap();
     assert_eq!(mode, "delete");
     db.close().unwrap();
+    let snapshot = crate::cognition::graph::GraphRepository::open_read_snapshot(&path).unwrap();
+    // Read sqlite_schema through the snapshot to take the lock after deferred BEGIN.
+    snapshot.obsolete_alias_index().unwrap();
+    let started = std::time::Instant::now();
+    let graph = crate::cognition::graph::GraphRepository::open(&path).unwrap();
+    assert!(started.elapsed() < crate::cognition::GRAPH_BUSY_TIMEOUT);
+    let mode: String = rusqlite::Connection::open(&path)
+        .unwrap()
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(mode, "delete");
+    drop(graph);
+    drop(snapshot);
     drop(crate::cognition::graph::GraphRepository::open(&path).unwrap());
     let mode: String = rusqlite::Connection::open(&path)
         .unwrap()
