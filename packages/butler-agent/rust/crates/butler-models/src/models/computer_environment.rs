@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-const RESERVED_NAMES: &[&str] = &["BUTLER_*"];
+const RESERVED_NAMES: &[&str] = &["BUTLER_*", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME"];
 const PREFIX: &str = "computer_env/";
 static SNAPSHOT: OnceLock<RwLock<Arc<BTreeMap<String, String>>>> = OnceLock::new();
 static UPDATES: Mutex<()> = Mutex::new(());

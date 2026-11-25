@@ -242,6 +242,11 @@ async fn computer_environment_add_validation_is_line_aware() -> Result<(), Harne
             Some(1),
         ),
         (
+            "# comment\nTMPDIR=/tmp/example".into(),
+            "computer_env_name_reserved",
+            Some(2),
+        ),
+        (
             "# comment\nSECRET=plain".into(),
             "computer_env_name_secret",
             Some(2),
