@@ -314,6 +314,8 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
   const prefix = `${width}-${language}-${theme}`;
   try {
     await commandSandboxSettings(page, server, copy);
+    // The sign-in pairing toast must clear before palette results under it are clicked.
+    await page.waitForFunction(() => document.querySelectorAll("[data-sonner-toast]").length === 0);
     await paletteChecks(page, prefix);
     await skillChecks(page, prefix);
     await mcpChecks(page, prefix);
