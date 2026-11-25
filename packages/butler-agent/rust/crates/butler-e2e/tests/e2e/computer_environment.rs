@@ -1,6 +1,9 @@
 //! Per-computer environment values through the owner API and both remote command paths.
 use super::{
-    access_tiers::stub::{self, call},
+    access_tiers::{
+        approve, delivered,
+        stub::{self, call},
+    },
     computer_account::{Deployed, deployed_with},
     remote_sessions::remote_chat_with_model,
 };
@@ -12,7 +15,7 @@ use butler_models::models::reset_secret_keys;
 use butler_platform::secrets::{SecretKey, isolated_system_secret_present_for_test};
 use reqwest::Method;
 use serde_json::json;
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::Duration};
 
 #[tokio::test]
 async fn computer_environment_reaches_remote_commands_only_as_names_on_the_main()
@@ -24,6 +27,7 @@ async fn computer_environment_reaches_remote_commands_only_as_names_on_the_main(
     );
     const ORIGINAL: &str = "ce-7f3a9c21-value-a1";
     const REPLACEMENT: &str = "ce-7f3a9c21-value-b2";
+    const COMMAND: &str = "printenv E2E_PROBE";
     let (url, script, server) = stub::start().await?;
     let authority = FakeChatGptAuthority::start().await?;
     let (d, chat) = remote_chat_with_model(
@@ -90,12 +94,45 @@ async fn computer_environment_reaches_remote_commands_only_as_names_on_the_main(
                 )
                 .await?;
         assert_eq!(controls.status, 200, "{controls:?}");
-        script.rounds.lock().unwrap().insert(prompt.into(), vec![call(
-            "probe", "run_command",
-            &json!({"command":"printenv E2E_PROBE","summary":"Read a variable","state_effect":"read_only"}),
-        )]);
-        let (_, turn) = d.s.turn(&chat, prompt).await?;
-        assert_eq!(turn_state(&turn), "delivered");
+        script.rounds.lock().unwrap().insert(
+            prompt.into(),
+            vec![call(
+                "probe",
+                "run_command",
+                &json!({"command":COMMAND,"summary":"Read a variable","state_effect":"read_only"}),
+            )],
+        );
+        if access == "auto" {
+            let id = d.s.gw.say_turn(&chat, prompt).await?;
+            let turn =
+                d.s.gw
+                    .wait_turn(
+                        &chat,
+                        &id,
+                        &[
+                            "waiting_for_form",
+                            "delivered",
+                            "cancelled",
+                            "failed",
+                            "runtime_fault",
+                        ],
+                        Duration::from_secs(20),
+                    )
+                    .await?;
+            if turn_state(&turn) == "waiting_for_form" {
+                let cards = d.s.gw.approval_requests(&chat).await?;
+                assert_eq!(cards.len(), 1);
+                assert_eq!(cards[0]["source_turn_id"], id);
+                assert_eq!(cards[0]["approval"]["examples"], json!([COMMAND]));
+                approve(&d.s, &chat, "allow", None).await?;
+                delivered(&d.s, &chat, &id).await?;
+            } else {
+                assert_eq!(turn_state(&turn), "delivered", "{turn}");
+            }
+        } else {
+            let (_, turn) = d.s.turn(&chat, prompt).await?;
+            assert_eq!(turn_state(&turn), "delivered", "{turn}");
+        }
         assert!(
             script
                 .requests_for(prompt)
