@@ -44,7 +44,7 @@ try {
   const remote = page.locator('[data-settings-section-id="remote-access"]');
   await remote.waitFor();
   await remote.getByRole("switch", { name: copy.security.remoteAccess, exact: true }).waitFor();
-  await remote.getByText(copy.security.tunnel, { exact: true }).waitFor();
+  await remote.getByText(copy.security.tunnel).first().waitFor();
 
   await navigation.getByRole("button", { name: copy.sections.security, exact: true }).click();
   await page.locator('[data-settings-section-id="butler-vault"]').waitFor();
