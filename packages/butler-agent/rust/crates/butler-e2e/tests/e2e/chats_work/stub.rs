@@ -8,6 +8,8 @@ use std::sync::{
 };
 use tokio::sync::Semaphore;
 
+pub(crate) const MUTATION: &str = "mkdir reviewed";
+
 pub(crate) struct Script {
     pub requests: Mutex<Vec<Value>>,
     pub delegated: AtomicBool,
@@ -144,7 +146,7 @@ fn child_item(body: &Value, step: usize, unattended: bool, tier: bool) -> Value 
         return call(
             "tier-command",
             "run_command",
-            &json!({"command":"printf reviewed","state_effect":"mutation","summary":"Check evidence"}),
+            &json!({"command":MUTATION,"state_effect":"mutation","summary":"Check evidence"}),
         );
     }
     let step = if tier && step > 2 { step - 1 } else { step };

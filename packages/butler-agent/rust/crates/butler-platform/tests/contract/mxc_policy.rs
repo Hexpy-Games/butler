@@ -70,6 +70,7 @@ fn host() -> BTreeMap<String, String> {
 }
 fn plan() -> Plan {
     Plan {
+        extra: Vec::new(),
         project: path(r"C:\work\project"),
         data: path(r"C:\Users\person\.butler"),
         host_environment: host(),

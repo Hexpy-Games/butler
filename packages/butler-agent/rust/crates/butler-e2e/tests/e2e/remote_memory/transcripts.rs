@@ -1,3 +1,6 @@
+mod removed_conversation;
+use removed_conversation::{assert_removed_conversation, wait_imported_turn};
+
 use super::*;
 
 #[tokio::test]
@@ -327,4 +330,99 @@ async fn unreachable_computer_needs_force() -> Result<(), HarnessError> {
     } = d;
     drop((remote, sshd, files, server, authority));
     s.finish().await
+}
+
+#[tokio::test]
+async fn deleted_computer_conversation_opens_read_only() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    const ASK: &str = "Read this after removing the computer.";
+    let (d, _, server, authority, chat) =
+        remote_chat_on("REMOTE-READ-REMOVED", "full_access", true).await?;
+    let turn = d.s.gw.say_turn(&chat, ASK).await?;
+    wait_imported_turn(&d, &turn).await?;
+    let removed = d
+        .api
+        .send(Method::DELETE, &format!("/computers/{}", d.id), None, &[])
+        .await?;
+    assert_eq!(removed.status, 200, "{removed:?}");
+    assert_removed_conversation(&d, &chat, ASK).await?;
+    drop((d.remote, d.sshd, d.files, server, authority));
+    d.s.finish().await
+}
+
+#[tokio::test]
+async fn force_deleted_computer_keeps_imported_conversations() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    const ASK: &str = "Read this after losing the computer.";
+    let (mut d, _, server, authority, chat) =
+        remote_chat_on("REMOTE-READ-FORCE-REMOVED", "full_access", true).await?;
+    let turn = d.s.gw.say_turn(&chat, ASK).await?;
+    wait_imported_turn(&d, &turn).await?;
+    d.sshd.drop_connections()?;
+    let removed = d
+        .api
+        .send(
+            Method::DELETE,
+            &format!("/computers/{}?force=true", d.id),
+            None,
+            &[],
+        )
+        .await?;
+    assert_eq!(removed.status, 200, "{removed:?}");
+    assert_eq!(removed.data()["remote_cleaned"], false);
+    assert_removed_conversation(&d, &chat, ASK).await?;
+    drop((d.remote, d.sshd, d.files, server, authority));
+    d.s.finish().await
+}
+
+#[tokio::test]
+async fn delete_refuses_while_a_turn_runs() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    const ASK: &str = "Wait for the gate before answering.";
+    let (d, script, server, authority, chat) =
+        remote_chat_on("REMOTE-BUSY-DELETE", "full_access", true).await?;
+    script.rounds.lock().unwrap().insert(
+        ASK.into(),
+        vec![call("delete-busy", "run_command", &json!({
+            "command": "touch delete-busy-started; while [ ! -f delete-busy-release ]; do sleep 0.1; done",
+            "summary": "Wait for the gate"
+        }))],
+    );
+    let turn = d.s.gw.say_turn(&chat, ASK).await?;
+    let work = d.remote.0.home.join("work");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !work.join("delete-busy-started").exists() {
+        assert!(Instant::now() < deadline, "command did not reach the gate");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let path = format!("/computers/{}", d.id);
+    let refused = d.api.send(Method::DELETE, &path, None, &[]).await?;
+    assert_eq!(refused.status, 409, "{refused:?}");
+    assert_eq!(refused.error_code(), Some("computer_busy"));
+    let listed = d.api.send(Method::GET, "/computers", None, &[]).await?;
+    assert_eq!(listed.status, 200, "{listed:?}");
+    assert_eq!(listed.data()["computers"][0]["id"], d.id);
+    fs::write(work.join("delete-busy-release"), b"")?;
+    let terminal =
+        d.s.gw
+            .wait_terminal(&chat, &turn, Duration::from_secs(90))
+            .await?;
+    assert_eq!(turn_state(&terminal), "delivered", "{terminal}");
+    let removed = d.api.send(Method::DELETE, &path, None, &[]).await?;
+    assert_eq!(removed.status, 200, "{removed:?}");
+    assert_removed_conversation(&d, &chat, ASK).await?;
+    drop((d.remote, d.sshd, d.files, server, authority));
+    d.s.finish().await
 }

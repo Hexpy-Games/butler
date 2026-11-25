@@ -139,7 +139,7 @@ pub(super) struct GatewaySecurity {
     auth: LocalAuthConfig,
     /// The local admin credential Settings → Security requires.
     admin: Option<Arc<str>>,
-    local_addr: SocketAddr,
+    local_addr: Option<SocketAddr>,
     dev_origins: Option<String>,
     ttl_seconds: u64,
     shutdown: CancellationToken,
@@ -151,7 +151,7 @@ pub(super) struct GatewaySecurity {
 pub(super) struct SecurityConfig {
     pub(super) auth: LocalAuthConfig,
     pub(super) admin: Option<String>,
-    pub(super) local_addr: SocketAddr,
+    pub(super) local_addr: Option<SocketAddr>,
     pub(super) allowed_hosts: Vec<String>,
     pub(super) dev_origins: Option<String>,
     pub(super) signed_url_ttl: Duration,
@@ -176,7 +176,12 @@ impl GatewaySecurity {
             butler_log::register_secret(secret);
         }
         let ttl_seconds = signed_url_ttl.as_secs().max(1);
-        let keyed = Keyed::derive(auth.token(), local_addr.port(), ttl_seconds, &shutdown);
+        let keyed = Keyed::derive(
+            auth.token(),
+            local_addr.map_or(0, |addr| addr.port()),
+            ttl_seconds,
+            &shutdown,
+        );
         let policy = RequestPolicy::new(local_addr, &allowed_hosts, dev_origins.as_deref(), &[]);
         Self {
             auth,
@@ -227,7 +232,7 @@ impl GatewaySecurity {
     /// Check proposed trusted hosts against the stored content listener.
     pub(super) fn validate_content_origin(
         &self,
-        content_addr: SocketAddr,
+        content_addr: Option<SocketAddr>,
         allowed_hosts: &[String],
     ) -> std::io::Result<()> {
         RequestPolicy::validate_content_origin(
@@ -270,8 +275,8 @@ impl GatewaySecurity {
     }
 
     /// The loopback listener's port.
-    pub(super) fn port(&self) -> u16 {
-        self.local_addr.port()
+    pub(super) fn port(&self) -> Option<u16> {
+        self.local_addr.map(|address| address.port())
     }
 
     /// The current token (the connection code), when there is one.
@@ -292,7 +297,7 @@ impl GatewaySecurity {
         }
         let next = Keyed::derive(
             Some(Arc::from(token)),
-            self.local_addr.port(),
+            self.port().unwrap_or_default(),
             self.ttl_seconds,
             &self.shutdown,
         );

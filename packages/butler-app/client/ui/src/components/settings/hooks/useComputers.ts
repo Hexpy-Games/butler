@@ -74,6 +74,8 @@ export function useComputers() {
       if (code === "computer_unreachable") return "unreachable";
       if (code === "computer_not_synced") {
         notifyStatus(copy.notSynced, { id: "computers", tone: "error" });
+      } else if (code === "computer_busy") {
+        notifyStatus(copy.busy, { id: "computers", tone: "error" });
       } else {
         notifyError(error, copy.removeFailed, { id: "computers" });
       }

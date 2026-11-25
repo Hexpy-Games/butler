@@ -63,13 +63,16 @@ pub(in crate::command_sandbox) fn project_write(
     denied: &[&Path],
     toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
-    if !extra_roots.is_empty() || !super::super::project_write_available() {
+    if !super::super::project_write_available()
+        || (!extra_roots.is_empty() && !super::super::folder_write_available())
+    {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
     prepare::invocation(
         invocation,
         environment,
         root,
+        extra_roots,
         writable,
         denied,
         toolchain_roots,

@@ -16,7 +16,7 @@ use super::AppSetup;
 use crate::host::service::entrypoint::STARTUP_TIMEOUT;
 
 pub(super) async fn activate(
-    listener: TcpListener,
+    listener: Option<TcpListener>,
     application: Arc<AppApplication>,
     config: GatewayConfig,
     setup: &AppSetup,

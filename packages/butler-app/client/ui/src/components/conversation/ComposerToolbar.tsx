@@ -22,7 +22,7 @@ import { ComposerLocationSelect } from "./ComposerLocationSelect";
 import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
 import { imageRefusalLabel } from "./composerImagePolicy";
 
-export const ComposerToolbar = memo(function ComposerToolbar() {
+export const ComposerToolbar = memo(function ComposerToolbar({ computerRemoved }: { computerRemoved: boolean }) {
   useAppLocale();
   const isSending = useComposerStore((store) => store.isSending);
   const activeTurn = useComposerStore((store) => store.activeTurn);
@@ -37,20 +37,25 @@ export const ComposerToolbar = memo(function ComposerToolbar() {
 
   return (
     <ComposerCardToolbar>
-      <ComposerAttachmentMenu />
-      <ComposerCompactPreview />
-      <ComposerCardExpandedControls>
-        <AccessModeMenu />
-        <ComposerWorkspaceSelect />
-        <ComposerLocationSelect />
-        <ComposerPlanModeBadge />
-        <ComposerCardToolbarSpacer />
-        <ComposerContextControl />
-        <ModelMenu />
-      </ComposerCardExpandedControls>
+      {!computerRemoved && <ComposerAttachmentMenu />}
+      <ComposerCompactPreview placeholder={computerRemoved ? appCopy.computers.removedComputerSend : undefined} />
+      {!computerRemoved && (
+        <ComposerCardExpandedControls>
+          <AccessModeMenu />
+          <ComposerWorkspaceSelect />
+          <ComposerLocationSelect />
+          <ComposerPlanModeBadge />
+          <ComposerCardToolbarSpacer />
+          <ComposerContextControl />
+          <ModelMenu />
+        </ComposerCardExpandedControls>
+      )}
       {agentNotice ? (
         <ComposerSendButton busy={agentNotice === "restarting"} disabled
           aria-label={agentNoticeLabel(agentNotice)} title={agentNoticeLabel(agentNotice)} />
+      ) : computerRemoved ? (
+        <ComposerSendButton disabled aria-label={appCopy.composer.send}
+          disabledReason={appCopy.computers.removedComputerSend} />
       ) : reconnecting ? (
         <ComposerSendButton busy aria-label={appCopy.feedback.reconnectingShort}
           title={appCopy.feedback.reconnectingShort} />

@@ -86,7 +86,7 @@ function readOnlyTab(browser, tab, session, turn) {
 /** A tab this turn opened and only read, with no call on it now and no other turn holding it. */
 export function idleReadTab(browser, tab, session, turn) {
   return tab.owner === `conversation:${session}` && tab.openedTurn === turn && tab.agent && tab.holder === "agent" && !tab.acted
-    && !tab.viewed && !tab.userViewed && !tab.sticky && !tab.preview && tab.profile !== "signed_in" && !tab.dialog && !tab.waiting
+    && !tab.viewed && !tab.userViewed && !tab.sticky && !tab.preview && !tab.dialog && !tab.waiting
     && !tab.pausedTurns && !tab.busy && !tab.closing && !activeCalls(browser, tab)
     && [...(browser.holds.get(tab.id)?.keys() ?? [])].every(held => held === turn);
 }

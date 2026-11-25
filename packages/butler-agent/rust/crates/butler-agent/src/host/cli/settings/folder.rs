@@ -3,7 +3,13 @@ use super::{CliError, Command, Options, ResolvedInstallation, report_error, repo
 use crate::host::runtime::storage_bootstrap::{
     is_unsupported_legacy_data, prepare_fresh_btcc_storage,
 };
-use crate::host::{cli::gateway, service::configuration::AppServiceConfiguration};
+use crate::host::{
+    cli::{
+        gateway::{self, AppEndpoint},
+        remote_relay::socket_request,
+    },
+    service::configuration::AppServiceConfiguration,
+};
 use butler_gateway::gateway::project_folder;
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -130,7 +136,7 @@ fn offline(db_path: &Path, selected: Option<&Path>) -> Result<Option<PathBuf>, C
 
 async fn online_request(
     app: &AppServiceConfiguration,
-    endpoint: &str,
+    endpoint: &AppEndpoint,
     selected: Option<&Path>,
 ) -> Result<PathBuf, CliError> {
     let token = app
@@ -138,33 +144,62 @@ async fn online_request(
         .local_auth
         .token()
         .ok_or_else(unavailable)?;
-    let client = butler_log::http::loopback()
-        .timeout(Duration::from_secs(30))
-        .redirect(butler_log::http::RedirectPolicy::none())
-        .build()
-        .map_err(|_| unavailable())?;
-    let mut request = client
-        .request(
-            if selected.is_some() {
-                Method::PATCH
-            } else {
-                Method::GET
-            },
-            format!("{}/settings", endpoint.trim_end_matches('/')),
-        )
-        .bearer_auth(token);
-    if let Some(path) = selected {
+    let method = if selected.is_some() {
+        Method::PATCH
+    } else {
+        Method::GET
+    };
+    let body = if let Some(path) = selected {
         let secret = app
             .folder_selection_secret
             .as_deref()
             .ok_or_else(unavailable)?;
         let selection = project_folder::selection_token(path, secret).map_err(|_| unavailable())?;
-        request = request.json(&json!({"default_project_folder_selection_token":selection}));
-    }
-    let response = request.send().await.map_err(|_| unavailable())?;
-    let status = response.status();
-    let body: Value = response.json().await.map_err(|_| unavailable())?;
-    if !status.is_success() {
+        Some(json!({"default_project_folder_selection_token":selection}))
+    } else {
+        None
+    };
+    let (status, body): (u16, Value) = match endpoint {
+        AppEndpoint::Tcp(endpoint) => {
+            let client = butler_log::http::loopback()
+                .timeout(Duration::from_secs(30))
+                .redirect(butler_log::http::RedirectPolicy::none())
+                .build()
+                .map_err(|_| unavailable())?;
+            let mut request = client
+                .request(
+                    method,
+                    format!("{}/settings", endpoint.trim_end_matches('/')),
+                )
+                .bearer_auth(token);
+            if let Some(body) = body {
+                request = request.json(&body);
+            }
+            let response = request.send().await.map_err(|_| unavailable())?;
+            let status = response.status().as_u16();
+            (status, response.json().await.map_err(|_| unavailable())?)
+        }
+        AppEndpoint::Remote(socket) => {
+            let body = body.map(|body| body.to_string()).unwrap_or_default();
+            let reply = socket_request(
+                socket,
+                method.as_str(),
+                "/settings",
+                &token,
+                None,
+                &[],
+                body.as_bytes(),
+            )
+            .await
+            .map_err(|_| unavailable())?;
+            let status = reply["status"]
+                .as_u64()
+                .and_then(|status| u16::try_from(status).ok())
+                .ok_or_else(unavailable)?;
+            (status, reply["body"].clone())
+        }
+    };
+    if !(200..300).contains(&status) {
         return Err(CliError::failed(
             "project_folder_rejected",
             body.pointer("/error/message")

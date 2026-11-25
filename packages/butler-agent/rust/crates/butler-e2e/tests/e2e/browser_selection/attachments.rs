@@ -91,3 +91,33 @@ async fn capture_reaches_responses_as_image_with_source_metadata() -> Result<(),
     assert_wire(&requests[0], &png, &metadata, "input_image");
     s.finish().await
 }
+
+#[tokio::test]
+async fn viewed_tab_reaches_the_model() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-VIEWED-TAB")?
+        .synthetic(Script {
+            rounds: 0,
+            path_for: Box::new(|_| String::new()),
+            final_text: "Page checked.".into(),
+        })
+        .start()
+        .await?;
+    let response = s.gw.post("/messages", json!({
+        "chat_id":"general", "text":"Check this page.",
+        "client_message_id":uuid::Uuid::new_v4().to_string(),
+        "content_parts":{"version":1,"parts":[{"type":"text","text":"Check this page."}],
+            "browser_view":{"tab":"t-view","url":"https://fixture-view.test/page","title":"View"}}
+    })).await?;
+    assert_eq!(response.status, 202, "{}", response.text);
+    let turn = s.gw.accepted_turn(response.data()).await?;
+    let terminal =
+        s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
+            .await?;
+    assert_eq!(turn_state(&terminal), "delivered", "{terminal}");
+    let requests = s.provider()?.requests();
+    let text = requests[0].to_string();
+    assert!(text.contains("t-view"));
+    assert!(text.contains("do not open the page again in a new tab"));
+    s.finish().await
+}

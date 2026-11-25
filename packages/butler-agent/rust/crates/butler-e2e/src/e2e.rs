@@ -34,6 +34,12 @@ pub mod task_graph;
 
 use sha2::{Digest, Sha256};
 
+pub async fn listening_tcp_ports(pid: u32) -> std::io::Result<std::collections::BTreeSet<u16>> {
+    tokio::task::spawn_blocking(move || butler_platform::instance::listening_tcp_ports(pid))
+        .await
+        .map_err(std::io::Error::other)?
+}
+
 /// A failure of the harness itself (setup, strict-replay miss, missing
 /// cassette), as opposed to a product assertion failure.
 pub struct HarnessError(pub String);
