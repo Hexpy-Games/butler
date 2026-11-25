@@ -68,10 +68,14 @@ export function useButlerAccount() {
     state, status, devices, busy, reload: () => load(),
     start: (email: string) => update(() => startButlerAccount(email)),
     verify: (email: string, code: string) => update(() => verifyButlerAccount(email, code), "status"),
-    setDevPlan: (plan: "free" | "plus") => update(async () => {
-      const next = await setButlerAccountDevPlan(plan);
-      if (mounted.current) setStatus(next);
-    }),
+    setDevPlan: async (plan: "free" | "plus") => {
+      const result = await update(async () => {
+        const next = await setButlerAccountDevPlan(plan);
+        if (mounted.current) setStatus(next);
+      });
+      if (!result.ok) notifyError(result, copy.failed, { id: "butler-account" });
+      return result;
+    },
     signOut: () => update(signOutButlerAccount, "status", {
       message: copy.signOutConfirm, label: copy.signOut, done: copy.signedOut,
     }),
