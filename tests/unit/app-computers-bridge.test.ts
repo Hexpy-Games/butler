@@ -61,6 +61,17 @@ test("actual preload sends every computer action through main's security channel
     }),
     fetch: () => { throw new Error("Computer requests must go through main"); },
   });
-  for (const [, , , action, input] of routes) expect(await bridge[action]!(input)).toEqual({ ok: true, data: {} });
-  expect(calls).toEqual(routes.map(([, , , route, , body]) => ["butler:security-request", body ? { route, body } : { route }]));
+  const preloadRoutes = [
+    ...routes.map(([, , , action, input, body]) => [action, input, action, body] as const),
+    ["getButlerAccount", undefined, "getButlerAccount", undefined],
+    ["postButlerAccount", {}, "postButlerAccount", { payload: {} }],
+    ["setButlerAccountDevPlan", { plan: "free" }, "postButlerAccount", { payload: { action: "dev_plan", plan: "free" } }],
+    ["signOutButlerAccount", undefined, "signOutButlerAccount", undefined],
+    ["listButlerAccountDevices", undefined, "listButlerAccountDevices", undefined],
+    ["revokeButlerAccountDevice", { id: "Device_1" }, "revokeButlerAccountDevice", { id: "Device_1" }],
+    ["getButlerBackup", undefined, "getButlerBackup", undefined],
+    ["postButlerBackup", {}, "postButlerBackup", { payload: {} }],
+  ] as const;
+  for (const [action, input] of preloadRoutes) expect(await bridge[action]!(input)).toEqual({ ok: true, data: {} });
+  expect(calls).toEqual(preloadRoutes.map(([, , route, body]) => ["butler:security-request", body ? { route, body } : { route }]));
 });
