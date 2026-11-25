@@ -39,7 +39,7 @@ if [[ ! -e "$APP" ]]; then
   done
   for build_dir in "$builds"/*/; do
     if [[ "$build_dir" != "$build/" && "$build_dir" != "$newest" && "$build_dir" != "$second_newest" ]]; then
-      chmod -R u+w -- "${build_dir%/}"
+      chmod -R u+w "${build_dir%/}"
       rm -rf -- "${build_dir%/}"
     fi
   done
