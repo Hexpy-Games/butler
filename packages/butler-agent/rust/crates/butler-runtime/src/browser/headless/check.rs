@@ -235,8 +235,8 @@ async fn run(
         .as_str()
         .unwrap_or("")
         .to_owned();
-    let (denied, root, total, shown) = hidden
-        .diagnostics(|d| (d.denied, d.root_absolute, d.total, d.shown.clone()))
+    let (denied, total, shown) = hidden
+        .diagnostics(|d| (d.denied, d.total, d.shown.clone()))
         .unwrap_or_default();
     if denied || !allowed(&current_url, origin) {
         return Err(json!({"status":"navigation_denied"}));
@@ -246,7 +246,6 @@ async fn run(
             json!({"status":"budget_exhausted","reason":"diagnostics_limit","errors":{"total":total,"shown":shown.iter().take(5).collect::<Vec<_>>()}}),
         );
     }
-    let warnings = merged(&desktop, &mobile, root);
     let units: Vec<u16> = current["targetInfo"]["title"]
         .as_str()
         .unwrap_or("")
@@ -258,7 +257,7 @@ async fn run(
         .to_owned();
     let mut report = json!({"status":"ok","url":current_url,"load_ms":load_ms,"title":title,"errors":{"total":total,"shown":shown},
         "layout":{"blank":desktop["blank"] == true && mobile["blank"] == true,"overflow_px":{"desktop":desktop["overflow"],"mobile":mobile["overflow"]}},
-        "warnings":warnings});
+        "warnings":[]});
     if args["include_image"] == true {
         if viewport == "desktop" {
             measure(hidden, false).await.map_err(|_| failed(hidden))?;
@@ -266,25 +265,6 @@ async fn run(
         report["image"] = shot(hidden).await;
     }
     Ok(report)
-}
-
-/// Both viewports' warnings once each, plus root-absolute paths the guard saw.
-fn merged(desktop: &Value, mobile: &Value, root: bool) -> Vec<String> {
-    let mut warnings: Vec<String> = Vec::new();
-    for value in desktop["warnings"]
-        .as_array()
-        .into_iter()
-        .chain(mobile["warnings"].as_array())
-        .flatten()
-    {
-        if let Some(w) = value.as_str().filter(|w| !warnings.iter().any(|x| x == w)) {
-            warnings.push(w.to_owned());
-        }
-    }
-    if root && !warnings.iter().any(|w| w == "root_absolute_paths") {
-        warnings.push("root_absolute_paths".into());
-    }
-    warnings
 }
 
 /// The viewport as a JPEG within the image carrier limit.

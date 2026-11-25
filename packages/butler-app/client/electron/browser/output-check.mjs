@@ -15,12 +15,15 @@ export function closeOutputChecks() {
   reports.clear();
 }
 
-function allowed(url, origin) {
-  try { return new URL(url).origin === origin && new URL(url).pathname.startsWith("/__o/"); }
+function allowed(url, origin, frame = true) {
+  try {
+    const target = new URL(url);
+    return target.origin === origin && (!frame || target.pathname.startsWith("/__o/"));
+  }
   catch { return false; }
 }
 
-function guard(contents, partition, origin, denied, rootAbsolute) {
+function guard(contents, partition, origin, denied) {
   const navigate = (event, url) => {
     if (!allowed(event.url ?? url, origin)) { event.preventDefault(); denied(); }
   };
@@ -31,10 +34,9 @@ function guard(contents, partition, origin, denied, rootAbsolute) {
   partition.on("will-download", event => event.preventDefault());
   partition.webRequest.onBeforeRequest((details, callback) => {
     const frame = ["mainFrame", "subFrame"].includes(details.resourceType);
-    const cancel = frame ? !allowed(details.url, origin) :
-      !(allowed(details.url, origin) || (details.url.startsWith("https:") && details.method === "GET") || /^(data|blob):/.test(details.url));
+    const cancel = !(allowed(details.url, origin, frame) ||
+      (!frame && ((details.url.startsWith("https:") && details.method === "GET") || /^(data|blob):/.test(details.url))));
     if (cancel && frame) denied();
-    if (!frame && details.url.startsWith(`${origin}/`) && !allowed(details.url, origin)) rootAbsolute();
     callback({ cancel });
   });
 }
@@ -102,8 +104,7 @@ export async function checkOutput(args, policy) {
   hosts.add(host);
   const contents = host.webContents;
   let denied = false;
-  let rootAbsolute = false;
-  guard(contents, partition, origin, () => { denied = true; }, () => { rootAbsolute = true; });
+  guard(contents, partition, origin, () => { denied = true; });
   const errors = diagnostics(contents, partition);
   const timeout = setTimeout(() => { if (!host.isDestroyed()) host.destroy(); }, 7500);
   try {
@@ -119,7 +120,7 @@ export async function checkOutput(args, policy) {
     if (denied || !allowed(contents.getURL(), origin)) return { status: "navigation_denied" };
     const report = { status: "ok", url: contents.getURL(), load_ms, title: compact(contents.getTitle()), errors: errors(),
       layout: { blank: desktop.blank && mobile.blank, overflow_px: { desktop: desktop.overflow, mobile: mobile.overflow } },
-      warnings: [...new Set([...desktop.warnings, ...mobile.warnings, ...(rootAbsolute ? ["root_absolute_paths"] : [])])] };
+      warnings: [] };
     if (report.errors.total > MAX_DIAGNOSTICS) {
       return { status: "budget_exhausted", reason: "diagnostics_limit", errors: { total: report.errors.total, shown: report.errors.shown.slice(0, 5) } };
     }

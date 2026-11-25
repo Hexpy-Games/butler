@@ -26,7 +26,7 @@ pub(super) fn build(state: &HttpState) -> HeaderMap {
         headers.insert("content-security-policy", value);
     }
     for (name, value) in [
-        ("referrer-policy", "no-referrer"),
+        ("referrer-policy", "same-origin"),
         ("x-content-type-options", "nosniff"),
         ("cross-origin-opener-policy", "same-origin"),
         ("cache-control", "no-store"),
