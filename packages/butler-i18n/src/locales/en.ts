@@ -134,6 +134,8 @@ const butlerAccount: AppCopy["butlerAccount"] = {
   plan: "Plan",
   renews: (date) => `Renews ${date}`,
   plans: { free: "Free", plus: "Plus", pro: "Pro", enterprise: "Enterprise" },
+  switchToPlus: "Switch to Plus",
+  switchToFree: "Switch to Free",
   signOut: "Sign out",
   signOutConfirm: "Sign out of your Butler account on this computer?",
   signedOut: "Signed out.",

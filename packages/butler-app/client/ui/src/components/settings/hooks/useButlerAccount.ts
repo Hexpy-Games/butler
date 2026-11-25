@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api";
 import {
-  getButlerAccount, listButlerAccountDevices, revokeButlerAccountDevice, signOutButlerAccount,
+  getButlerAccount, listButlerAccountDevices, revokeButlerAccountDevice, setButlerAccountDevPlan, signOutButlerAccount,
   startButlerAccount, verifyButlerAccount, type ButlerAccountDevice, type ButlerAccountStatus,
 } from "@/app/butlerAccount";
 import { confirmAction } from "@/app/confirmation";
@@ -41,8 +41,8 @@ export function useButlerAccount() {
     return () => { mounted.current = false; };
   }, [load]);
 
-  async function update(operation: () => Promise<unknown>, reload?: "status" | "devices",
-    confirmation?: { message: string; label: string; done: string }): Promise<{ ok: true } | { ok: false; code?: string }> {
+  async function update<T>(operation: () => Promise<T>, reload?: "status" | "devices",
+    confirmation?: { message: string; label: string; done: string }): Promise<{ ok: true; value: T } | { ok: false; code?: string }> {
     if (acting.current) return { ok: false };
     acting.current = true;
     try {
@@ -50,10 +50,10 @@ export function useButlerAccount() {
         title: confirmation.label, confirmLabel: confirmation.label, destructive: true,
       })) return { ok: false };
       setBusy(true);
-      await operation();
+      const value = await operation();
       if (confirmation) notifyStatus(confirmation.done, { id: "butler-account", tone: "ok" });
       if (reload) await load(reload === "devices");
-      return { ok: true };
+      return { ok: true, value };
     } catch (error) {
       const code = apiErrorCode(error);
       if (confirmation) notifyError(error, copy.failed, { id: "butler-account" });
@@ -68,6 +68,10 @@ export function useButlerAccount() {
     state, status, devices, busy, reload: () => load(),
     start: (email: string) => update(() => startButlerAccount(email)),
     verify: (email: string, code: string) => update(() => verifyButlerAccount(email, code), "status"),
+    setDevPlan: (plan: "free" | "plus") => update(async () => {
+      const next = await setButlerAccountDevPlan(plan);
+      if (mounted.current) setStatus(next);
+    }),
     signOut: () => update(signOutButlerAccount, "status", {
       message: copy.signOutConfirm, label: copy.signOut, done: copy.signedOut,
     }),

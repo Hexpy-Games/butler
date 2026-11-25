@@ -793,6 +793,9 @@ const butlerApp = Object.freeze({
   postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
     method: "POST", body: JSON.stringify(request ?? {}),
   }),
+  setButlerAccountDevPlan: ({ plan }) => requestBridgeResult("/setup/butler-account", {
+    method: "POST", body: JSON.stringify({ action: "dev_plan", plan }),
+  }),
   signOutButlerAccount: () => requestBridgeResult("/setup/butler-account", { method: "DELETE" }),
   listButlerAccountDevices: () => requestBridgeResult("/setup/butler-account/devices"),
   revokeButlerAccountDevice: ({ id } = {}) => requestBridgeResult(`/setup/butler-account/devices/${encodeURIComponent(id ?? "")}`, {

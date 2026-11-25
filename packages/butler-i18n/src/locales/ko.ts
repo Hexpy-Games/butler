@@ -140,6 +140,8 @@ const butlerAccount: AppCopy["butlerAccount"] = {
   plan: "요금제",
   renews: (date) => `${date} 갱신`,
   plans: { free: "무료", plus: "Plus", pro: "Pro", enterprise: "Enterprise" },
+  switchToPlus: "Plus로 전환",
+  switchToFree: "Free로 전환",
   signOut: "로그아웃",
   signOutConfirm: "이 컴퓨터에서 버틀러 계정을 로그아웃할까요?",
   signedOut: "로그아웃했습니다.",
