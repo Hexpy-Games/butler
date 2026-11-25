@@ -266,17 +266,27 @@ pub(super) async fn delete(
 ) -> Result<bool, HttpError> {
     let reach = async {
         let installed = deploy::installed(computer, cancel.clone()).await?;
-        if installed {
-            deploy::ensure_running((data, version), computer, cancel.clone()).await?;
-            let identity = setup.computer_key(computer.id.clone()).await?;
-            relay::unlock(computer, &identity, cancel.clone()).await?;
+        if !installed {
+            return Ok(None);
         }
-        Ok::<_, HttpError>(installed)
+        deploy::ensure_running((data, version), computer, cancel.clone()).await?;
+        let identity = setup.computer_key(computer.id.clone()).await?;
+        relay::unlock(computer, &identity, cancel.clone()).await?;
+        session_state::request(computer, cancel.clone())
+            .await
+            .map(Some)
     }
     .await;
     let reachable = match reach {
-        Ok(installed) => {
-            if installed {
+        Ok(sessions) => {
+            if let Some(sessions) = sessions {
+                if sessions.iter().any(SessionStateRow::has_active_turn) {
+                    return Err(HttpError::public(
+                        409,
+                        "computer_busy",
+                        "A conversation is still running on this computer.",
+                    ));
+                }
                 let link = Link {
                     setup: setup.clone(),
                     root: data.to_path_buf(),

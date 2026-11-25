@@ -297,6 +297,13 @@ pub trait AppSetupPort: Send + Sync + 'static {
     ) -> ApplicationFuture<bool> {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
+    fn computer_session_turns(
+        &self,
+        _computer_id: String,
+        _runtime_session_id: String,
+    ) -> ApplicationFuture<Vec<crate::gateway::RemovedComputerTurn>> {
+        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
+    }
     /// The read-only memory copy the main hands a registered computer on connect.
     fn computer_memory_copy(&self) -> ApplicationFuture<Value> {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })

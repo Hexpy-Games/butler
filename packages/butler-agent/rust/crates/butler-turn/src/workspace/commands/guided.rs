@@ -235,7 +235,7 @@ async fn prepare_command(
             }
             std::fs::create_dir_all(&scratch.artifacts).map_err(CommandError::io)?;
             let process_cwd = command_sandbox::working_directory(&cwd).map_err(CommandError::io)?;
-            let invocation = super::guided_invocation::invocation(&input, &secrets)?;
+            let invocation = super::guided_invocation::invocation(&input, &cwd, &secrets)?;
             Ok::<_, CommandError>((invocation, environment, process_cwd))
         }
     })

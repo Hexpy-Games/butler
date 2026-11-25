@@ -102,7 +102,7 @@ export function useLiveSessionEvents(): void {
       publishChatGptEvent(event);
       publishLibraryEvent(event);
       publishConnectorEvent(event);
-      publishComputerEvent(event);
+      publishComputerEvent(event, navigationReconciliation.requestRefresh);
       publishDocumentEvent(event);
       publishCanonEvent(event);
       publishCanonQueueEvent(event);

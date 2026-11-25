@@ -19,10 +19,10 @@ test("sessionMark prioritizes attention, work, unread", () => {
 test("sessionSubtitle covers status, progress and location", () => {
   const copy = { working: "Working", needsAttention: "Needs attention" };
   const idle = { ...session, unread: false };
-  expect(sessionSubtitle({ ...idle, active_turn_state: "thinking", safe_status_label: "Reading files", work_progress: { completed: 2, total: 5 } }, "Desk", copy)).toBe("Reading files · 2/5");
-  expect(sessionSubtitle({ ...idle, attention_required: true }, "Desk", copy)).toBe("Needs attention");
-  expect(sessionSubtitle({ ...idle, branch: "feature/sample" }, "Desk", copy)).toBe("Desk · feature/sample");
-  expect(sessionSubtitle({ ...idle, computer_name: "Studio" }, "Desk", copy)).toBe("Studio");
+  expect(sessionSubtitle({ ...idle, active_turn_state: "thinking", safe_status_label: "Reading files", work_progress: { completed: 2, total: 5 } }, "Desk", copy, "a removed computer")).toBe("Reading files · 2/5");
+  expect(sessionSubtitle({ ...idle, attention_required: true }, "Desk", copy, "a removed computer")).toBe("Needs attention");
+  expect(sessionSubtitle({ ...idle, branch: "feature/sample" }, "Desk", copy, "a removed computer")).toBe("Desk · feature/sample");
+  expect(sessionSubtitle({ ...idle, computer_name: "Studio" }, "Desk", copy, "a removed computer")).toBe("Studio");
 });
 
 test("titleFromPrompt shortens a long first line and falls back for empty text", () => {

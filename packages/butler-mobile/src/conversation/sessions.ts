@@ -10,13 +10,13 @@ export function sessionMark(s: SessionSummary): "attention" | "working" | "unrea
 
 /** A home row's line: the status while it works or waits, otherwise where it runs. */
 export function sessionSubtitle(s: SessionSummary, computerName: string | undefined,
-  copy: Pick<MobileCopy["conversations"], "working" | "needsAttention">): string {
+  copy: Pick<MobileCopy["conversations"], "working" | "needsAttention">, removedComputer: string): string {
   const mark = sessionMark(s);
   if (mark === "working" || mark === "attention") {
     const progress = s.work_progress ? ` · ${s.work_progress.completed}/${s.work_progress.total}` : "";
     return (s.safe_status_label ?? (mark === "working" ? copy.working : copy.needsAttention)) + progress;
   }
-  return [s.computer_name ?? computerName, s.branch].filter(Boolean).join(" · ");
+  return [s.computer_name ?? (s.computer_id ? removedComputer : computerName), s.branch].filter(Boolean).join(" · ");
 }
 
 export function timeLabel(iso: string, locale: string, now: Date): string {
