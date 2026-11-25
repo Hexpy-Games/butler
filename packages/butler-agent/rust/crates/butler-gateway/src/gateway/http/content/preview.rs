@@ -180,6 +180,7 @@ fn clean_headers(headers: &mut axum::http::HeaderMap, websocket: bool) {
     for name in [
         "authorization",
         "cookie",
+        "referer",
         "proxy-authorization",
         "proxy-authenticate",
         "keep-alive",

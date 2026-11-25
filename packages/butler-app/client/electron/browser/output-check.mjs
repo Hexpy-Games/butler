@@ -119,8 +119,7 @@ export async function checkOutput(args, policy) {
     const mobile = await measure(contents, true);
     if (denied || !allowed(contents.getURL(), origin)) return { status: "navigation_denied" };
     const report = { status: "ok", url: contents.getURL(), load_ms, title: compact(contents.getTitle()), errors: errors(),
-      layout: { blank: desktop.blank && mobile.blank, overflow_px: { desktop: desktop.overflow, mobile: mobile.overflow } },
-      warnings: [] };
+      layout: { blank: desktop.blank && mobile.blank, overflow_px: { desktop: desktop.overflow, mobile: mobile.overflow } } };
     if (report.errors.total > MAX_DIAGNOSTICS) {
       return { status: "budget_exhausted", reason: "diagnostics_limit", errors: { total: report.errors.total, shown: report.errors.shown.slice(0, 5) } };
     }

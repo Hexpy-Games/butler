@@ -1,7 +1,7 @@
 //! `output.check` (P1b self-check) on the headless browser, the App's
 //! `output-check.mjs`: the output loads in a fresh hidden page, is measured at
-//! desktop and mobile size, and reports errors, blankness, overflow and
-//! root-absolute paths, optionally with a screenshot.
+//! desktop and mobile size, and reports errors, blankness and overflow,
+//! optionally with a screenshot.
 use super::{
     Headless,
     hidden::{HiddenPage, Purpose},
@@ -256,8 +256,7 @@ async fn run(
         .trim_end_matches('\u{fffd}')
         .to_owned();
     let mut report = json!({"status":"ok","url":current_url,"load_ms":load_ms,"title":title,"errors":{"total":total,"shown":shown},
-        "layout":{"blank":desktop["blank"] == true && mobile["blank"] == true,"overflow_px":{"desktop":desktop["overflow"],"mobile":mobile["overflow"]}},
-        "warnings":[]});
+        "layout":{"blank":desktop["blank"] == true && mobile["blank"] == true,"overflow_px":{"desktop":desktop["overflow"],"mobile":mobile["overflow"]}}});
     if args["include_image"] == true {
         if viewport == "desktop" {
             measure(hidden, false).await.map_err(|_| failed(hidden))?;

@@ -56,7 +56,7 @@ pub(super) fn shape(value: &Value) -> Value {
         .as_u64()
         .unwrap_or(0);
     let blank = value["layout"]["blank"].as_bool().unwrap_or(true);
-    let mut result = json!({"status":if total > 0 || blank || desktop > 0 || mobile > 0 {"issues"} else {"ok"},"load_ms":value["load_ms"].as_u64().unwrap_or(0),"title":text(&value["title"]),"errors":{"total":total,"shown":shown},"layout":{"blank":blank,"overflow_px":{"desktop":desktop,"mobile":mobile}},"warnings":[]});
+    let mut result = json!({"status":if total > 0 || blank || desktop > 0 || mobile > 0 {"issues"} else {"ok"},"load_ms":value["load_ms"].as_u64().unwrap_or(0),"title":text(&value["title"]),"errors":{"total":total,"shown":shown},"layout":{"blank":blank,"overflow_px":{"desktop":desktop,"mobile":mobile}}});
     if let Some(cursor) = value["next_cursor"]
         .as_u64()
         .filter(|c| *c > 0 && *c < total)
