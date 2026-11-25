@@ -228,7 +228,7 @@ impl Gateway {
             .find(|turn| turn_id_of(turn) == Some(turn_id)))
     }
 
-    /// The approval requests waiting in `chat_id` (the App's approval cards).
+    /// The pending authority requests in `chat_id` (approvals and questions).
     pub async fn approval_requests(&self, chat_id: &str) -> Result<Vec<Value>, HarnessError> {
         let reply = self
             .get(&format!("/authority-requests?session_id={chat_id}"))
@@ -251,30 +251,54 @@ impl Gateway {
         states: &[&str],
         timeout: Duration,
     ) -> Result<Value, HarnessError> {
-        let deadline = Instant::now() + timeout;
         let mut last = Value::Null;
-        loop {
-            if let Some(turn) = self.turn(chat_id, turn_id).await? {
-                if states.contains(&turn_state(&turn)) {
-                    return Ok(turn);
+        let result = tokio::time::timeout(timeout, async {
+            loop {
+                if let Some(turn) = self.turn(chat_id, turn_id).await? {
+                    if states.contains(&turn_state(&turn)) {
+                        return Ok(turn);
+                    }
+                    last = turn;
                 }
-                last = turn;
+                let poll = Instant::now();
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
+                    == Some(std::ffi::OsStr::new("1"))
+                {
+                    eprintln!(
+                        "command_poll_timing requested_us=100000 actual_us={}",
+                        poll.elapsed().as_micros()
+                    );
+                }
             }
-            if Instant::now() > deadline {
-                return Err(harness_error(format!(
-                    "turn {turn_id} did not reach {states:?} within {timeout:?}; last: {last}"
-                )));
+        })
+        .await;
+        match result {
+            Ok(result) => result,
+            Err(_) => {
+                let pending = self.pending_forms_at_timeout(chat_id, turn_id).await;
+                Err(harness_error(format!(
+                    "turn {turn_id} in {chat_id} did not reach {states:?} within {timeout:?}, last turn: {last}, pending forms: {pending}"
+                )))
             }
-            let poll = Instant::now();
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            if std::env::var_os("BUTLER_DEBUG_COMMAND_TIMINGS").as_deref()
-                == Some(std::ffi::OsStr::new("1"))
-            {
-                eprintln!(
-                    "command_poll_timing requested_us=100000 actual_us={}",
-                    poll.elapsed().as_micros()
-                );
+        }
+    }
+
+    async fn pending_forms_at_timeout(&self, chat_id: &str, turn_id: &str) -> String {
+        match tokio::time::timeout(Duration::from_secs(1), self.approval_requests(chat_id)).await {
+            Ok(Ok(requests)) => {
+                let forms: Vec<_> = requests
+                    .iter()
+                    .filter(|request| request["source_turn_id"] == turn_id)
+                    .map(|request| json!({
+                        "kind": if request["category"] == "ask_user" { "question" } else { "approval" },
+                        "request_ref": request["request_ref"],
+                    }))
+                    .collect();
+                json!(forms).to_string()
             }
+            Ok(Err(_)) => "lookup failed".into(),
+            Err(_) => "lookup timed out".into(),
         }
     }
 

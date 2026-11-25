@@ -77,15 +77,18 @@ pub(super) fn write(
     credentials: &HashMap<String, String>,
 ) -> Result<(), ModelCatalogError> {
     if sealed::is_enabled() {
-        let mut map = sealed::read_map().map_err(write_failed)?;
-        map.retain(|key, _| !key.starts_with(VAULT_PREFIX));
-        for (model_ref, secret) in credentials {
-            if !secret.is_empty() {
-                butler_log::register_secret_for(&format!("local:{model_ref}"), secret);
-                map.insert(format!("{VAULT_PREFIX}{model_ref}"), secret.clone());
+        return sealed::update_map(|map| {
+            map.retain(|key, _| !key.starts_with(VAULT_PREFIX));
+            for (model_ref, secret) in credentials {
+                if !secret.is_empty() {
+                    butler_log::register_secret_for(&format!("local:{model_ref}"), secret);
+                    map.insert(format!("{VAULT_PREFIX}{model_ref}"), secret.clone());
+                }
             }
-        }
-        return sealed::write_map(&map).map_err(write_failed);
+            Some(())
+        })
+        .map(|_| ())
+        .map_err(write_failed);
     }
     for (source, secret) in credentials {
         butler_log::register_secret_for(&format!("local:{source}"), secret);

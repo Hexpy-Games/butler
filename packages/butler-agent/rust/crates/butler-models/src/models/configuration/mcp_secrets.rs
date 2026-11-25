@@ -26,9 +26,10 @@ impl McpSecretStore {
         if sealed::is_enabled() {
             let value = SecretText::new(value.to_owned());
             spawn_blocking(move || {
-                let mut map = sealed::read_map()?;
-                map.insert(vault_id, value.expose().to_owned());
-                sealed::write_map(&map)
+                sealed::update_map(|map| {
+                    map.insert(vault_id, value.expose().to_owned());
+                    Some(())
+                })
             })
             .await
             .map_err(CredentialStoreError::Interrupted)??;
@@ -82,15 +83,9 @@ impl McpSecretStore {
     ) -> Result<(), CredentialStoreError> {
         let vault_id = mcp_vault_id(id);
         if sealed::is_enabled() {
-            spawn_blocking(move || {
-                let mut map = sealed::read_map()?;
-                if map.remove(&vault_id).is_some() {
-                    sealed::write_map(&map)?;
-                }
-                Ok::<_, sealed::SealedError>(())
-            })
-            .await
-            .map_err(CredentialStoreError::Interrupted)??;
+            spawn_blocking(move || sealed::update_map(|map| map.remove(&vault_id)))
+                .await
+                .map_err(CredentialStoreError::Interrupted)??;
             return Ok(());
         }
         if let Some(vault) = self.secrets.vault(&self.root).await? {

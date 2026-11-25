@@ -33,6 +33,7 @@ pub fn reset_secret_keys(root: &Path) -> io::Result<Vec<(String, String)>> {
     for (id, home) in super::computer_keys::homes(root)? {
         if let Some(backend) = SecretBackend::from_name(&home).filter(|backend| backend.is_system())
         {
+            ids.push(("computer_env".into(), id.clone(), backend));
             ids.push(("computer_key".into(), id, backend));
         }
     }

@@ -15,6 +15,7 @@ mod oauth;
 mod readiness;
 
 use butler_platform::secrets::SecretText;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -245,6 +246,26 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move {
             let root = this.validated_root()?;
             credentials::computer_key(&this.configuration, &id, &root).await
+        })
+    }
+
+    fn computer_environment(&self, id: String) -> ApplicationFuture<BTreeMap<String, SecretText>> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::computer_environment(&this.configuration, &id, &root).await
+        })
+    }
+
+    fn save_computer_environment(
+        &self,
+        id: String,
+        values: BTreeMap<String, SecretText>,
+    ) -> ApplicationFuture<()> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::save_computer_environment(&this.configuration, &id, &root, values).await
         })
     }
 

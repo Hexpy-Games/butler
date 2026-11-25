@@ -17,16 +17,22 @@ impl Scenario {
         text: &str,
         timeout: Duration,
     ) -> Result<(String, Value), HarnessError> {
-        tokio::time::timeout(timeout, async {
-            let turn_id = self.gw.say_turn(chat, text).await?;
-            let turn = self.gw.wait_terminal(chat, &turn_id, timeout).await?;
-            Ok((turn_id, turn))
-        })
-        .await
-        .map_err(|_| {
-            harness_error(format!(
-                "turn in {chat} did not complete within {timeout:?}"
-            ))
-        })?
+        let deadline = tokio::time::Instant::now() + timeout;
+        let turn_id = tokio::time::timeout_at(deadline, self.gw.say_turn(chat, text))
+            .await
+            .map_err(|_| {
+                harness_error(format!(
+                    "turn in {chat} was not admitted within {timeout:?}"
+                ))
+            })??;
+        let turn = self
+            .gw
+            .wait_terminal(
+                chat,
+                &turn_id,
+                deadline.saturating_duration_since(tokio::time::Instant::now()),
+            )
+            .await?;
+        Ok((turn_id, turn))
     }
 }

@@ -52,6 +52,7 @@ mod remote_sessions;
 mod remote_transcripts;
 mod retry;
 mod router;
+mod routes;
 #[cfg(feature = "test-support")]
 pub(crate) use router::templates as route_templates;
 mod security;

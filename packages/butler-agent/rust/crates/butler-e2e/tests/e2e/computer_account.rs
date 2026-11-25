@@ -39,13 +39,14 @@ pub(super) struct Deployed {
 }
 
 pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
-    deployed_with(id, env, &[]).await
+    deployed_with(id, env, &[], false).await
 }
 
 pub(super) async fn deployed_with(
     id: &str,
     env: &[(&str, &str)],
     main_env: &[(&str, &str)],
+    system_store: bool,
 ) -> Result<Deployed, HarnessError> {
     let setup = Setup::new(id)?;
     let mut launch = Launch::new(&setup.sandbox)?;
@@ -81,12 +82,22 @@ pub(super) async fn deployed_with(
     for (key, value) in main_env {
         setup = setup.env(key, *value);
     }
+    if system_store {
+        butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
+        setup = setup.env("BUTLER_SECRET_STORE", "");
+    }
     let home = setup.sandbox.home.clone();
     let setup = setup.env(
         butler_platform::remote_ssh::CONFIG_FIXTURE,
         user_ssh_config(&home)?.to_string_lossy(),
     );
     let s = setup.start().await?;
+    if system_store {
+        let config_path = s.sandbox.data.join("butler.config.json");
+        let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?)?;
+        config["secrets"] = json!({"store": "system"});
+        fs::write(config_path, serde_json::to_vec(&config)?)?;
+    }
     let health = s.gw.get("/health").await?;
     let version = health.data()["agent_version"]
         .as_str()

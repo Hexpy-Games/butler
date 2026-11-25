@@ -19,6 +19,7 @@ async fn command(
 ) -> Result<(Option<i32>, Vec<u8>), HarnessError> {
     let output = owner
         .submit_guided(GuidedCommandInput {
+            computer_environment: Default::default(),
             allowed_folders: Vec::new(),
             extra_write_roots: Vec::new(),
             protected_roots: Vec::new(),
