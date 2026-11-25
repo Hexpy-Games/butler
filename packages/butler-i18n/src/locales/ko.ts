@@ -547,8 +547,7 @@ export const koKrCopy: AppCopy = {
       unreachable: "버틀러에 연결할 수 없습니다. 주소와 네트워크를 확인하십시오.",
       failed: "연결하지 못했습니다. 다시 시도하십시오.",
       desktopOffline: "컴퓨터가 꺼져 있습니다",
-      relayOff: "밖에서 연결이 꺼져 있습니다",
-      outsideAccess: "밖에서 연결",
+      relayOff: "컴퓨터에 연결할 수 없습니다. 컴퓨터의 설정 → 보안을 확인하십시오.",
     },
     localNetwork: {
       title: "로컬 네트워크 허용",

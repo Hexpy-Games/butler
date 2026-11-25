@@ -47,10 +47,11 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
       setConnecting(true);
       void pairAnyAndOpenHome(link).then(failure => {
         if (!failure) return;
-        const { origin, problem } = failure;
+        const { origin, problem, relay } = failure;
         setConnecting(false);
         setAddress(origin);
         if (problem === "invalidCode") setCodeError(copy.problems.invalidCode);
+        else if (relay) showToast({ message: copy.problems[problem], tone: "error" });
         else {
           setAddressError(copy.problems[problem]);
           if (explainLocalNetwork(problem, origin)) setExplainer(true);

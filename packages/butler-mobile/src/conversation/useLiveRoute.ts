@@ -70,7 +70,7 @@ export function useLiveRoute({
           return;
         }
         const found = problemFrom(error);
-        setProblem(found === "desktopOffline" || found === "relayOff" ? found : null);
+        setProblem(found === "desktopOffline" ? found : null);
       },
     });
     if (AppState.currentState === "background") live.current.pause();
@@ -84,7 +84,7 @@ export function useLiveRoute({
     if (result.kind === "ready" && result.route.origin !== route.current?.origin) {
       connect(current, result.route, live.current?.cursor ?? 0);
       setReconcile(value => value + 1);
-    } else if (result.kind === "problem" && (result.problem === "desktopOffline" || result.problem === "relayOff")) setProblem(result.problem);
+    } else if (result.kind === "problem" && result.problem === "desktopOffline") setProblem(result.problem);
   };
   const open = useCallback(async (next: Pairing): Promise<ProbeResult> => {
     const nextPeer = await loadRelayPeer(next).catch(() => null);

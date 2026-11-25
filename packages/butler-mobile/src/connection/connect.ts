@@ -41,9 +41,9 @@ export function pairAndOpenHome(origin: string, code: string): Promise<Problem |
 
 /**
  * Scan path. LAN resolve first; if no LAN address answers and the QR has k + t, the pair request goes through the relay at once
- * (it is the probe). Nothing else spends the code's 60 s. On failure, `origin` is the LAN address to prefill ("" when none).
+ * (it is the probe). Nothing else spends the code's 60 s. On failure, `origin` is the LAN address to prefill ("" when none) and `relay` says the failing attempt went through the relay.
  */
-export async function pairAnyAndOpenHome(link: { origins: string[]; code: string; tunnel?: PairLinkTunnel }): Promise<{ origin: string; problem: Problem } | null> {
+export async function pairAnyAndOpenHome(link: { origins: string[]; code: string; tunnel?: PairLinkTunnel }): Promise<{ origin: string; problem: Problem; relay: boolean } | null> {
   const key = link.tunnel ? newNoiseKey() : null;
   const resolved = link.origins.length > 0 ? await resolveOrigin(link.origins, nativeFetch) : null;
   const relay = link.tunnel && key ? {
@@ -56,9 +56,9 @@ export async function pairAnyAndOpenHome(link: { origins: string[]; code: string
     ...(link.tunnel && key ? { tunnel: { tunnelId: link.tunnel.tunnelId, desktopStatic: link.tunnel.desktopStatic }, noiseStatic: key.publicText, noisePrivate: key.privateText } : {}),
   };
   const target = resolved?.ok ? { origin: resolved.origin, fetch: nativeFetch } : relay;
-  if (!target) return { origin: link.origins[0] ?? "", problem: resolved && !resolved.ok ? resolved.problem : "unreachable" };
+  if (!target) return { origin: link.origins[0] ?? "", problem: resolved && !resolved.ok ? resolved.problem : "unreachable", relay: false };
   const problem = await pairAt(target, link.code, record);
-  return problem ? { origin: target === relay ? link.origins[0] ?? "" : target.origin, problem } : null;
+  return problem ? { origin: target === relay ? link.origins[0] ?? "" : target.origin, problem, relay: target === relay } : null;
 }
 
 /** The deep-link prefill address: the reachable origin, else the first. */

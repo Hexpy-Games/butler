@@ -549,8 +549,7 @@ export const enUsCopy: AppCopy = {
       unreachable: "Can't reach Butler. Check the address and network.",
       failed: "Couldn't connect. Try again.",
       desktopOffline: "Your computer is off",
-      relayOff: "Outside access is off",
-      outsideAccess: "Outside access",
+      relayOff: "Can't reach your computer. Check Settings → Security on your computer.",
     },
     localNetwork: {
       title: "Allow local network",

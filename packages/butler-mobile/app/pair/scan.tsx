@@ -47,7 +47,7 @@ export default function PairScan() {
     void connect(link);
   };
   const rescan = () => { busy.current = false; rejected.current = null; setScan({ kind: "live" }); };
-  const manual = () => router.replace(scan.kind === "failed"
+  const manual = () => router.replace(scan.kind === "failed" && scan.link.origins.length > 0
     ? { pathname: "/pair/manual", params: { v: "1", a: scan.origin, c: scan.code } }
     : "/pair/manual");
   const blocked = unavailable || (permission !== null && !permission.granted && permission.status === "denied");

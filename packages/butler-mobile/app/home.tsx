@@ -7,7 +7,7 @@ import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import type { Problem } from "@/connection/problems";
-import { displayAddress } from "@/connection/route";
+import { lanAddresses } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
@@ -22,7 +22,7 @@ import { useCanonSidebars } from "@/conversation/useCanonSidebars";
 import { spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
 import { sessionMark, sessionSubtitle, timeLabel } from "@/conversation/sessions";
 
-type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
+type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin?: string } | { kind: "problem"; origin?: string; problem: Problem };
 
 export default function Home() {
   const copy = useMobileCopy();
@@ -50,7 +50,7 @@ export default function Home() {
       return;
     }
     if (id !== latest.current) return;
-    const origin = displayAddress(pairing, pairing.addresses[0], copy.problems.outsideAccess);
+    const origin = pairing.computerName ?? lanAddresses(pairing)[0];
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin }
       : { kind: "problem", origin, problem: result.problem });
@@ -76,7 +76,8 @@ export default function Home() {
         </ScrollView>
         <ButtonGroup>
           {status.kind === "problem" ? <Button label={copy.home.retry} onPress={check} /> : null}
-          <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />
+          {status.kind === "problem" && status.problem === "desktopOffline" ? null
+            : <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />}
         </ButtonGroup>
       </View>
     </Surface>

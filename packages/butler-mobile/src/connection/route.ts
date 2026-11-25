@@ -14,10 +14,6 @@ export function relayAddress(pairing: Pairing): string | null {
   return pairing.tunnelId ? pairing.addresses[pairing.addresses.length - 1] ?? null : null;
 }
 
-export function displayAddress(pairing: Pairing, address: string, outsideAccess: string): string {
-  return address === relayAddress(pairing) ? outsideAccess : address;
-}
-
 export function lanAddresses(pairing: Pairing): string[] {
   return pairing.tunnelId ? pairing.addresses.slice(0, -1) : pairing.addresses;
 }

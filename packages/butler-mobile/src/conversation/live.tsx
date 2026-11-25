@@ -20,7 +20,7 @@ interface ConversationContext {
   route: Route | null;
   access: Access | null;
   lost: boolean;
-  problem: Problem | null; // only "desktopOffline" | "relayOff", from the last relay error; cleared when the stream is back
+  problem: Problem | null; // only "desktopOffline", from the last relay error; cleared when the stream is back
   reconcile: number;
   subscribe(listener: (event: LiveEvent) => void): () => void;
 }
