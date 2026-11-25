@@ -5,6 +5,14 @@ on:
       upload-pages:
         type: boolean
         default: false
+      # The privacy policy's officer names (site.yml passes the repository variables).
+      # Empty in pull request checks, which build the page without them.
+      privacy-officer-ko:
+        type: string
+        default: ""
+      privacy-officer-en:
+        type: string
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -38,6 +46,8 @@ jobs:
       - name: Build /, /help/ and /ds/
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          SITE_PRIVACY_OFFICER_KO: ${{ inputs.privacy-officer-ko }}
+          SITE_PRIVACY_OFFICER_EN: ${{ inputs.privacy-officer-en }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run site:build
 
       - name: Leak check (/ds/)

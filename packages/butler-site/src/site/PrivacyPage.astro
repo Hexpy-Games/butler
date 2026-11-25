@@ -1,0 +1,31 @@
+---
+/** The privacy policy for one locale: /privacy/ and /<locale>/privacy/. A standalone page, not part of the manual (no breadcrumb, pager or search entry). */
+import { Typo } from "../ds/components/Typo";
+import DocContent from "../ds/web/DocContent/DocContent.astro";
+import pageStyles from "../ds/web/DocPage/DocPage.module.css";
+import DocsLayout from "../ds/web/DocsLayout/DocsLayout.astro";
+import { loadNav } from "./docs";
+import { mdxComponents } from "./mdxComponents";
+import { docsRoot, privacyHref } from "./nav";
+import * as en from "./privacy/en.mdx";
+import * as ko from "./privacy/ko.mdx";
+import { LOCALES, type Locale } from "./sections";
+
+interface Props {
+  locale: Locale;
+}
+
+const POLICY: Record<Locale, typeof ko> = { ko, en };
+const base = import.meta.env.BASE_URL;
+const { locale } = Astro.props;
+const { Content, frontmatter } = POLICY[locale];
+const alternates = Object.fromEntries(LOCALES.map((code) => [code, privacyHref(base, code)]));
+---
+<DocsLayout alternates={alternates} description={frontmatter.title} homeHref={docsRoot(base, locale)} locale={locale} nav={await loadNav(locale, "")} title={frontmatter.title}>
+  <article class={pageStyles.article}>
+    <header class={pageStyles.header}>
+      <Typo.H1>{frontmatter.title}</Typo.H1>
+    </header>
+    <DocContent><Content components={mdxComponents(locale)} /></DocContent>
+  </article>
+</DocsLayout>

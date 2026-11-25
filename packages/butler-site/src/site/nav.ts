@@ -51,6 +51,11 @@ export function docsRoot(base: string, locale: Locale): string {
   return withBase(base, locale === DEFAULT_LOCALE ? `${MANUAL_SEGMENT}/` : `${locale}/${MANUAL_SEGMENT}/`);
 }
 
+/** The privacy policy: /privacy/ (/<locale>/privacy/ for other locales). */
+export function privacyHref(base: string, locale: Locale): string {
+  return withBase(base, locale === DEFAULT_LOCALE ? "privacy/" : `${locale}/privacy/`);
+}
+
 /** The DS Viewer (packages/butler-app/client/ui ds-site build), added to the site by scripts/build-ds.ts. */
 export function designSystemRoot(base: string): string {
   return withBase(base, "ds/");
