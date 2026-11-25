@@ -7,6 +7,7 @@
 )]
 mod availability;
 mod images;
+mod root_paths;
 mod security;
 mod self_check;
 pub(super) mod stub;

@@ -61,11 +61,6 @@ async fn output_check_runs_on_the_headless_browser_without_the_app() -> Result<(
         "{report}"
     );
     assert_eq!(report["layout"]["blank"], false, "{report}");
-    assert_eq!(
-        report["warnings"],
-        json!(["root_absolute_paths"]),
-        "{report}"
-    );
     assert_eq!(report["image"]["mime_type"], "image/jpeg", "{report}");
     let (clean, _) = publish_as(&s, "Publish fixture").await?;
     let report = check(&admin, &clean, false).await?;

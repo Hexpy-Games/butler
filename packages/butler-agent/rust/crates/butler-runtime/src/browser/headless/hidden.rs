@@ -30,7 +30,6 @@ pub(crate) struct Diagnostics {
     pub total: usize,
     pub shown: Vec<String>,
     pub denied: bool,
-    pub root_absolute: bool,
     pub status: Option<u16>,
     urls: HashMap<String, String>,
 }
@@ -262,17 +261,14 @@ pub(crate) async fn admit(browser: &Browser, tab: &str, purpose: &Purpose, param
             let ok = if frame {
                 check_allowed(url, origin)
             } else {
-                check_allowed(url, origin)
+                url::Url::parse(url).is_ok_and(|u| u.origin().ascii_serialization() == *origin)
                     || url.starts_with("https:") && params["request"]["method"] == "GET"
                     || url.starts_with("data:")
                     || url.starts_with("blob:")
             };
-            let root =
-                !frame && url.starts_with(&format!("{origin}/")) && !check_allowed(url, origin);
             browser.shared.with_tab(tab, |t| {
                 if let Some(d) = t.diagnostics.as_mut() {
                     d.denied |= frame && !ok;
-                    d.root_absolute |= root;
                 }
             });
             ok

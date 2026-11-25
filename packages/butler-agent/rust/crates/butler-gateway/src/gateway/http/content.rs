@@ -3,6 +3,7 @@ mod capability;
 mod headers;
 pub(super) mod message_file;
 pub(super) mod preview;
+mod referer;
 pub(super) mod remote;
 use super::{HttpError, HttpState, error::error_response};
 use axum::{
@@ -89,6 +90,8 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
         Err(refused())
     } else if request.uri().path().starts_with("/__o/") {
         serve(&state, request).await
+    } else if let Some(result) = referer::redirect(&state, &request) {
+        result
     } else {
         preview::serve(state.clone(), request).await
     };

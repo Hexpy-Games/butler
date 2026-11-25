@@ -3,7 +3,7 @@
 //! The rules match the App's navigation guard: `http`/`https` only, no
 //! credentials in the URL, no `localhost` names, and a host is reachable only
 //! when every address it resolves to is public. The one loopback exception is
-//! Butler's own output origin, and only its `/__o/` capability paths.
+//! Butler's own output origin. Frame navigation is limited to its `/__o/` capability paths.
 //!
 //! [`EgressProxy`] enforces them on the network path itself: the browser
 //! resolves nothing (its resolver maps every name to "not found"), the proxy
@@ -46,6 +46,13 @@ impl ContentOrigin {
     }
     fn admits(self, host: &str, port: u16, path: &str) -> bool {
         host == "127.0.0.1" && port == self.0 && path.starts_with("/__o/")
+    }
+    fn same_origin(self, url: &url::Url) -> bool {
+        url.scheme() == "http"
+            && self.hosts(
+                url.host_str().unwrap_or(""),
+                url.port_or_known_default().unwrap_or(0),
+            )
     }
 }
 
@@ -202,11 +209,10 @@ struct Scope {
 }
 
 impl Scope {
-    /// The output origin as this proxy may reach it, for `host:port` + `path`.
-    fn content(self, host: &str, port: u16, path: Option<&str>) -> bool {
+    /// The output origin as this proxy may reach it, including preview tunnels.
+    fn content(self, host: &str, port: u16, url: Option<&url::Url>) -> bool {
         self.content.is_some_and(|c| {
-            (self.preview && c.hosts(host, port))
-                || path.is_some_and(|path| c.admits(host, port, path))
+            (self.preview && c.hosts(host, port)) || url.is_some_and(|url| c.same_origin(url))
         })
     }
 }
@@ -337,10 +343,10 @@ async fn tunnel(mut client: TcpStream, head: Head, scope: Scope) {
 async fn destination(
     host: &str,
     port: u16,
-    path: Option<&str>,
+    url: Option<&url::Url>,
     scope: Scope,
 ) -> io::Result<Vec<SocketAddr>> {
-    if scope.content(host, port, path) {
+    if scope.content(host, port, url) {
         Ok(vec![SocketAddr::from(([127, 0, 0, 1], port))])
     } else {
         public_addresses(host, port)
@@ -362,7 +368,7 @@ async fn forward(mut client: TcpStream, head: Head, scope: Scope) {
         return log.finish(Err(io::ErrorKind::PermissionDenied.into()));
     }
     let upstream = match async {
-        let addresses = destination(host, port, Some(url.path()), scope).await?;
+        let addresses = destination(host, port, Some(&url), scope).await?;
         log.connect(&addresses, CONNECT_TIMEOUT).await
     }
     .await
