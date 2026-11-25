@@ -137,26 +137,29 @@ async fn computer_environment_reaches_remote_commands_only_as_names_on_the_main(
             let (_, turn) = d.s.turn(&chat, prompt).await?;
             assert_eq!(turn_state(&turn), "delivered", "{turn}");
         }
+        let outputs: Vec<String> = script
+            .requests_for(prompt)
+            .iter()
+            .flat_map(|request| request["input"].as_array().into_iter().flatten())
+            .filter(|item| item["type"] == "function_call_output" && item["call_id"] == "probe")
+            .filter_map(|item| item["output"].as_str().map(str::to_owned))
+            .collect();
         assert!(
-            script
-                .requests_for(prompt)
-                .iter()
-                .flat_map(|request| request["input"].as_array().into_iter().flatten())
-                .any(|item| item["type"] == "function_call_output"
-                    && item["call_id"] == "probe"
-                    && item["output"]
-                        .as_str()
-                        .and_then(|output| serde_json::from_str::<Value>(output).ok())
-                        .and_then(|output| output["stdout"].as_str().map(str::to_owned))
-                        .is_some_and(|stdout| {
-                            let mut lines = stdout.lines();
-                            lines.next().is_some_and(|path| {
-                                path.split(':')
-                                    .collect::<Vec<_>>()
-                                    .windows(3)
-                                    .any(|entries| entries == ["/custom/bin", "/usr/bin", "/bin"])
-                            }) && lines.eq([r" a=b#c\n$HOME ", "", expected])
-                        }))
+            outputs.iter().any(|output| {
+                serde_json::from_str::<Value>(output)
+                    .ok()
+                    .and_then(|output| output["stdout"].as_str().map(str::to_owned))
+                    .is_some_and(|stdout| {
+                        let mut lines = stdout.lines();
+                        lines.next().is_some_and(|path| {
+                            path.split(':')
+                                .collect::<Vec<_>>()
+                                .windows(3)
+                                .any(|entries| entries == ["/custom/bin", "/usr/bin", "/bin"])
+                        }) && lines.eq([r" a=b#c\n$HOME ", "", expected])
+                    })
+            }),
+            "{prompt}: {outputs:?}"
         );
     }
     let listed = d.api.send(Method::GET, "/computers", None, &[]).await?;
