@@ -64,15 +64,16 @@ fn find(
         return Ok(Vec::new());
     }
     let gram = lexical::folded_grams(&folded).pop();
+    let postings = crate::cognition::graph::postings_relation(db)?;
     // Short cues use the exact folded-alias index; longer cues also use the
-    // existing postings index for substring candidates, never a node scan.
-    let mut statement = db.prepare(
+    // alias postings for substring candidates, never a node scan.
+    let mut statement = db.prepare(&format!(
         "WITH candidates AS (
             SELECT node_id,source_id FROM memory_aliases WHERE folded_key=?1
             UNION
-            SELECT node_id,source_id FROM memory_alias_postings WHERE gram=?2
+            SELECT node_id,source_id FROM {postings} WHERE gram=?2
          )
-         SELECT DISTINCT n.id,n.type,n.label_original,n.project_id,'{}'
+         SELECT DISTINCT n.id,n.type,n.label_original,n.project_id,'{{}}'
          FROM candidates p JOIN memory_nodes n ON n.id=p.node_id
          JOIN memory_aliases a ON a.node_id=p.node_id AND a.source_id=p.source_id
          JOIN memory_chunk_sources s ON s.source_id=p.source_id
@@ -80,8 +81,8 @@ fn find(
          WHERE instr(a.folded_key,?1)>0 AND c.status='active'
            AND n.canonical_node_id IS NULL
            AND (?3 IS NULL OR n.type=?3) AND (?4 IS NULL OR n.project_id=?4)
-         ORDER BY n.id LIMIT 20",
-    )?;
+         ORDER BY n.id LIMIT 20"
+    ))?;
     statement
         .query_map(params![folded, gram, entity_type, project], entity_row)?
         .collect()

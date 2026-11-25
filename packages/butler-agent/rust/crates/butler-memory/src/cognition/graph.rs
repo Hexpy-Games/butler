@@ -67,7 +67,9 @@ pub(in crate::cognition) use recall::{
     CurrentVectorMatches, GraphRecallReader, ProjectionCoverage, RawSourceSelection,
     RecallEpisodeRow, RecallMention, RelationshipState, TemporalSelection,
 };
+pub(in crate::cognition) use recall_index::postings_relation;
 pub(super) use registration::{GraphRegistration, RegistrationInput};
+pub(in crate::cognition) use schema::compact_alias_postings;
 pub(in crate::cognition) use stages::ExtractionStageResult;
 pub(super) use typed_registration::TypedRegistrationInput;
 pub(in crate::cognition) use vector_quantum::{ClaimLimit, ClaimedVectorUnit};

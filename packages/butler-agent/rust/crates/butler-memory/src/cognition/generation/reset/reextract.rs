@@ -51,9 +51,7 @@ pub(crate) async fn run(
         return Err(io::Error::other("Operation ID conflicts"));
     }
     if result.phase == "complete" {
-        if result.removal_pending && retirement_due(result.retire_after.as_deref(), &now)? {
-            retirement::retire(root, paths, coordinator, result, token);
-        }
+        hold_retirement(root, paths, coordinator, result, &now, token)?;
         return Ok(ReextractOutcome::Done);
     }
     if result.phase != "preparing" {
@@ -67,7 +65,15 @@ pub(crate) async fn run(
             Ok(Some(ReextractOutcome::Done)) => {
                 return match settle(binding.clone(), coordinator.clone(), &now, token.clone()).await
                 {
-                    Ok(()) => Ok(ReextractOutcome::Done),
+                    Ok(completed) => hold_retirement(
+                        binding.0.clone(),
+                        binding.1.clone(),
+                        coordinator.clone(),
+                        completed,
+                        &now,
+                        token.clone(),
+                    )
+                    .map(|()| ReextractOutcome::Done),
                     Err(error) => fail(binding, coordinator, &token, stop, error).await,
                 };
             }
@@ -93,13 +99,60 @@ async fn load_receipt(
     .map_err(io::Error::other)?
 }
 
-fn retirement_due(at: Option<&str>, now: &Clock) -> io::Result<bool> {
+/// Time left before the held generation may be reclaimed; `None` without a hold.
+fn retirement_delay(at: Option<&str>, now: &Clock) -> io::Result<Option<Duration>> {
     let Some(at) = at else {
-        return Ok(false);
+        return Ok(None);
     };
     let at = chrono::DateTime::parse_from_rfc3339(at).map_err(io::Error::other)?;
     let now = chrono::DateTime::parse_from_rfc3339(&now()).map_err(io::Error::other)?;
-    Ok(now >= at)
+    Ok(Some((at - now).to_std().unwrap_or(Duration::ZERO)))
+}
+
+/// Reclaims a due hold now, or schedules one in-process timer for its end.
+fn hold_retirement(
+    root: PathBuf,
+    paths: CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    result: ResetResult,
+    now: &Clock,
+    token: CancellationToken,
+) -> io::Result<()> {
+    if !result.removal_pending {
+        return Ok(());
+    }
+    match retirement_delay(result.retire_after.as_deref(), now)? {
+        None => {}
+        Some(delay) if delay.is_zero() => {
+            retirement::retire(root, paths, coordinator, result, token);
+        }
+        Some(delay) => schedule_retirement(root, paths, coordinator, result, delay, token),
+    }
+    Ok(())
+}
+
+/// Service stop cancels the timer; the next startup pass is the backstop. The
+/// receipt is reread on waking so a hold another path settled is left alone.
+fn schedule_retirement(
+    root: PathBuf,
+    paths: CognitionPathEnvironment,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    result: ResetResult,
+    delay: Duration,
+    token: CancellationToken,
+) {
+    tokio::spawn(async move {
+        tokio::select! {
+            () = token.cancelled() => return,
+            () = tokio::time::sleep(delay) => {}
+        }
+        if let Ok(current) = load_receipt(root.clone(), paths.clone(), result.operation_id).await
+            && current.phase == "complete"
+            && current.removal_pending
+        {
+            retirement::retire(root, paths, coordinator, current, token);
+        }
+    });
 }
 
 async fn stage(
@@ -261,7 +314,7 @@ async fn settle(
     coordinator: Arc<CognitionWriteCoordinator>,
     now: &Clock,
     token: CancellationToken,
-) -> io::Result<()> {
+) -> io::Result<ResetResult> {
     let read = binding.clone();
     tokio::task::spawn_blocking(move || {
         let old = read
@@ -291,7 +344,7 @@ async fn settle(
                 tracing::warn!(%error, "Memory re-extraction settlement is waiting for its lease");
                 sleep(&token, 5).await?;
             }
-            result => return result,
+            result => return result.map(|()| binding.2),
         }
     }
 }

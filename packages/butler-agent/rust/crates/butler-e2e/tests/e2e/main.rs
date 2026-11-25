@@ -11,6 +11,7 @@ mod agent_context;
 mod agent_exit;
 mod agent_import;
 mod alias_index_drop;
+mod alias_postings_compact;
 mod answer_blocks;
 mod anthropic_cache;
 mod anthropic_output_limit;

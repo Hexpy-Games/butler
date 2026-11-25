@@ -46,7 +46,7 @@ pub struct ResetResult {
     pub sequence: u64,
     /// Whether the old directory remains pending reader drain/removal.
     pub removal_pending: bool,
-    /// Earliest startup at which the retired generation may be reclaimed.
+    /// Earliest time the retired generation may be reclaimed: by a startup pass or the in-process hold timer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retire_after: Option<String>,
     /// Current-revision jobs whose windows are terminal, computed on read.
@@ -247,6 +247,9 @@ fn stage(
     object.insert("reset_operation_id".into(), json!(result.operation_id));
     write_json(&new.join("manifest.json"), &manifest)?;
     swap::vacuum_snapshot_cancellable(&old.graph_path, &new.join("graph.sqlite"), token)
+        .map_err(io::Error::other)?;
+    // The staged copy may predate compact alias postings, which the prune reads.
+    crate::cognition::graph::compact_alias_postings(&new.join("graph.sqlite"))
         .map_err(io::Error::other)?;
     survivors::prune(
         root,

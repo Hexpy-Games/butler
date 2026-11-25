@@ -262,8 +262,7 @@ mod tests {
              VALUES ('s','chunk','r1','conversation','p','/text',0,6,'hash','user','user_input','now','user_statement');
              INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind)
              VALUES ('a','Garden','Garden','garden','s','exact');
-             INSERT INTO memory_alias_postings(gram,node_id,source_id,surface_original,identity_scope,project_id)
-             VALUES ('ard','a','s','Garden','project','garden');"
+             INSERT INTO memory_alias_postings(gram,alias_id) SELECT 'ard',alias_id FROM memory_aliases WHERE node_id='a';"
         ).unwrap();
         drop(db);
         let before = fs::read(&path).unwrap();
