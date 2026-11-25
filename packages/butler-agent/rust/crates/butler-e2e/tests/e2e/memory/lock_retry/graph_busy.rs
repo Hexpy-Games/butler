@@ -14,6 +14,7 @@ async fn mem_projection_graph_busy_recovers() -> Result<(), HarnessError> {
     until(|| user_calls(&s) == 1).await;
     // A competing writer blocks the result write in WAL mode too.
     let holder = sqlite::open(&graph)?;
+    holder.busy_timeout(butler_memory::cognition::GRAPH_BUSY_TIMEOUT)?;
     holder.execute_batch("BEGIN IMMEDIATE")?;
     let window: String = holder.query_row(
         "SELECT window_ref FROM memory_projection_windows WHERE state='running' LIMIT 1",

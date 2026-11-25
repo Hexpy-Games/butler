@@ -1,3 +1,4 @@
+//! Opening graph.sqlite: read-write (IMMEDIATE, WAL), read-only and snapshot.
 use butler_platform::sqlite;
 use rusqlite::OpenFlags;
 use std::{path::Path, time::Duration};
