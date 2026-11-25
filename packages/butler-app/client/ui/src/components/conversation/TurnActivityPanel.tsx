@@ -12,6 +12,7 @@ import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
 import { chatActivityLabel } from "./chatActivityLabel";
+import { useWaitingForQuestionAnswer } from "./useComposerQuestion";
 
 /** Live progress of the running turn, attached to its message or its own row. */
 export interface LiveTurnActivity {
@@ -56,6 +57,7 @@ export function liveTurnWork(projection: TurnActivityProjection, turnId?: string
 export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId, startedAt, chat = false }: LiveTurnActivity & { markKey?: string; chat?: boolean }) {
   useAppLocale();
   const thinkingLine = useModelThinking(store => turnId ? store.lines[turnId] : undefined);
+  const waitingForAnswer = useWaitingForQuestionAnswer(turnId);
   const ownMarkKey = useId();
   const markKey = sharedMarkKey ?? ownMarkKey;
   const projection = projectTurnActivity(useThinkingRows(rows, turnId), turnId);
@@ -66,7 +68,7 @@ export function TurnActivityStatus({ markKey: sharedMarkKey, rows, state, turnId
       thinkingLine={thinkingLine}
       markKey={markKey}
       state={state}
-      waitingForAnswer={rows.some((row) => row.safe_tool_name === "ask_user")}
+      waitingForAnswer={waitingForAnswer}
       activityLabel={chat ? chatActivityLabel(phaseActivities) : undefined}
       modelRoundWait={modelRoundWait}
       operation={operation}

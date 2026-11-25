@@ -1,9 +1,10 @@
 import { api } from "@/app/api.ts";
 import type { SignInTransport } from "@/components/first-run/useSignIn";
-import type { Computer, ComputerConnection, ComputerModelSource, MainModelKind } from "./computerTypes";
+import type { Computer, ComputerConnection, ComputerModelSource } from "./computerTypes";
 import type { MemoryInventory, MemoryReceipt } from "./memoryTypes";
 import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
 
+export { listComputers } from "@/app/computerEvents.ts";
 export type { Computer } from "./computerTypes";
 
 export type HostKeyCheck = { trusted: true };
@@ -20,10 +21,6 @@ interface ComputerInput extends HostTarget {
   model_source: ComputerModelSource;
   environment?: Array<{ name: string; value?: string }>;
   environment_text?: string;
-}
-
-export async function listComputers(): Promise<{ computers: Computer[]; main_model: MainModelKind }> {
-  return api("/computers");
 }
 
 export function checkHostKey(target: HostTarget) {

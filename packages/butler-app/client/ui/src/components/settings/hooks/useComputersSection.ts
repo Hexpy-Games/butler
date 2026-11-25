@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useComputerChanges } from "@/app/computerEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import type { Computer } from "../computersApi";
 import { useComputers } from "./useComputers";
@@ -7,6 +8,7 @@ export type ComputersSectionState = ReturnType<typeof useComputersSection>;
 
 export function useComputersSection() {
   const computers = useComputers();
+  const requested = useComputerChanges((state) => state.signIn);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Computer | null>(null);
   const [aiFor, setAiFor] = useState<Computer | null>(null);
@@ -25,6 +27,7 @@ export function useComputersSection() {
   function aiClosed() {
     void computers.refresh();
     setAiFor(null);
+    useComputerChanges.setState({ signIn: null });
   }
 
   async function confirmRemove(forget: boolean, force: boolean) {
@@ -36,5 +39,5 @@ export function useComputersSection() {
     }
   }
 
-  return { computers, adding, setAdding, editing, setEditing, aiFor, removing, setRemoving, added, aiClosed, confirmRemove };
+  return { computers, adding, setAdding, editing, setEditing, aiFor: aiFor ?? requested, removing, setRemoving, added, aiClosed, confirmRemove };
 }

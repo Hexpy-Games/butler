@@ -8,6 +8,7 @@ use serde_json::{Map, Value, json};
 const FIELDS: [&str; 4] = ["name", "address", "folder", "model"];
 const KO: Copy = Copy {
     eyebrow: "컴퓨터",
+    labels: ["이름", "주소", "폴더", "모델"],
     name: "컴퓨터 이름",
     address: "SSH 주소 (~/.ssh/config 별칭 사용 가능)",
     folder: "작업 폴더",
@@ -21,6 +22,7 @@ const KO: Copy = Copy {
 };
 const EN: Copy = Copy {
     eyebrow: "Computer",
+    labels: ["Name", "Address", "Folder", "Model"],
     name: "Computer name",
     address: "SSH address (~/.ssh/config aliases work)",
     folder: "Work folder",
@@ -35,6 +37,7 @@ const EN: Copy = Copy {
 
 struct Copy {
     eyebrow: &'static str,
+    labels: [&'static str; 4],
     name: &'static str,
     address: &'static str,
     folder: &'static str,
@@ -101,7 +104,10 @@ pub(super) async fn build(
         .map_or_else(|| tool.as_str().to_owned(), |id| format!("{tool}:{id}"));
     let question = |field: &str, options: Vec<QuestionOption>, allow_custom| UserQuestion {
         id: format!("{prefix}.{field}"),
-        eyebrow: copy.eyebrow.into(),
+        eyebrow: FIELDS
+            .iter()
+            .position(|f| *f == field)
+            .map_or_else(|| copy.eyebrow.into(), |index| copy.labels[index].into()),
         title: copy.title(field, name),
         kind: if options.is_empty() {
             QuestionKind::Text
