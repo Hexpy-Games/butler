@@ -1,20 +1,13 @@
 import { useState, type ReactNode } from "react";
-import { appCopy, getAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Button, ButtonContainer, CardListItem, DropdownMenu, Field, FieldContent, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
   Globe2, IconButton, Input, MoreHorizontal, Plus, SegmentedControl, SettingsSection, Stack, Switch, Tag, Tooltip, Typo,
 } from "@/butler-ds";
+import { relativeTimeSince } from "@/lib/relativeTime";
 import { canSignOut, type SignInPolicy, type SignInSiteRow } from "./signInsApi";
 import { useSignIns } from "./useSignIns";
 import { SecurityBrowserImportSection } from "./SecurityBrowserImportSection";
-
-function since(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  const format = new Intl.RelativeTimeFormat(getAppLocale(), { numeric: "auto" });
-  if (seconds < 3600) return format.format(-Math.floor(seconds / 60), "minute");
-  if (seconds < 86400) return format.format(-Math.floor(seconds / 3600), "hour");
-  return format.format(-Math.floor(seconds / 86400), "day");
-}
 
 /** Sign-ins, the sections in `children`, then import from another browser last (it needs the same keychain). */
 export function SecuritySignInsSections({ children }: { children?: ReactNode }) {
@@ -55,7 +48,7 @@ function SignInRow({ row, busy, actions }: { row: SignInSiteRow; busy: boolean; 
   const policies: SignInPolicy[] = ["always", "ask", "never"];
   return (
     <CardListItem data-test-class="sign-in-row" icon={<Globe2 />} title={row.site}
-      meta={used ? copy.lastUsed(since(used)) : copy.notUsed}
+      meta={used ? copy.lastUsed(relativeTimeSince(Math.max(0, (Date.now() - Date.parse(used)) / 1000))) : copy.notUsed}
       description={(
         <Stack as="span" gap="sm">
           <Stack as="span" align="row" cross="center" gap="xs" wrap>

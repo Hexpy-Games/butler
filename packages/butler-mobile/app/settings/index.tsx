@@ -11,7 +11,7 @@ import { SETTINGS_GROUPS } from "@/settings/sections";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
 const SECTION_ICONS = {
-  general: icons.SlidersHorizontal, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
+  general: icons.SlidersHorizontal, notifications: icons.Bell, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
   updates: icons.RefreshCcw, usage: icons.Database, browser: icons.Globe2, security: icons.Lock,
   archives: icons.Archive, about: icons.Document,
 } satisfies Record<(typeof SETTINGS_GROUPS)[number]["ids"][number], IconGlyph>;
@@ -19,6 +19,7 @@ const SECTION_ICONS = {
 export default function Settings() {
   const copy = useMobileCopy();
   const S = getAppCopy(useAppLocale()).settings;
+  const sections = { ...S.sections, notifications: copy.settings.notifications };
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
@@ -38,7 +39,7 @@ export default function Settings() {
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
-        {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}
+        {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={sections[id]}
           navigates onPress={() => router.push(`/settings/${id}`)} />)}
       </ListGroup>)}
       <ListGroup>

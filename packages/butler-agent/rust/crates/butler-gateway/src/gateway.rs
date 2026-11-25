@@ -34,6 +34,7 @@ mod remote_computers;
 mod remote_socket;
 pub use remote_socket::{RemoteSocket, SocketActivity};
 mod security_settings;
+pub(crate) use devices::PUSH_KINDS;
 pub use devices::{DeviceKind, GatewayDevices, PairedDevice};
 mod server;
 mod session_references;

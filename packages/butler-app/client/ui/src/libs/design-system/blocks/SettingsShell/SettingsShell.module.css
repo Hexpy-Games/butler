@@ -60,6 +60,16 @@
   app-region: drag;
 }
 
+.windowControls {
+  position: absolute;
+  z-index: calc(var(--z-drag) + 1);
+  top: calc(var(--border-hairline) + var(--titlebar-height) / 2);
+  inset-inline-end: calc(var(--border-hairline) + 10px);
+  transform: translateY(-50%);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* AdaptiveShell frame="cards": the navigation sits on the shell; the detail
    pane is a card under the title row, inset from the window. The title-row
    drag lane above the card is unchanged. */

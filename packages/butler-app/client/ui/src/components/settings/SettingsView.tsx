@@ -17,6 +17,7 @@ import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
 import { useButlerAccountAvailable } from "./hooks/useButlerAccountAvailable";
 import { useCompactSettingsPaneEntry } from "./useCompactSettingsPaneEntry";
 import { ArrowLeft, IconButton, SettingsShell } from "@/butler-ds";
+import { WindowControls } from "@/components/layout/WindowControls";
 
 interface SettingsViewProps {
   initialSection?: SettingsSectionId | string;
@@ -116,6 +117,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
   return (
     <SettingsShell
       active={isActive}
+      windowControls={<WindowControls />}
       compactPane={compactPane}
       pageTitle={title}
       pageDescription={activeDescriptor?.description}

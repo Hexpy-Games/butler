@@ -12,6 +12,9 @@ pub enum ButlerAccountRequest {
         email: String,
         code: String,
     },
+    DevPlan {
+        plan: String,
+    },
     #[serde(skip)]
     Status,
     #[serde(skip)]
@@ -21,6 +24,18 @@ pub enum ButlerAccountRequest {
     #[serde(skip)]
     RevokeDevice {
         id: String,
+    },
+    /// Local only: true when signed in on this computer (no network call).
+    #[serde(skip)]
+    PushAvailable,
+    #[serde(skip)]
+    PushTokens {
+        tokens: Vec<String>,
+    },
+    #[serde(skip)]
+    Push {
+        messages: Vec<serde_json::Value>,
+        tokens: Vec<String>,
     },
 }
 

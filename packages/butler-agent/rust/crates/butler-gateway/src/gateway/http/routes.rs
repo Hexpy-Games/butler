@@ -40,6 +40,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/connection-codes", Handler::ConnectionCodes),
     ("/devices/pair", Handler::Connect),
     ("/devices/self", Handler::Connect),
+    ("/devices/self/push", Handler::Connect),
     ("/context-details", Handler::Subsessions),
     ("/credentials", Handler::Setup),
     ("/credentials/{id}", Handler::Setup),

@@ -59,6 +59,7 @@ impl super::Launch {
             .env("BUTLER_DATA", &self.data)
             .env("BUTLER_APP_SERVER_HOST", "127.0.0.1")
             .env("BUTLER_APP_SERVER_PORT", self.port.to_string())
+            .env("BUTLER_CLOUD_API_URL", "http://127.0.0.1:9")
             .env("BUTLER_METRICS_ENABLED", "0")
             // launchd and the systemd user manager belong to the user, not to
             // this sandbox: no scenario reaches them unless it turns them on

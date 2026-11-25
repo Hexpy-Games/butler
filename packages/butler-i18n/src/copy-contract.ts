@@ -519,6 +519,13 @@ export interface MobileCopy {
   settings: {
     title: string;
     computer: string;
+    notifications: string;
+    notificationsFailed: string;
+    notificationsSignIn: string;
+    notificationsAllow: string;
+    notificationsPermissionFooter: string;
+    notificationsKindsTitle: string;
+    notificationKinds: Record<"needs_input" | "done" | "failed" | "schedule_blocked", string>;
     disconnect: string;
     disconnectTitle: string;
     disconnectBody: string;
@@ -842,11 +849,14 @@ export interface AppCopy {
     plan: string;
     renews: (date: string) => string;
     plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
+    switchToPlus: string;
+    switchToFree: string;
     signOut: string;
     signOutConfirm: string;
     signedOut: string;
     devices: string;
     thisDevice: string;
+    justNow: string;
     platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
     revoke: string;
     revokeDevice: (name: string) => string;

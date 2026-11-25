@@ -68,6 +68,7 @@ impl AppApplication {
                 let run = records::run(db, &run_id)?;
                 let mut event = run_event(&run);
                 event["tainted"] = serde_json::Value::Bool(tainted);
+                event["attention"] = serde_json::Value::Bool(true);
                 publish(db, &subscribers, "automation.run", &event, &now)?;
                 Ok(run)
             })
