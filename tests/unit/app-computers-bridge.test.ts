@@ -46,7 +46,7 @@ test("renderer maps computer routes to the security bridge actions", async () =>
   expect(calls).toEqual(routes.map(([, , , action, input]) => [action, input]));
 });
 
-test("actual preload sends every computer action through main's security channel", async () => {
+test("actual preload sends every security action through main's security channel", async () => {
   let bridge: Record<string, (input?: unknown) => Promise<unknown>> = {};
   const calls: unknown[] = [];
   runInNewContext(readFileSync(resolve(import.meta.dir, "../../packages/butler-app/client/electron/preload.cjs"), "utf8"), {

@@ -44,7 +44,7 @@ const SECURITY_ROUTES = Object.freeze({
   postButlerAccount: { method: "POST", path: "/setup/butler-account", payload: true },
   signOutButlerAccount: { method: "DELETE", path: "/setup/butler-account" },
   listButlerAccountDevices: { method: "GET", path: "/setup/butler-account/devices" },
-  revokeButlerAccountDevice: { method: "DELETE", path: "/setup/butler-account/devices", opaqueId: true },
+  revokeButlerAccountDevice: { method: "DELETE", path: "/setup/butler-account/devices", credential: true },
   getButlerBackup: { method: "GET", path: "/setup/butler-backup" },
   postButlerBackup: { method: "POST", path: "/setup/butler-backup", payload: true },
   // Connections: the mail password passes through main to the Agent's keychain store only.
@@ -169,7 +169,6 @@ export async function requestSecurityRoute(
   if (route?.hook && (typeof hookId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(hookId))) return failure("invalid_request");
   const entryId = input?.body?.id;
   if (route?.entry && (typeof entryId !== "string" || !ENTRY_ID.test(entryId))) return failure("invalid_request");
-  if (route?.opaqueId && (typeof entryId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(entryId))) return failure("invalid_request");
   const flow = input?.body?.flow;
   if (route?.flow && (typeof flow !== "string" || !/^[A-Za-z0-9_-]{1,128}$/u.test(flow))) return failure("invalid_request");
   const credentialId = input?.body?.id;
@@ -183,7 +182,7 @@ export async function requestSecurityRoute(
   if (route?.account && (typeof account !== "string" || !/^acct-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(account))) return failure("invalid_request");
   if (route?.revision && (!Number.isSafeInteger(revision) || revision < 0)) return failure("invalid_request");
   if (route?.rule && (typeof rule !== "string" || !/^rule-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(rule))) return failure("invalid_request");
-  const path = route?.connector ? `${route.path}/${connector}/accounts${route.account ? `/${account}${route.suffix ?? ""}` : ""}${route.revision ? `?revision=${revision}` : ""}` : route?.plugin ? `${route.path}/${plugin}${route.suffix}` : route?.rule ? `${route.path}/${rule}` : route?.credential || route?.opaqueId ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.flow ? `/oauth/${flow}` : ""}${route.suffix ?? ""}` : route?.path;
+  const path = route?.connector ? `${route.path}/${connector}/accounts${route.account ? `/${account}${route.suffix ?? ""}` : ""}${route.revision ? `?revision=${revision}` : ""}` : route?.plugin ? `${route.path}/${plugin}${route.suffix}` : route?.rule ? `${route.path}/${rule}` : route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.flow ? `/oauth/${flow}` : ""}${route.suffix ?? ""}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook || route?.payload;
   if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {
