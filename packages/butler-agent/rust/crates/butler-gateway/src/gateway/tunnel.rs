@@ -4,6 +4,7 @@ use zeroize::Zeroizing;
 
 pub struct TunnelAccount {
     pub base_url: String,
+    pub qr_cloud: Option<String>,
     pub device_token: Zeroizing<String>,
 }
 

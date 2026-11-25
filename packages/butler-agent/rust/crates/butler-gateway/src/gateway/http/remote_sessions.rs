@@ -106,16 +106,17 @@ async fn remote_view(
     match handler {
         Handler::Output => content::remote::output_view(
             state,
-            parts.headers.clone(),
-            parts.uri.clone(),
+            Request::from_parts(parts.clone(), Body::empty()),
             computer.to_owned(),
         )
         .await
         .map(Some),
-        Handler::MessageFiles => {
-            content::remote::message_file_view(state, &parts.headers, &parts.uri, computer)
-                .map(Some)
-        }
+        Handler::MessageFiles => content::remote::message_file_view(
+            state,
+            &Request::from_parts(parts.clone(), Body::empty()),
+            computer,
+        )
+        .map(Some),
         _ => Ok(None),
     }
 }

@@ -648,6 +648,7 @@ export interface SecurityView {
     state: "off" | "connecting" | "connected";
     public_key: string | null;
     tunnel_id: string | null;
+    cloud: string | null;
   } | null;
   remote_access_enabled: boolean;
   /** Every listen address, loopback first. */

@@ -14,7 +14,7 @@ export function securityPairingSection({ disabled, addresses, pairing, tunnel }:
   const unavailable = disabled || pairing.busy || Boolean(pairing.code);
   const digits = pairing.busy ? undefined : pairing.code?.code;
   const link = digits ? pairingLink(addresses, digits, tunnel?.enabled && tunnel.public_key && tunnel.tunnel_id
-    ? { publicKey: tunnel.public_key, tunnelId: tunnel.tunnel_id }
+    ? { publicKey: tunnel.public_key, tunnelId: tunnel.tunnel_id, cloud: tunnel.cloud }
     : null) : null;
   return (
     <SettingsSection id="device-pairing" kind="form" title={copy.pairDevice}>

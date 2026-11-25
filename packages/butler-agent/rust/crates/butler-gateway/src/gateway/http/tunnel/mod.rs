@@ -35,6 +35,7 @@ pub(super) struct Tunnel {
 struct Current {
     tunnel_id: Option<String>,
     public_key: Option<String>,
+    cloud: Option<String>,
     state: TunnelState,
     session: Option<CancellationToken>,
 }
@@ -54,6 +55,7 @@ pub(super) struct TunnelView {
     state: TunnelState,
     public_key: Option<String>,
     tunnel_id: Option<String>,
+    cloud: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -97,12 +99,12 @@ impl Tunnel {
             self.current.lock().tunnel_id = id;
             return Ok(());
         }
-        if self.port.account().await?.is_none() {
+        let Some(account) = self.port.account().await? else {
             return self.stop(state, socket::Stop::SignedOut).await;
-        }
+        };
         let key = self.port.static_key().await?;
         if let Some(id) = id {
-            self.spawn(state, id, key, None);
+            self.spawn(state, id, key, account.qr_cloud, None);
         } else {
             self.stop(state, socket::Stop::NotFound).await?;
         }
@@ -115,9 +117,9 @@ impl Tunnel {
             return Ok(self.view());
         }
         if enabled {
-            if self.port.account().await?.is_none() {
+            let Some(account) = self.port.account().await? else {
                 return Err(socket::Stop::SignedOut.error());
-            }
+            };
             let id = self.port.allocate().await?;
             let key = self.port.static_key().await?;
             state
@@ -125,7 +127,7 @@ impl Tunnel {
                 .save_tunnel(json!({"enabled": true, "tunnel_id": id}))
                 .await?;
             let (first, settled) = oneshot::channel();
-            self.spawn(state, id, key, Some(first));
+            self.spawn(state, id, key, account.qr_cloud, Some(first));
             drop(change);
             if let Ok(result) = settled.await {
                 result?;
@@ -146,6 +148,7 @@ impl Tunnel {
         state: &Arc<HttpState>,
         id: String,
         key: Zeroizing<[u8; 32]>,
+        cloud: Option<String>,
         first: Option<oneshot::Sender<Result<(), HttpError>>>,
     ) {
         let session = state.shutdown.child_token();
@@ -156,6 +159,7 @@ impl Tunnel {
         }
         current.tunnel_id = Some(id.clone());
         current.public_key = Some(URL_SAFE_NO_PAD.encode(public.as_bytes()));
+        current.cloud = cloud;
         current.state = TunnelState::Connecting;
         tokio::spawn(socket::run(state.clone(), session, id, key, first));
     }
@@ -202,6 +206,7 @@ impl Tunnel {
             state: current.state,
             public_key: current.public_key.clone(),
             tunnel_id: current.tunnel_id.clone().filter(|_| enabled),
+            cloud: current.cloud.clone().filter(|_| enabled),
         }
     }
 

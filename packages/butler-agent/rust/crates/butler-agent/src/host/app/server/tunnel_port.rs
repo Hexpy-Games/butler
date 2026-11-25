@@ -8,7 +8,7 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use super::super::runtime_ports::setup::butler_account::{
-    ButlerAccount, check, signed_out, unavailable,
+    ButlerAccount, DEFAULT_API_URL, check, signed_out, unavailable,
 };
 use crate::host::service::configuration::local_credentials;
 
@@ -23,6 +23,7 @@ impl GatewayTunnelPort for AppTunnelPort {
         Box::pin(async move {
             Ok(account.read().await?.map(|stored| TunnelAccount {
                 base_url: account.base_url.clone(),
+                qr_cloud: (account.base_url != DEFAULT_API_URL).then(|| account.base_url.clone()),
                 device_token: Zeroizing::new(stored.device_token),
             }))
         })

@@ -13,7 +13,7 @@ use reqwest::{Method, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
+pub(crate) const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
 
 pub(crate) struct ButlerAccount {
     http: Client,

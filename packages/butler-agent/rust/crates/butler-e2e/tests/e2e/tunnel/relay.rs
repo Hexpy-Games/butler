@@ -13,7 +13,9 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
     butler_e2e::gate!();
     let fake = FakeButlerCloud::start().await?;
     fake.set_plan("plus");
-    let setup = Setup::new("TUNNEL-01")?.env("BUTLER_CLOUD_API_URL", &fake.url);
+    let setup = Setup::new("TUNNEL-01")?
+        .env("BUTLER_CLOUD_API_URL", &fake.url)
+        .stub_cassette(crate::browser_outputs::stub::cassette()?);
     std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
     std::fs::write(
         setup.sandbox.data.join("gateways/app.json"),
@@ -64,6 +66,7 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
     assert_eq!(paired.status, 201);
     let token = paired.data()["device_token"].as_str().unwrap();
     assert!(token.starts_with("bdt_"));
+    let view_path = crate::content_port::publish(&s).await?;
 
     let health = phone
         .request(
@@ -113,6 +116,25 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
     assert_eq!(
         serde_json::from_slice::<Value>(&security.body).unwrap()["error"]["code"],
         "loopback_required"
+    );
+    let output = phone
+        .request(
+            &mut socket,
+            4,
+            &desktop_public,
+            id,
+            "GET",
+            &view_path,
+            Some(token),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        output.status == 200
+            && serde_json::from_slice::<Value>(&output.body).unwrap()["data"]["url"]
+                .as_str()
+                .is_some_and(|url| url.starts_with("/__o/"))
     );
 
     let disabled = app

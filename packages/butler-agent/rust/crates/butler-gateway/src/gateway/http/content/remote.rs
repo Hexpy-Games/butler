@@ -10,7 +10,7 @@ use crate::gateway::{
 };
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
+    http::{HeaderValue, Request, StatusCode, header},
     response::Response,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -19,18 +19,18 @@ use serde_json::Value;
 
 pub(in crate::gateway::http) async fn output_view(
     state: &HttpState,
-    headers: HeaderMap,
-    uri: Uri,
+    request: Request<Body>,
     computer: String,
 ) -> Result<Response, HttpError> {
-    let id = uri
+    let id = request
+        .uri()
         .path()
         .strip_prefix("/outputs/")
         .and_then(|p| p.strip_suffix("/view"))
         .filter(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()))
         .ok_or_else(|| HttpError::public(404, "output_not_found", "Output not found."))?;
     let mut path = format!("/outputs/{id}/content");
-    if let Some(revision) = query(&uri)
+    if let Some(revision) = query(request.uri())
         .get("revision")
         .and_then(|v| v.parse::<u64>().ok())
     {
@@ -51,7 +51,7 @@ pub(in crate::gateway::http) async fn output_view(
         .ok_or_else(refused)?;
     signed_view(
         state,
-        &headers,
+        &request,
         &format!("remote.{computer}.{id}"),
         revision,
         entry,
@@ -61,11 +61,11 @@ pub(in crate::gateway::http) async fn output_view(
 
 pub(in crate::gateway::http) fn message_file_view(
     state: &HttpState,
-    headers: &HeaderMap,
-    uri: &Uri,
+    request: &Request<Body>,
     computer: &str,
 ) -> Result<Response, HttpError> {
-    let id = uri
+    let id = request
+        .uri()
         .path()
         .strip_prefix("/message-files/")
         .and_then(|p| p.strip_suffix("/view"))
@@ -75,7 +75,7 @@ pub(in crate::gateway::http) fn message_file_view(
                 && id[5..].bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
         })
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let origin = view_origin(state, headers)?;
+    let origin = view_origin(state, request)?.unwrap_or_default();
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
     let cap = capability::sign(

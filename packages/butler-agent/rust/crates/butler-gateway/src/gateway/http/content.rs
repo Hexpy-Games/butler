@@ -9,7 +9,7 @@ use axum::{
     Router,
     body::Body,
     extract::State,
-    http::{HeaderMap, Method, Request, StatusCode, header},
+    http::{Method, Request, StatusCode, header},
     response::Response,
     routing::any,
 };
@@ -311,7 +311,7 @@ pub(super) async fn view(
         .ok_or_else(refused)?;
     signed_view(
         &state,
-        request.headers(),
+        &request,
         &output.output_id,
         rev.revision,
         &rev.entry,
@@ -321,25 +321,31 @@ pub(super) async fn view(
 
 pub(super) fn signed_view(
     state: &HttpState,
-    headers: &HeaderMap,
+    request: &Request<Body>,
     id: &str,
     revision: u64,
     entry: &str,
     revisions: Vec<u64>,
 ) -> Result<Response, HttpError> {
-    let origin = view_origin(state, headers)?;
+    let origin = view_origin(state, request)?;
     let token = state.security.token().ok_or_else(refused)?;
     let cap = capability::sign(&token, port(state), id, revision, now());
-    let mut url = url::Url::parse(&format!("{origin}/__o/{cap}/")).map_err(|_| refused())?;
+    let base = origin.as_deref().unwrap_or("http://tunnel.invalid");
+    let mut url = url::Url::parse(&format!("{base}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
         .map_err(|()| refused())?
         .pop_if_empty()
         .extend(entry.split('/'));
+    let url = if origin.is_some() {
+        url.as_str()
+    } else {
+        &url[url::Position::BeforePath..]
+    };
     super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {
             protocol_version: crate::gateway::protocol::APP_PROTOCOL_VERSION,
-            data: serde_json::json!({"url":url.to_string(),"revision":revision,"revisions":serde_json::Value::from(revisions)}),
+            data: serde_json::json!({"url":url,"revision":revision,"revisions":serde_json::Value::from(revisions)}),
         },
     )
 }
@@ -363,7 +369,15 @@ pub(super) fn admit_ui_frames(state: &HttpState, response: &mut Response) {
     }
 }
 
-fn view_origin(state: &HttpState, headers: &HeaderMap) -> Result<String, HttpError> {
+fn view_origin(state: &HttpState, request: &Request<Body>) -> Result<Option<String>, HttpError> {
+    if request
+        .extensions()
+        .get::<super::listeners::TunnelPeer>()
+        .is_some()
+    {
+        return Ok(None);
+    }
+    let headers = request.headers();
     let authority = host(headers)?
         .parse::<axum::http::uri::Authority>()
         .map_err(|_| refused())?;
@@ -393,7 +407,7 @@ fn view_origin(state: &HttpState, headers: &HeaderMap) -> Result<String, HttpErr
         }
         format!("https://{content}")
     };
-    Ok(origin)
+    Ok(Some(origin))
 }
 
 /// Host checks always use the loopback content origin, never a caller URL.

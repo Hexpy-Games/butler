@@ -29,6 +29,7 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
             tunnel["public_key"]
                 .as_str()
                 .zip(tunnel["tunnel_id"].as_str())
+                .map(|(key, id)| (key, id, tunnel["cloud"].as_str()))
         })
         .flatten();
     for origin in &origins {
@@ -72,15 +73,18 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
 }
 
 /// The phone app's pairing payload v1; matches the desktop QR.
-fn pair_link(origins: &[&str], code: &str, relay: Option<(&str, &str)>) -> String {
+fn pair_link(origins: &[&str], code: &str, relay: Option<(&str, &str, Option<&str>)>) -> String {
     let mut query = url::form_urlencoded::Serializer::new(String::new());
     query.append_pair("v", "1");
     for origin in origins.iter().take(4) {
         query.append_pair("a", origin);
     }
-    if let Some((key, id)) = relay {
+    if let Some((key, id, cloud)) = relay {
         query.append_pair("k", key);
         query.append_pair("t", id);
+        if let Some(cloud) = cloud {
+            query.append_pair("u", cloud);
+        }
     }
     query.append_pair("c", code);
     format!("butler://pair?{}", query.finish())

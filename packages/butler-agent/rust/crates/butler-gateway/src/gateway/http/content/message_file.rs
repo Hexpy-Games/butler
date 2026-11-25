@@ -16,7 +16,7 @@ pub(in crate::gateway::http) fn view(
     if !is_html(file) {
         return Err(refused());
     }
-    let origin = view_origin(state, request.headers())?;
+    let origin = view_origin(state, request)?.unwrap_or_default();
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
     let cap = capability::sign(
