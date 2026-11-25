@@ -15,6 +15,7 @@ export interface Computer {
   ai_connected: boolean;
   model_source: ComputerModelSource;
   environment: string[];
+  environment_text: string;
   added_at: string;
 }
 

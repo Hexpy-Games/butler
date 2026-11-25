@@ -57,6 +57,8 @@ pub(super) struct Computer {
     sent_credential: Option<String>,
     #[serde(default)]
     environment: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    environment_text: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     sent_environment: bool,
     host_keys: Vec<String>,
@@ -82,6 +84,9 @@ impl Computer {
             object.remove("host_keys");
             object.remove("sent_credential");
             object.remove("sent_environment");
+            object
+                .entry("environment_text")
+                .or_insert_with(|| "".into());
         }
         Ok(value)
     }
@@ -145,6 +150,7 @@ pub(super) struct AddInput {
     model_source: ModelSource,
     #[serde(default)]
     environment: Option<Vec<environment::EnvInput>>,
+    environment_text: Option<String>,
 }
 
 impl AddInput {
@@ -204,7 +210,10 @@ pub(super) async fn add(
         key_file: input.key_file,
     };
     target.validate()?;
-    let values = environment::merge(&Default::default(), input.environment.unwrap_or_default())?;
+    let mut environment_text = input.environment_text.unwrap_or_default();
+    let values =
+        environment::prepare_add(&environment_text, input.environment.unwrap_or_default())?;
+    normalize_environment_text(&mut environment_text);
     let records = list(data).await?;
     store::unique_name(&records, &name)?;
     let host_keys = ssh::host_key(&target, &records, cancel.clone()).await?;
@@ -224,20 +233,27 @@ pub(super) async fn add(
         model_source: input.model_source,
         sent_credential: None,
         environment: values.keys().cloned().collect(),
+        environment_text,
         sent_environment: false,
         host_keys,
         added_at: chrono::Utc::now().to_rfc3339(),
     };
     let id = computer.id.clone();
-    let has_environment = !values.is_empty();
-    if has_environment {
+    let has_secrets = !values.is_empty();
+    if has_secrets {
         setup.save_computer_environment(id.clone(), values).await?;
     }
     let saved = store::add(data.join("config/computers.json"), computer).await;
-    if saved.is_err() && has_environment {
+    if saved.is_err() && has_secrets {
         setup.delete_computer_key(id).await?;
     }
     saved
+}
+
+fn normalize_environment_text(text: &mut String) {
+    if text.trim().is_empty() {
+        text.clear();
+    }
 }
 
 pub(super) async fn delete(
@@ -377,7 +393,9 @@ async fn connect(
         let _ = error;
     }
     relay::unlock(computer, &identity, cancel.clone()).await?;
-    if (!computer.environment.is_empty() || computer.sent_environment)
+    if (!computer.environment_text.is_empty()
+        || !computer.environment.is_empty()
+        || computer.sent_environment)
         && environment::push(setup, root, computer, cancel.clone())
             .await
             .is_err()

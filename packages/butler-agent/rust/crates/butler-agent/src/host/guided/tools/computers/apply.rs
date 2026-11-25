@@ -1,6 +1,6 @@
 use super::{
     AdminClient, BtccError, GuidedTools, JsonDocument, ToolExecutionError, ToolName, admin,
-    encoded, error, gateway_failure, not_found, rows,
+    encoded, error, gateway_failure, mutation_view, not_found, rows,
 };
 use butler_models::models::CredentialError;
 use http::Method;
@@ -63,10 +63,10 @@ async fn add(client: &AdminClient, mut values: Map<String, Value>) -> Result<Val
     }
     let sign_in = (model == "chatgpt").then(|| json!({"open_sign_in":true}));
     values.insert("model_source".into(), model);
-    let mut result = client
+    let result = client
         .data(Method::POST, "/computers", Some(&Value::Object(values)))
         .await?;
-    let computer = result["computer"].take();
+    let computer = mutation_view(&result["computer"]);
     let id = computer["id"].as_str().ok_or_else(not_found)?;
     let start = client
         .data(
@@ -114,7 +114,8 @@ async fn edit(
     if sign_in {
         body["open_sign_in"] = json!(true);
     }
-    client.data(method, &path, Some(&body)).await
+    let data = client.data(method, &path, Some(&body)).await?;
+    Ok(json!({"computer":mutation_view(&data["computer"])}))
 }
 
 async fn remove(client: &AdminClient, id: &str, forget: bool) -> Result<Value, Value> {

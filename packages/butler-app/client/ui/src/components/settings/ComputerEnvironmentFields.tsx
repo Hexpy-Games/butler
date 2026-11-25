@@ -1,5 +1,5 @@
 import { appCopy } from "@/app/copy.ts";
-import { Button, FieldError, IconButton, Input, Plus, SettingsSecretRow, SettingsSecretRows, Stack, Trash2, Typo } from "@/butler-ds";
+import { Button, FieldError, IconButton, Input, Plus, SettingsSecretRow, SettingsSecretRows, Stack, Trash2 } from "@/butler-ds";
 import { COMPUTER_FIELD_IDS } from "./computerAddErrors";
 
 export type ComputerEnvironmentRow = { id: string; name: string; value: string; saved: boolean };
@@ -12,13 +12,12 @@ export function ComputerEnvironmentFields({ rows, onChange, disabled, error }: {
 }) {
   const copy = appCopy.computers.form.environment;
   const fieldId = COMPUTER_FIELD_IDS.environment;
-  const description = `${fieldId}-hint${error ? ` ${fieldId}-error` : ""}`;
+  const description = error ? `${fieldId}-error` : undefined;
 
   return (
     <Stack gap="xs">
       <SettingsSecretRows
         title={copy.title}
-        emptyState={rows.length === 0 ? copy.empty : undefined}
         actions={
           <Button type="button" id={rows.length === 0 ? fieldId : undefined} size="xs" variant="outline"
             aria-describedby={description} disabled={disabled}
@@ -52,7 +51,6 @@ export function ComputerEnvironmentFields({ rows, onChange, disabled, error }: {
           />
         ))}
       </SettingsSecretRows>
-      <Typo.Caption id={`${fieldId}-hint`} tone="secondary">{copy.hint}</Typo.Caption>
       {error && <FieldError id={`${fieldId}-error`}>{error}</FieldError>}
     </Stack>
   );

@@ -1,9 +1,9 @@
 import { appCopy } from "@/app/copy.ts";
 import type { HostTarget } from "./computersApi";
 
-export type ComputerField = "name" | "address" | "port" | "keyFile" | "folder" | "environment";
+export type ComputerField = "name" | "address" | "port" | "keyFile" | "folder" | "environment" | "environmentText";
 export interface ComputerFieldError { field: ComputerField; message: string }
-export interface ComputerForm { name: string; address: string; port: string; keyFile: string; folder: string }
+export interface ComputerForm { name: string; address: string; port: string; keyFile: string; folder: string; environmentText: string }
 
 export const COMPUTER_FIELD_IDS: Record<ComputerField, string> = {
   name: "computer-name",
@@ -12,10 +12,21 @@ export const COMPUTER_FIELD_IDS: Record<ComputerField, string> = {
   keyFile: "computer-key-file",
   folder: "computer-folder",
   environment: "computer-environment",
+  environmentText: "computer-environment-text",
 };
 
-export function addFailure(code: string | undefined): ComputerFieldError | null {
+export function addFailure(code: string | undefined, line?: number): ComputerFieldError | null {
   const copy = appCopy.computers.errors;
+  if (line !== undefined) {
+    const messages = new Map([
+      ["computer_env_line_invalid", copy.environment.lineInvalid],
+      ["computer_env_name_reserved", copy.environment.lineReserved],
+      ["computer_env_name_duplicate", copy.environment.lineDuplicate],
+      ["computer_env_name_secret", copy.environment.lineSecret],
+    ]);
+    const message = code === undefined ? undefined : messages.get(code);
+    return message ? { field: "environmentText", message: message(line) } : null;
+  }
   const fields = new Map<string, ComputerFieldError>([
     ["ssh_auth_failed", { field: "address", message: copy.keyLogin }],
     ["ssh_unreachable", { field: "address", message: copy.unreachable }],

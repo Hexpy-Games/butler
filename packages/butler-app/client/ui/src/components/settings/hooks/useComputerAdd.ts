@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { apiErrorCode } from "@/app/api.ts";
+import { apiErrorCode, apiErrorLine } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { addFailure, hostTarget, validateComputerForm, type ComputerFieldError, type ComputerForm } from "../computerAddErrors";
@@ -31,7 +31,7 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     const target = hostTarget(form);
     const environment = rows.map(({ id, name, value, saved }) =>
       saved && id === name && value === "" ? { name } : { name, value });
-    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment };
+    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText };
     try {
       if (editing) {
         setStep("adding");
@@ -61,7 +61,7 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
         onAdded(editing, copy.form.environment.syncFailed);
         return;
       }
-      const fieldError = addFailure(code);
+      const fieldError = addFailure(code, apiErrorLine(error));
       setError(fieldError);
       if (!fieldError) notifyError(error, copy.errors.addFailed, { id: "computers" });
     } finally {

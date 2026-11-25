@@ -21,41 +21,43 @@ pub(in crate::gateway) async fn edit(
     };
     target.validate()?;
     let (lock, this) = locked(root, id).await?;
-    let values = if let Some(input) = input.environment {
-        let previous = setup.computer_environment(id.to_owned()).await?;
-        let next = environment::merge(&previous, input)?;
-        Some((previous, next))
+    let mut text = input.environment_text;
+    let values = if input.environment.is_some() || text.is_some() {
+        let next_text = text.as_deref().unwrap_or(&this.environment_text);
+        Some(environment::prepare(setup, &this, next_text, input.environment).await?)
     } else {
         None
     };
+    text.iter_mut().for_each(super::normalize_environment_text);
     let (keys, platform, target_changed) =
         target_details(root, &this, &name, &target, &folder, cancel.clone()).await?;
     let model_source = input.model_source;
     if let ModelSource::Key(id) = &model_source {
         setup.computer_model(Some(id.clone())).await?;
     }
-    let mut previous = None;
-    let mut names = None;
-    if let Some((stored, next)) = values {
-        names = Some(next.keys().cloned().collect::<Vec<_>>());
-        if !stored
-            .iter()
-            .map(|(key, value)| (key, value.expose()))
-            .eq(next.iter().map(|(key, value)| (key, value.expose())))
-        {
+    let (names, previous) = if let Some(values) = values {
+        let previous = if let Some((stored, next)) = values.changed_secrets {
             setup.save_computer_environment(id.to_owned(), next).await?;
-            previous = Some(stored);
-        }
-    }
+            Some(stored)
+        } else {
+            None
+        };
+        (values.names, previous)
+    } else {
+        (None, None)
+    };
     let environment_changed = previous.is_some()
         || names
             .as_ref()
-            .is_some_and(|names| *names != this.environment);
+            .is_some_and(|names| *names != this.environment)
+        || text
+            .as_ref()
+            .is_some_and(|text| *text != this.environment_text);
     let edited = store::edit(
         root.join("config/computers.json"),
         id.to_owned(),
         name.clone(),
-        changes(name, target, folder, keys, platform, names),
+        changes(name, target, folder, keys, platform, (names, text)),
     )
     .await;
     if edited.is_err()
@@ -177,7 +179,7 @@ fn changes(
     folder: String,
     keys: Vec<String>,
     platform: Option<ssh::Platform>,
-    names: Option<Vec<String>>,
+    (names, text): (Option<Vec<String>>, Option<String>),
 ) -> impl FnOnce(&mut Computer) {
     move |computer| {
         computer.name = name;
@@ -188,6 +190,9 @@ fn changes(
         computer.host_keys = keys;
         if let Some(names) = names {
             computer.environment = names;
+        }
+        if let Some(text) = text {
+            computer.environment_text = text;
         }
         if let Some(platform) = platform {
             computer.os = platform.os;

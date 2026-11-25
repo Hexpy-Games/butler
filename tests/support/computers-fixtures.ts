@@ -4,7 +4,7 @@ import type { Computer, ComputerConnection, ComputerModelSource, MainModelKind }
 const addedAt = "2026-11-23T00:00:00Z";
 const defaults = {
   port: null, key_file: null, folder: "~/projects", os: "linux", arch: "x86_64", glibc: null,
-  environment: [], stops_on_logout: false, ai_connected: true, added_at: addedAt, model_source: "follow" as ComputerModelSource,
+  environment: [], environment_text: "", stops_on_logout: false, ai_connected: true, added_at: addedAt, model_source: "follow" as ComputerModelSource,
 };
 
 export const computerFixtures = [
@@ -40,7 +40,7 @@ export function computersFocusResponse(path: string): unknown {
 
 export function createComputersFake() {
   const calls: ComputerCall[] = [];
-  const failures = new Map<ComputerStep, string>();
+  const failures = new Map<ComputerStep, { code: string; line?: number }>();
   const fake = {
     calls,
     computers: [] as Computer[],
@@ -48,11 +48,11 @@ export function createComputersFake() {
     startHold: undefined as Promise<void> | undefined,
     oauthStatus: "pending",
     oauthCancelStatus: "cancelled",
-    failNext(step: ComputerStep, code: string) { failures.set(step, code); },
+    failNext(step: ComputerStep, code: string, line?: number) { failures.set(step, { code, line }); },
     respond,
   };
   const ok = (data: unknown, status = 200) => ({ status, json: { protocol_version: "butler.app.v1", data } });
-  const error = (code: string, status = 422) => ({ status, json: { error: { code, message: "TEST" } } });
+  const error = (code: string, status = 422, line?: number) => ({ status, json: { error: { code, message: "TEST", line } } });
 
   async function respond(call: ComputerCall) {
     calls.push(call);
@@ -66,24 +66,25 @@ export function createComputersFake() {
     const failure = step && failures.get(step);
     if (step && failure) {
       failures.delete(step);
-      return error(failure, step === "delete" ? 409 : failure === "computer_env_name_reserved" ? 400 : 422);
+      const { code, line } = failure;
+      return error(code, step === "delete" ? 409 : code.startsWith("computer_env_") ? 400 : 422, line);
     }
     if (path === "/credentials" && method === "GET") return ok(credentials);
     if (path === "/computers" && method === "GET") return ok({ computers: fake.computers, main_model: fake.mainModel });
     if (step === "host-key") return ok({ trusted: true });
     if (step === "add") {
-      const { name, address, port, key_file, folder, model_source } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source">;
-      const computer = { ...defaults, id: addedId, environment: ["API_TOKEN"], name, address, folder, port: port ?? null, key_file: key_file ?? null, ai_connected: false, model_source };
+      const { name, address, port, key_file, folder, model_source, environment_text } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source" | "environment_text">;
+      const computer = { ...defaults, id: addedId, environment_text: environment_text ?? "", environment: ["API_TOKEN"], name, address, folder, port: port ?? null, key_file: key_file ?? null, ai_connected: false, model_source };
       fake.computers.push(computer);
       return ok({ computer }, 201);
     }
     const computer = fake.computers.find((entry) => entry.id === id);
     if (!computer) return error("computer_not_found");
     if (step === "edit") {
-      const environment = (body as { environment: { name: string }[] }).environment.map(({ name }) => name).sort();
-      const { name, address, port, key_file, folder, model_source } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source">;
+      const environment = (body as { environment?: { name: string }[] }).environment?.map(({ name }) => name).sort();
+      const { name, address, port, key_file, folder, model_source, environment_text } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source" | "environment_text">;
       const edited = {
-        ...computer, environment, name, address, folder, port: port ?? null, key_file: key_file ?? null, model_source,
+        ...computer, environment: environment ?? computer.environment, environment_text: environment_text ?? computer.environment_text, name, address, folder, port: port ?? null, key_file: key_file ?? null, model_source,
         ai_connected: model_source !== "none" && model_source !== "chatgpt",
       };
       fake.computers = fake.computers.map((entry) => entry.id === id ? edited : entry);

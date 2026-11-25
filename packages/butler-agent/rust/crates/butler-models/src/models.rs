@@ -98,7 +98,7 @@ pub use butler_platform::secrets::read_secret_input;
 pub use computer_environment::{
     EnvError, ReplaceError as ComputerEnvironmentReplaceError, check as check_computer_environment,
     current as current_computer_environment, load as load_computer_environment,
-    replace as replace_computer_environment,
+    parse as parse_computer_environment, replace as replace_computer_environment,
 };
 pub use configuration::chatgpt;
 pub use configuration::sealed;

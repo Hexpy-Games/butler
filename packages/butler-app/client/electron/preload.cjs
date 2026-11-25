@@ -85,6 +85,7 @@ function bridgeErrorEnvelope(error) {
     ...(code === "tag_exists" && error?.existing ? { existing: error.existing } : {}),
     ...(Number.isSafeInteger(error?.current?.revision) ? { current: { revision: error.current.revision } } : {}),
     code,
+    ...(Number.isSafeInteger(error?.line) ? { line: error.line } : {}),
     ...(code === "hook_blocked" && typeof error?.message === "string" ? { hook_reason: error.message.slice(0, 16384) } : {}),
     ...(status === undefined ? {} : { status }),
     ...(code === "session_cursor_resync_required"
@@ -293,6 +294,7 @@ async function requestJson(path, options = {}) {
     error.code = body?.error?.code ?? "request_failed";
     error.status = response.status;
     if (error.code === "tag_exists" && body?.error?.existing) error.existing = body.error.existing;
+    if (Number.isSafeInteger(body?.error?.line)) error.line = body.error.line;
     if (Number.isSafeInteger(body?.error?.current?.revision)) error.current = { revision: body.error.current.revision };
     throw error;
   }
