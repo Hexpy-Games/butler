@@ -3,7 +3,7 @@ import { snapshotApp } from "./app-snapshot.mjs";
 import { openExternalSignIn, openLink } from "./links.mjs";
 import { requestClose } from "./dialogs.mjs";
 import { answerUserDialog } from "./user-dialogs.mjs";
-import { ipcMain, session } from "electron";
+import { ipcMain, session, shell } from "electron";
 import { createUserBrowser } from "./tabs.mjs";
 import { installQuitClose } from "./quit.mjs";
 import { clearOffer, installSignInOffers, saveOffer } from "./signin-offer.mjs";
@@ -22,7 +22,7 @@ async function signOutSite(site) {
 export function installUserBrowser(app, getWindow, getLanguage) {
   const browser = createUserBrowser(app, getWindow, getLanguage);
   installSignInOffers(browser);
-  ipcMain.handle("butler-browser:call", (event, op, input = {}) => {
+  ipcMain.handle("butler-browser:call", async (event, op, input = {}) => {
     const win = getWindow();
     if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("browser_forbidden");
     switch (op) {
@@ -32,6 +32,20 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "app-snapshot": return snapshotApp(win, input.target);
       case "open-link": return openLink(browser, input.url);
       case "open-external-signin": return openExternalSignIn(input.url);
+      case "downloads": return browser.downloads.list();
+      case "download.open": {
+        const entry = browser.downloads.entry(input.id);
+        if (entry?.state !== "done") throw new Error("download_missing");
+        const failure = await shell.openPath(entry.path);
+        if (failure) throw new Error("download_missing");
+        return;
+      }
+      case "download.show": {
+        const entry = browser.downloads.entry(input.id);
+        if (!entry?.path) throw new Error("download_missing");
+        return shell.showItemInFolder(entry.path);
+      }
+      case "download.cancel": return browser.downloads.cancelEntry(input.id);
       case "frame.subscribe": return browser.live.subscribe(input.id, event.sender, input.widthPx);
       case "frame.unsubscribe": return browser.live.unsubscribe(input.id);
       case "frame.visibility": return browser.live.visibility(input.value === true);

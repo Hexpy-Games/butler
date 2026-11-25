@@ -7,7 +7,7 @@ pub trait GatewaySessionControls: Send + Sync {
         Box::pin(async { Ok(None) })
     }
 
-    /// Main-only canonical workspace and current output attribution.
+    /// Main-only canonical download workspace.
     fn browser_download_context(
         &self,
         _session_id: String,
@@ -15,12 +15,6 @@ pub trait GatewaySessionControls: Send + Sync {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
-    fn browser_download_published(
-        &self,
-        _output: butler_runtime::outputs::Output,
-    ) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::internal()) })
-    }
     fn get_session_controls_view(
         &self,
         session_id: String,
