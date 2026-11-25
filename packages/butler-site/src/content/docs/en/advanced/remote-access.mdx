@@ -6,14 +6,14 @@ order: 3
 status: published
 ---
 
-Remote access is off by default. Turn it on from the computer that runs Butler, then pair a browser on another computer with a one-time code. In the app, manage it in **Settings → Security**. Without the app, use the CLI. Security management needs a local client and the local admin credential. On a screen opened from another computer, **Settings → Security** shows the **Available only on the host computer.** message.
+Remote access is off by default. Turn it on from the computer that runs Butler, then pair a browser on another computer with a one-time code. In the app, manage it in **Settings → Phone & devices**. Without the app, use the CLI. Security management needs a local client and the local admin credential. On a screen opened from another computer, **Settings → Phone & devices** shows the **Available only on the host computer.** message.
 
 ## Pair a device in the app
 
 <Steps>
-  1. On the computer that runs Butler, open **Settings → Security**.
-  2. Turn on **Allow access from other computers**. **Addresses** shows the address to open on the other computer.
-  3. Click **Pair device**. **Code** shows an 8-digit code and the time left.
+  1. On the computer that runs Butler, open **Settings → Phone & devices**.
+  2. Turn on **Connect on the same network**. **Addresses** shows the address to open on the other computer.
+  3. Click **Create code**. **Code** shows an 8-digit code and the time left.
   4. In a browser on the other computer, open the address and enter the code in the connect form.
   5. When the device pairs, **Device paired** appears and the device shows up in the **Paired devices** list.
 </Steps>
@@ -22,7 +22,7 @@ Remote access is off by default. Turn it on from the computer that runs Butler, 
 - Three failed entries invalidate the code. A new code appears with **Repeated failures issued a new code**.
 - **Paired devices** shows each device's name, IP address and last-seen time. **Disconnect** disconnects that device, and **Disconnect all** disconnects every device after a confirmation dialog.
 
-For each item, see the [Settings reference](/en/help/settings/#security).
+For each item, see the [Settings reference](/en/help/settings/#phone--devices).
 
 ## Headless / WSL / server
 
@@ -53,7 +53,7 @@ Status shows whether remote access is on, the bind addresses, LAN URLs, bind err
 
 ## Port forwarding and allowed hosts
 
-If WSL port forwarding, a tunnel or a reverse proxy uses a different Host, register its name or IP. In the app, expand **Allowed hosts for tunnels and proxies** in **Settings → Security**, enter the name in **Host names** and click **Add**.
+If WSL port forwarding, a tunnel or a reverse proxy uses a different Host, register its name or IP. In the app, expand **Allowed hosts for tunnels and proxies** in **Settings → Phone & devices**, enter the name in **Host names** and click **Add**.
 
 To open outputs Butler made from another computer, enter the tunnel hostname for outputs in **Output host** in the same place. **Output host** can be set only in the app.
 

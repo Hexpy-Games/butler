@@ -1728,6 +1728,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       devicesAndSecurity: "Devices & security",
       extensions: "Extensions",
       app: "App",
+      preferences: "Preferences",
+      appAndSystem: "App and system",
     },
     sections: {
       memory: "Memory",

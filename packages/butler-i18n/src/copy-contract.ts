@@ -1583,6 +1583,8 @@ export interface AppCopy {
       devicesAndSecurity: string;
       extensions: string;
       app: string;
+      preferences: string;
+      appAndSystem: string;
     };
     sections: {
       general: string;

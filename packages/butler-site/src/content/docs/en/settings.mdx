@@ -20,13 +20,15 @@ Manage app behavior, models, extensions and system information in Settings. Sect
 - Most items are saved as soon as you change them, and a **Saved** notice appears. **Personalization** is saved only when you click **Apply**.
 - Click **Back** or press <Kbd keys={["Esc"]} label="Escape" /> to close Settings.
 
-Sections fall into three groups.
+Sections fall into five groups.
 
 | Group | Sections |
 | --- | --- |
-| **Preferences** | General, Appearance, Personalization, Memory, Models |
-| **App and system** | Updates, Usage, Logs, Browser, Security, System events, Archives, About |
-| **Advanced** | MCP, Hooks, Skills, Server |
+| **Personal** | General, Account, Personalization, Appearance |
+| **Butler** | Models, Memory, Archive, Usage |
+| **Devices & security** | Phone & devices, Environments, Browser, Security |
+| **Extensions** | MCP, Hooks, Skills, Connectors |
+| **App** | Server, Updates, System events, Logs, About |
 
 ## General
 
@@ -112,9 +114,11 @@ Manage the models Butler and workers use, backup models and the image model.
 | **Butler model** | **Model**, **Manage models**, **Reasoning**, **Context limit**, **Local reasoning budget** | [Cloud models](/en/help/models/cloud/#choose-the-default-model), [Custom models](/en/help/models/custom/#local-reasoning-budget) |
 | **Backup models** | Backup model summary, **Edit**, **Use backup models**, **Add backup model** | [Backup models](/en/help/models/backup/) |
 | **Image model** | **Model**, **Saved credential**, **API key**, **Default quality** | [Image model](#image-model) |
+| **Connected accounts** | ChatGPT sign-in | The ChatGPT account you signed in with. Click **Sign out** to delete the credential Butler saved. |
+| **API keys** | List of saved keys | The API keys your models use. Click **Replace** or **Delete**. See [Cloud models](/en/help/models/cloud/#manage-api-keys). |
 | **Advanced** | **Worker settings** | The table below |
 
-Manage saved API keys in **Settings → Security → API keys**, and the default permission for new chats and **Use plan mode by default** in **Settings → General**.
+Manage saved API keys in **Settings → Models → API keys**, and the default permission for new chats and **Use plan mode by default** in **Settings → General**.
 
 **Settings → Models → Model management → Edit** for a ChatGPT model shows the sign-in state and account. Click **Use another account** to switch accounts, or **Sign out**. **Manage usage** opens ChatGPT usage settings.
 
@@ -206,20 +210,25 @@ butler config set secrets.store system
 
 With this setting on, API keys are also stored in the system store.
 
-## Security
+## Phone & devices
 
-Manage access from other devices, approved actions, API keys and connected accounts. The remote access items work only on the host computer. If you open them from another computer, **Available only on the host computer.** appears. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/#pair-a-device-in-the-app).
+Manage access from your phone and other devices. The remote access items work only on the host computer. If you open them from another computer, **Available only on the host computer.** appears. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/#pair-a-device-in-the-app).
 
 | Area | Item | Description |
 | --- | --- | --- |
-| **Remote access** | **Allow access from other computers** | When on, devices on the same network connect by entering the connection code. It is off at first. |
+| **Remote access** | **Connect on the same network** | When on, devices on the same network connect by entering the connection code. It is off at first. |
 | | **Addresses** | Appears when access is allowed. These are the addresses to open on another computer. Click **Copy address** to copy one. If an address cannot be opened, **Port in use**, **Port blocked**, **Address unavailable** or **Couldn't open address** appears. |
-| **Pair device** | **Code** | Appears when access is allowed. Click **Pair device** to show an 8-digit code and the time left. A code works once, within 60 seconds, and a new one is issued when it expires. |
+| **Pair device** | **Code** | Appears when access is allowed. Click **Create code** to show an 8-digit code and the time left. A code works once, within 60 seconds, and a new one is issued when it expires. |
 | **Paired devices** | Device list | Appears when access is allowed. Shows each paired device's name, IP address and last-seen time. Click **Disconnect** to disconnect one device, or **Disconnect all** to disconnect every device. When no device is paired, **No paired devices** appears. |
-| **Approved actions** | Action list | Actions you allowed to run without asking. Filter with **Search approvals** and **Kind**, and click **Revoke** to take an approval back. |
-| **API keys** | List of saved keys | The API keys your models use. Click **Replace** or **Delete**. See [Cloud models](/en/help/models/cloud/#manage-api-keys). |
-| **Connected accounts** | ChatGPT sign-in | The ChatGPT account you signed in with. Click **Sign out** to delete the credential Butler saved. |
 | **Advanced** | **Allowed hosts for tunnels and proxies** | Click it to expand **Host names** and **Output host**. Enter the name a tunnel or proxy uses in **Host names**, and the tunnel hostname for opening outputs remotely in **Output host**, then click **Add**. |
+
+## Security
+
+Manage the vault, commands, folders to work in without asking and approved actions.
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Approved actions** | Action list | Actions you allowed to run without asking. Filter with **Search approvals** and **Kind**, and click **Revoke** to take an approval back. |
 
 ## System events
 
@@ -229,7 +238,7 @@ Review when and how regular consolidation, profile building and maintenance work
 - The status is one of **OK**, **Completed**, **Failed**, **Running**, **Not run yet** and **Needs status check**.
 - Click **Refresh** to reload, and **More** to load 20 more.
 
-## Archives
+## Archive
 
 Restore or delete archived projects and conversations.
 
@@ -276,12 +285,12 @@ Set the Butler server connection and the folder for new projects.
 ## Notes
 
 <Notice tone="warning">
-  - Projects and conversations deleted from **Archives** cannot be restored.
+  - Projects and conversations deleted from **Archive** cannot be restored.
   - **Erase all data** cannot be undone.
   - At **Full**, logs include chat content; it turns off after 60 minutes.
   - If you turn off developer mode while viewing **Logs**, Settings moves to **About**.
   - Changes in **Personalization** are not saved until you click **Apply**.
-  - Turn on **Allow access from other computers** only on a network you trust.
+  - Turn on **Connect on the same network** only on a network you trust.
 </Notice>
 
 ## Related pages

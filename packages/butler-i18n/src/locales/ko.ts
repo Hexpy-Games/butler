@@ -1733,6 +1733,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       devicesAndSecurity: "기기와 권한",
       extensions: "확장",
       app: "앱",
+      preferences: "환경 설정",
+      appAndSystem: "앱 및 시스템",
     },
     sections: {
       memory: "기억",
