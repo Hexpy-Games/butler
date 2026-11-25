@@ -1,5 +1,5 @@
 import { useConversationRequest } from "./ConversationRequestContext.tsx";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type MouseEvent } from "react";
 import { useAnswerDrafts, draftTurns, withDraftMessages } from "@/app/answerDrafts";
 import { useChatsIntroVisible } from "./ChatsIntro";
 import { TranscriptRows } from "./TranscriptRows";
@@ -9,7 +9,8 @@ import { useButlerStore } from "@/app/store.ts";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { useMessageList } from "./hooks/useMessageList";
 import { useMessageListLayout } from "./hooks/useMessageListLayout";
-import { type ConversationColumnRect, ConversationScroll, MessageListSurface } from "@/butler-ds";
+import { Box, type ConversationColumnRect, ConversationScroll, MessageListSurface } from "@/butler-ds";
+import { openConversationLink } from "@/components/browser/browserBridge";
 import { useEnteringMessageIds } from "./hooks/useEnteringMessageIds";
 import { useQueuedConversation } from "./hooks/useQueuedConversation";
 
@@ -47,15 +48,26 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
 
   const { parentRef, seedRef, virtualListHeight, scrollState } = layout;
 
+  function onTranscriptLinkClick(event: MouseEvent<HTMLElement>) {
+    const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
+    if (!link || link.getAttribute("data-butler-link-target") === "external") return;
+    const url = new URL(link.href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return;
+    event.preventDefault();
+    void openConversationLink(url.href, activeChatId);
+  }
+
   return (
     <>
       <ConversationScroll virtualized scrollRef={parentRef}>
-        <MessageListSurface height={virtualListHeight} onColumnRect={onColumnRect}>
-          {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
-          <TranscriptRows list={list} layout={layout} queue={queue} request={request} anchored={anchored}
-            enteringIds={enteringIds} liveActivity={liveActivity} activeChatId={activeChatId}
-            intro={intro} introIndex={introIndex} requestIndex={requestIndex} />
-        </MessageListSurface>
+        <Box data-butler-link-session={activeChatId} onClick={onTranscriptLinkClick}>
+          <MessageListSurface height={virtualListHeight} onColumnRect={onColumnRect}>
+            {summary?.branch_seed && <div ref={seedRef}><SessionBranchSeed /></div>}
+            <TranscriptRows list={list} layout={layout} queue={queue} request={request} anchored={anchored}
+              enteringIds={enteringIds} liveActivity={liveActivity} activeChatId={activeChatId}
+              intro={intro} introIndex={introIndex} requestIndex={requestIndex} />
+          </MessageListSurface>
+        </Box>
       </ConversationScroll>
       {scrollState.isAwayFromBottom ? (
         <ScrollToBottomButton

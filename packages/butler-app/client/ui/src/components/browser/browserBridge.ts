@@ -136,7 +136,7 @@ export async function openConversationBrowser(session: string, requestedTab?: st
 export async function focusBrowserTab(id: string, sessionId: string, fallback: string) {
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
-  else void openLink(fallback);
+  else void openConversationLink(fallback, sessionId);
 }
 
 /**
