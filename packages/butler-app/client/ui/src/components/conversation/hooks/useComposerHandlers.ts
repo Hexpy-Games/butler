@@ -1,3 +1,5 @@
+import { useButlerStore } from "@/app/store";
+import { sessionFromNavigation } from "@/app/utils";
 import { useComposerStore } from "../composerStore";
 import type {
   MutableRefObject,
@@ -106,7 +108,12 @@ export function useComposerHandlers(props: UseComposerHandlersProps) {
     setAccessMenuOpen,
     onSend,
   });
+  const computerRemoved = useButlerStore(({ navigation, activeChatId }) => {
+    const session = sessionFromNavigation(navigation, activeChatId);
+    return Boolean(session?.computer_id && !session.computer_name);
+  });
   const handleKeyDown = useComposerKeyboard({
+    sendDisabled: computerRemoved,
     isComposing,
     multilineSendBehavior,
     setModelMenuOpen,

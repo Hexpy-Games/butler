@@ -113,6 +113,8 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         .env("BUTLER_E2E_APP_NOW", T)
         .start()
         .await?;
+    s.provider()?
+        .set_chat_responder(memory_stubs::daily_briefing);
     s.provider()?.set_memory_responder(|_| {
         let text = json!({"status":"processed","entities":[],"items":[],"attributes":[]}).to_string();
         let item = json!({"type":"message","id":"msg_meaning","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]});

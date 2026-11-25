@@ -310,6 +310,7 @@ async fn open_application(
         .queue
         .observe_settlements(application.inbound_settlement_listener());
     application.observe_hook_blocks();
+    application.start_push();
     Ok(application)
 }
 

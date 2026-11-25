@@ -6,6 +6,7 @@ mod cache_validation;
 mod cache_work;
 mod candidates;
 mod canonical_inventory;
+mod connection;
 mod consolidate;
 pub(in crate::cognition) mod episode_fts;
 mod failure;
@@ -39,9 +40,8 @@ mod vector_registration;
 
 use butler_platform::sqlite;
 use std::path::Path;
-use std::time::Duration;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 
 use super::{CognitionError, CognitionResult};
 
@@ -51,6 +51,7 @@ pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use canonical_inventory::{
     InventoryPhase, InventoryState, InventoryWrite, Uncovered,
 };
+pub use connection::GRAPH_BUSY_TIMEOUT;
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
 pub use jobs::{GraphProgress, JobOutcome};
@@ -288,46 +289,6 @@ impl GraphRepository {
             source_refs,
         )
     }
-    pub(super) fn open(path: &Path) -> CognitionResult<Self> {
-        let connection = sqlite::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_URI,
-        )
-        .map_err(db_error)?;
-        connection
-            .pragma_update(None, "foreign_keys", "ON")
-            .map_err(db_error)?;
-        connection
-            .busy_timeout(Duration::from_millis(5_000))
-            .map_err(db_error)?;
-        Ok(Self {
-            connection: Some(connection),
-            _reader_pin: path.parent().map(super::generation::pins::pin),
-        })
-    }
-
-    pub(in crate::cognition) fn open_readonly(path: &Path) -> CognitionResult<Self> {
-        let connection =
-            sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(db_error)?;
-        connection
-            .busy_timeout(Duration::from_millis(5_000))
-            .map_err(db_error)?;
-        Ok(Self {
-            connection: Some(connection),
-            _reader_pin: path.parent().map(super::generation::pins::pin),
-        })
-    }
-
-    /// A fresh, consistent view for multi-query readers while writers advance.
-    pub(in crate::cognition) fn open_read_snapshot(path: &Path) -> CognitionResult<Self> {
-        let graph = Self::open_readonly(path)?;
-        graph
-            .connection()?
-            .execute_batch("BEGIN")
-            .map_err(db_error)?;
-        Ok(graph)
-    }
-
     pub(super) fn ensure_schema(&mut self, now: &str) -> CognitionResult<()> {
         schema::ensure(self.connection_mut()?, now)
     }

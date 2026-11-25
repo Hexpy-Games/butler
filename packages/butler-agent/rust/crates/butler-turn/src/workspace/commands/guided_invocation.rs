@@ -11,6 +11,7 @@ use super::{CommandCode, CommandError, GuidedAccess, GuidedCommandInput};
 /// artifacts), never the rest of the Butler data folder.
 fn project_write_shell(
     input: &GuidedCommandInput,
+    cwd: &Path,
     environment: &HashMap<String, String>,
     secrets: &[PathBuf],
 ) -> Result<command_sandbox::Invocation, command_sandbox::SandboxError> {
@@ -31,11 +32,30 @@ fn project_write_shell(
         denied.extend(input.installation_root.as_deref());
         denied.extend(input.protected_roots.iter().map(PathBuf::as_path));
     }
-    let extra: Vec<_> = input
+    let workspace = input.workspace_root.as_path();
+    let mut extra: Vec<_> = input
         .extra_write_roots
         .iter()
         .map(PathBuf::as_path)
         .collect();
+    let mut primary = workspace;
+    if !extra.is_empty() {
+        let include_workspace = !butler_platform::secure_fs::path_is_within(workspace, data);
+        extra.extend(include_workspace.then_some(workspace));
+        if let Some(index) = extra
+            .iter()
+            .position(|root| butler_platform::secure_fs::path_is_within(cwd, root))
+        {
+            primary = extra.remove(index);
+        } else if !include_workspace {
+            return Err(command_sandbox::SandboxError::ProjectWriteUnavailable);
+        }
+        extra.retain(|root| *root != primary);
+        // Keep the folder-sandbox requirement when the primary is the sole grant.
+        if extra.is_empty() {
+            extra.push(primary);
+        }
+    }
     let toolchain_roots =
         butler_platform::account_dirs::account_dirs().map(|dirs| command_sandbox::ToolchainRoots {
             home: dirs.home,
@@ -45,7 +65,7 @@ fn project_write_shell(
     command_sandbox::project_write_shell(
         &input.command,
         environment,
-        &input.workspace_root,
+        primary,
         &extra,
         &writable,
         &denied,
@@ -57,6 +77,7 @@ fn project_write_shell(
 /// the host sandbox; a host without one refuses them.
 pub(super) fn invocation(
     input: &GuidedCommandInput,
+    cwd: &Path,
     secrets: &[PathBuf],
 ) -> Result<command_sandbox::Invocation, CommandError> {
     let mut environment = input.host_environment.clone();
@@ -81,7 +102,7 @@ pub(super) fn invocation(
     // Data-folder reads follow ordinary file access; only credential roots
     // and project secrets belong in the private-read exclusions.
     let shell = if input.access == GuidedAccess::ProjectWrite {
-        project_write_shell(input, &environment, secrets)
+        project_write_shell(input, cwd, &environment, secrets)
     } else if input.access == GuidedAccess::ContainedObservation {
         let roots: Vec<_> = std::iter::once(input.workspace_root.as_path())
             .chain(input.allowed_folders.iter().map(PathBuf::as_path))

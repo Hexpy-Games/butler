@@ -13,6 +13,8 @@ export interface SettingsShellProps {
   active?: boolean;
   compactPane?: "master" | "detail";
   detailNavigation?: ReactNode;
+  /** Window controls shown in the titlebar. */
+  windowControls?: ReactNode;
   /** Title the detail header shows; sections never repeat it (see FormSection). */
   pageTitle?: string;
   /** Description the detail header shows; section descriptions never repeat it. */
@@ -46,6 +48,7 @@ export function SettingsShell({
   active = false,
   compactPane = "master",
   detailNavigation,
+  windowControls,
   pageTitle,
   pageDescription,
   pageKey,
@@ -103,6 +106,9 @@ export function SettingsShell({
           className={styles.titlebarDragOverlay}
           data-test-class="settings-titlebar-drag-overlay settings-detail-drag-lane"
         />
+      ) : null}
+      {windowControls ? (
+        <div className={styles.windowControls}>{windowControls}</div>
       ) : null}
     </section>
   );

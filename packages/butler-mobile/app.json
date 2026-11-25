@@ -50,7 +50,8 @@
         "resizeMode": "contain",
         "backgroundColor": "#F8F9FA",
         "dark": { "image": "./assets/splash-mark-dark.png", "backgroundColor": "#1F2023" }
-      }]
+      }],
+      "expo-notifications"
     ],
     "extra": { "eas": { "projectId": "2667f0b4-3413-4754-beb8-9e29201debe6" } }
   }

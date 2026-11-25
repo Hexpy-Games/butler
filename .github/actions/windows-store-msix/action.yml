@@ -1,0 +1,41 @@
+name: Pack and verify the Microsoft Store package
+description: Pack the unsigned Store MSIX from a Windows App portable zip and install-check those bytes (GitHub-hosted only)
+inputs:
+  version:
+    required: true
+    description: App version or v-prefixed tag
+  app-directory:
+    required: false
+    default: dist/release/app-windows
+    description: Folder with the portable App zip
+  output:
+    required: true
+    description: Folder for the MSIX and its .sha256
+  check-output:
+    required: true
+    description: Folder for check results
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+    - name: Pack and verify
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $version = '${{ inputs.version }}' -replace '^v', ''
+        $zip = @(Get-ChildItem '${{ inputs.app-directory }}/butler-app-*-windows-x64-portable.zip')
+        if ($zip.Count -ne 1) { throw 'Expected one portable App zip' }
+        $unpacked = Join-Path $env:RUNNER_TEMP ('butler-store-app-' + [guid]::NewGuid())
+        Expand-Archive -LiteralPath $zip[0].FullName -DestinationPath $unpacked
+        $app = (Get-ChildItem $unpacked -Recurse -Filter Butler.exe | Select-Object -First 1).DirectoryName
+        $name = "Butler-$version-x64.msix"
+        New-Item -ItemType Directory -Force '${{ inputs.output }}' | Out-Null
+        $msix = Join-Path '${{ inputs.output }}' $name
+        bun run packages/butler-app/scripts/windows/store/pack-msix.ts --app $app --out $msix --app-version $version
+        if ($LASTEXITCODE -ne 0) { throw "MSIX packing exited $LASTEXITCODE" }
+        $hash = (Get-FileHash $msix -Algorithm SHA256).Hash.ToLower()
+        Set-Content -LiteralPath "$msix.sha256" -Encoding ASCII -Value "$hash  $name"
+        # A child process, so the script's own exit code is the result.
+        powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./packages/butler-app/scripts/windows/store/verify-msix.ps1 -AppDir $app -Msix $msix -Out '${{ inputs.check-output }}'
+        if ($LASTEXITCODE) { throw "MSIX verification exited $LASTEXITCODE" }
+        if ((Get-FileHash $msix -Algorithm SHA256).Hash.ToLower() -ne $hash) { throw 'Verified package changed' }

@@ -11,7 +11,7 @@ pub(super) mod unresolved;
 #[cfg(feature = "test-support")]
 pub use mountns::verify_mount_plan_contract;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -35,6 +35,9 @@ struct Policy {
     allowed: Vec<PathBuf>,
     tcp: bool,
     project: Option<PathBuf>,
+    /// Canonical folder roots. May include the primary in a one-root folder sandbox.
+    #[serde(default)]
+    extra: Vec<PathBuf>,
     writable: Vec<PathBuf>,
     write_denied: Vec<PathBuf>,
     #[serde(default)]
@@ -224,6 +227,7 @@ pub(super) fn read_only_contained(
         allowed: allowed.iter().map(|path| path.to_path_buf()).collect(),
         tcp: tcp_available(),
         project: None,
+        extra: Vec::new(),
         writable: Vec::new(),
         write_denied: Vec::new(),
         mountns: false,
@@ -266,31 +270,50 @@ pub(super) fn project_write(
     denied: &[&Path],
     _toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
-    if !extra_roots.is_empty() || !super::project_write_available() {
+    if !super::project_write_available()
+        || (!extra_roots.is_empty() && !super::folder_write_available())
+    {
         return Err(SandboxError::ProjectWriteUnavailable);
     }
     let real = crate::secure_fs::canonicalize(root)?;
+    let extra = extra_roots
+        .iter()
+        .map(crate::secure_fs::canonicalize)
+        .collect::<Result<Vec<_>, _>>()?;
     // The helper inventories project secrets immediately before containment.
     // Do not repeat a potentially huge inventory in the exec argument block.
-    let mut walk = rediscovery::Rediscovery::new(root, &real)?;
+    let mut walks = vec![rediscovery::Rediscovery::new(root, &real)?];
+    for (root, path) in extra_roots.iter().zip(&extra) {
+        if path != &real {
+            walks.push(rediscovery::Rediscovery::new(root, path)?);
+        }
+    }
     let denied: Vec<_> = denied
         .iter()
         .copied()
-        .filter(|path| !walk.reaches(path))
+        .filter(|path| !walks.iter_mut().any(|walk| walk.reaches(path)))
         .collect();
+    let mut allowed = vec![real.clone()];
+    allowed.extend(extra.iter().filter(|path| *path != &real).cloned());
     let policy = Policy {
         // Outside reads match ReadOnly. Denials of existing project secrets
         // retain both their lexical path and resolved aliases in complement.
         denied: denied
             .iter()
-            .filter(|path| path.starts_with(root) || path.starts_with(&real))
+            .filter(|path| {
+                path.starts_with(root)
+                    || path.starts_with(&real)
+                    || extra_roots.iter().any(|root| path.starts_with(root))
+                    || extra.iter().any(|root| path.starts_with(root))
+            })
             .map(|path| path.to_path_buf())
             .collect(),
         write_denied: denied.iter().map(|path| path.to_path_buf()).collect(),
         credentials: super::credentials::roots(environment),
-        allowed: vec![real.clone()],
+        allowed,
         tcp: tcp_available(),
         project: Some(real),
+        extra,
         mountns: mountns::available(),
         mountns_plus: mountns::tier() == mountns::Tier::MPlus,
         secrets: Vec::new(),
@@ -345,7 +368,10 @@ pub(super) fn trampoline() -> Result<(), Error> {
     if let Some(root) = &policy.project {
         // The parent sends only denials the walk cannot rediscover; resolve
         // those fully, and discovered entries only where they are symlinks.
-        let secrets = complement::entry_aliases(discover_project_secrets(root)?)?;
+        let mut secrets = Vec::new();
+        for root in std::iter::once(root).chain(policy.extra.iter().filter(|path| *path != root)) {
+            secrets.extend(complement::entry_aliases(discover_project_secrets(root)?)?);
+        }
         timing.mark("project_secrets");
         policy.denied = complement::aliases(&policy.denied)?;
         policy.write_denied = complement::aliases(&policy.write_denied)?;
@@ -369,10 +395,11 @@ pub(super) fn trampoline() -> Result<(), Error> {
     // Dropped already by tool_environment; also remove it for direct invocations.
     let mut command = Command::new(program);
     if let Some(root) = &policy.project {
-        command.env(
-            "GIT_CEILING_DIRECTORIES",
-            root.parent().ok_or("project has no parent")?,
-        );
+        let parents = std::iter::once(root)
+            .chain(&policy.extra)
+            .map(|root| root.parent().ok_or("project has no parent"))
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        command.env("GIT_CEILING_DIRECTORIES", std::env::join_paths(parents)?);
     }
     let error = command.args(arguments).env_remove("WSL_INTEROP").exec();
     Err(error.into())
@@ -395,6 +422,9 @@ fn install_policy(policy: &Policy, timing: &mut timing::Timing) -> Result<mountn
     } else {
         None
     };
+    if !policy.extra.is_empty() && masked.is_none() {
+        return Err("allowed folders need the mount tier".into());
+    }
     let mounted = masked.is_some();
     // M+ only adds read-only mounts; a failure keeps M's metadata denial.
     let sealed = masked

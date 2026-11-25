@@ -17,7 +17,20 @@ pub enum StoreUpdateError {
     Failed(String),
 }
 
-/// The newest App version (major.minor.build, revision dropped), or None.
+/// The App version a Store package version was packed from (see
+/// `packages/butler-app/scripts/windows/store/store-version.ts`): `(M+1).m.(p*1000+s)`, where
+/// `s` is the preview number, or 999 for a stable release. The fourth part belongs to the Store.
+pub fn app_version(major: u16, minor: u16, build: u16) -> Option<String> {
+    let major = major.checked_sub(1)?;
+    let (patch, slot) = (build / 1000, build % 1000);
+    Some(if slot == 999 {
+        format!("{major}.{minor}.{patch}")
+    } else {
+        format!("{major}.{minor}.{patch}-preview.{slot}")
+    })
+}
+
+/// The newest App version the Store offers (see [app_version]), or None.
 pub fn check() -> Result<Option<String>, StoreUpdateError> {
     #[cfg(windows)]
     {

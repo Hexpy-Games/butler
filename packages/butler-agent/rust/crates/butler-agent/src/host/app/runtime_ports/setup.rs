@@ -3,6 +3,7 @@
 //! gateway's [`AppSetupPort`].
 
 mod butler_account;
+mod push_relay;
 pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
@@ -258,6 +259,18 @@ impl AppSetupPort for AppSetup {
     fn computer_import_turn(&self, computer_id: String, line: Vec<u8>) -> ApplicationFuture<bool> {
         let memory = self.0.computer_memory.clone();
         Box::pin(async move { memory.import_turn(computer_id, line).await })
+    }
+
+    fn computer_session_turns(
+        &self,
+        computer_id: String,
+        runtime_session_id: String,
+    ) -> ApplicationFuture<Vec<butler_gateway::gateway::RemovedComputerTurn>> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            computer_memory::session_turns(this.validated_root()?, computer_id, runtime_session_id)
+                .await
+        })
     }
 
     fn computer_memory_copy(&self) -> ApplicationFuture<serde_json::Value> {

@@ -412,7 +412,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerAccount"));
   }
   if (method === "POST" && url.pathname === "/setup/butler-account") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postButlerAccount", parseBody(options.body)));
+    const request = parseBody(options.body);
+    const action = request.action === "dev_plan" ? "setButlerAccountDevPlan" : "postButlerAccount";
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action, request));
   }
   if (method === "DELETE" && url.pathname === "/setup/butler-account") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutButlerAccount"));

@@ -1,5 +1,5 @@
 //! Conversation downloads on the headless browser (#745 semantics): the file
-//! lands in the workspace under downloads/ and becomes a session output.
+//! lands in the workspace under downloads/ without becoming an output.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 #[tokio::test]
-async fn headless_downloads_land_in_the_workspace_as_outputs() -> Result<(), HarnessError> {
+async fn headless_downloads_land_in_the_workspace_not_outputs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
     let s = setup("BROWSER-HEADLESS-DOWNLOADS")?.start().await?;
@@ -63,14 +63,8 @@ async fn headless_downloads_land_in_the_workspace_as_outputs() -> Result<(), Har
         .unwrap_or_else(|| panic!("{events:?}"));
     assert_eq!(done["path"], "downloads/report.csv", "{done}");
     assert_eq!(done["size_bytes"], REPORT.len(), "{done}");
-    let output = done["output_id"].as_str().unwrap();
+    assert!(done.get("output_id").is_none());
     let artifacts = s.gw.get("/artifacts?session_id=general").await?;
-    assert!(artifacts.text.contains(output), "{}", artifacts.text);
-    let view = s.gw.get(done["view"].as_str().unwrap()).await?;
-    let bytes = reqwest::get(view.data()["url"].as_str().unwrap())
-        .await?
-        .bytes()
-        .await?;
-    assert_eq!(bytes.as_ref(), REPORT.as_bytes());
+    assert!(!artifacts.text.contains("report.csv"), "{}", artifacts.text);
     s.finish().await
 }

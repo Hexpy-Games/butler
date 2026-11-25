@@ -136,7 +136,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],
   about: [
-    { id: "app-info", kind: "info", fields: ["app-name", "app-version", "app-repository", "app-protocol"] },
+    { id: "app-info", kind: "info", fields: ["app-name", "app-version", "app-repository", "app-privacy-policy", "app-protocol"] },
     { id: "diagnostics", kind: "form", fields: ["diagnostics-export"] },
     { id: "developer", kind: "form", fields: ["developer-mode"] },
   ],

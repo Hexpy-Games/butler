@@ -59,6 +59,7 @@ import LockIcon from "@hugeicons/core-free-icons/LockIcon";
 import Activity01Icon from "@hugeicons/core-free-icons/Activity01Icon";
 import MagicWand01Icon from "@hugeicons/core-free-icons/MagicWand01Icon";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
+import Notification01Icon from "@hugeicons/core-free-icons/Notification01Icon";
 import Unlink01Icon from "@hugeicons/core-free-icons/Unlink01Icon";
 
 import Album02Icon from "@hugeicons/core-free-icons/Album02Icon";
@@ -82,6 +83,7 @@ export const icons = {
   Activity: Activity01Icon,
   MagicWand: MagicWand01Icon,
   Computer: ComputerIcon,
+  Bell: Notification01Icon,
   Unlink: Unlink01Icon,
   ZoomIn: ZoomInAreaIcon,
   ZoomOut: ZoomOutAreaIcon,

@@ -16,7 +16,9 @@ pub(super) fn prune(
     let mut db = sqlite::open(graph).map_err(io::Error::other)?;
     let cancellation = token.clone();
     db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
-    let tx = db.transaction().map_err(io::Error::other)?;
+    let tx = db
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(io::Error::other)?;
     tx.execute_batch("CREATE TEMP TABLE reset_chunks(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_sources(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_jobs(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_scope_sessions(id TEXT PRIMARY KEY);").map_err(io::Error::other)?;
     if reextract {
         tx.execute_batch("DELETE FROM memory_state WHERE key LIKE 'canonical_catchup_%'")

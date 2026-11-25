@@ -17,7 +17,8 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
     interface_label_key: row.session?.safe_status_label_key,
     interface_label_parameters: row.session?.safe_status_label_parameters,
   }) || (spaceActivity(row.session) === "working" ? appCopy.space.working : appCopy.space.attention);
-  const computerName = row.session?.computer_name;
+  const computerName = row.session?.computer_name
+    ?? (row.session?.computer_id ? appCopy.computers.removedComputer : undefined);
   const location = computerName ? `${row.location} · ${computerName}` : row.location;
   const progress = row.session?.work_progress;
   const progressText = progress ? ` · ${Math.min(progress.total, progress.completed + 1)}/${progress.total}` : "";
