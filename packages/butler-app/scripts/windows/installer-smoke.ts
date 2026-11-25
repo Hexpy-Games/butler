@@ -402,7 +402,14 @@ async function windowCloseAndRelaunch(sessionId: string) {
 }
 
 async function settingsUpdate() {
-  await click(page!, "Settings"); await click(page!, "Updates");
+  await click(page!, "Settings");
+  await waitFor(async () => await page!.expression(`(() => {
+    const button = document.querySelector('[data-test-class="app-window-close"]');
+    if (!button?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    const { x, y, width, height } = button.getBoundingClientRect();
+    return button.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+  })()`), "Settings window close button is visible and clickable");
+  await click(page!, "Updates");
   const row = "document.querySelector('[data-test-id=\"update-component-app\"] button')";
   const component = "document.querySelector('[data-test-id=\"update-component-app\"]')";
   await waitFor(async () => await page!.expression(`Boolean(${row}) && ${row}.disabled && !${component}.innerText.includes(${JSON.stringify(to)})`), "preview hidden");
