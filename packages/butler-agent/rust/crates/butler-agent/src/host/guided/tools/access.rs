@@ -4,14 +4,14 @@ use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{
     AccessDecision, AccessMode, AccessRequest, ApprovalRisk, BtccError, CapabilityKind,
     CommandSandbox, DenyReason, GrantUse, ModelRoundToolCall, RuleVerdict, TargetScope,
-    ToolExecutionError, apply_allow, command_access_risk, command_scope_unresolved, decide,
-    needs_scope, rule_verdict,
+    ToolExecutionError, apply_allow, command_access_risk, command_scope_unresolved,
+    command_target_scope, decide, needs_scope, rule_verdict,
 };
 use butler_turn::workspace::{
     FolderRelation, FolderRoots, ScopeRoots, allowed_folder, classify_targets,
 };
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(super) async fn kind(
     owner: &GuidedTools,
@@ -106,7 +106,7 @@ pub(super) async fn decision_for_kind(
     }
     let (scope, allowed_folders) = if classify || command.is_some() && verdict == RuleVerdict::Allow
     {
-        target_scope(owner, call, args, rules.folders).await?
+        target_scope(owner, call, args, kind, rules.folders).await?
     } else {
         (TargetScope::NoTarget, Vec::new())
     };
@@ -188,6 +188,7 @@ async fn target_scope(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
     args: &Value,
+    kind: CapabilityKind,
     allowed_folders: Vec<PathBuf>,
 ) -> Result<(TargetScope, Vec<PathBuf>), BtccError> {
     if call.name == ToolName::SwitchFolder {
@@ -233,25 +234,12 @@ async fn target_scope(
                 return (TargetScope::Outside, allowed_folders);
             };
             let cwd = root.join(cwd);
-            let mut targets = vec![cwd.to_string_lossy().into_owned()];
-            targets.extend(
-                butler_platform::command_sandbox::path_tokens(command)
-                    .into_iter()
-                    .filter(|token| !token.starts_with('-'))
-                    .map(butler_platform::command_sandbox::normalize_path_token),
-            );
-            targets.extend(
-                butler_turn::btcc::command_segments(command)
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-                    .filter(|word| !word.text.starts_with('-'))
-                    .map(|word| butler_platform::command_sandbox::normalize_path_token(&word.text)),
-            );
-            classify_targets(
+            let targets = command_targets(command, &cwd);
+            command_target_scope(
                 &roots,
                 &cwd,
                 &targets.iter().map(String::as_str).collect::<Vec<_>>(),
+                kind,
             )
         } else {
             file_targets(&name, &args).map_or(TargetScope::Outside, |targets| {
@@ -263,6 +251,28 @@ async fn target_scope(
     .await
     .map_err(|e| BtccError::relayed("scope_classification_failed", e.to_string()))
 }
+
+fn command_targets(command: &str, cwd: &Path) -> Vec<String> {
+    use butler_platform::command_sandbox::{normalize_path_token, path_tokens};
+
+    let mut targets = vec![cwd.to_string_lossy().into_owned()];
+    targets.extend(
+        path_tokens(command)
+            .into_iter()
+            .filter(|token| !token.starts_with('-'))
+            .map(normalize_path_token),
+    );
+    targets.extend(
+        butler_turn::btcc::command_segments(command)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|word| !word.text.starts_with('-'))
+            .map(|word| normalize_path_token(&word.text)),
+    );
+    targets
+}
+
 fn file_targets<'a>(name: &str, args: &'a Value) -> Option<Vec<&'a str>> {
     let paths = |list: &str| -> Vec<&str> {
         args[list]

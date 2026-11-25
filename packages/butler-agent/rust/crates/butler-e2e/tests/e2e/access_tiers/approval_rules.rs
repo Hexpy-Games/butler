@@ -182,7 +182,7 @@ async fn allowed_folder_is_in_scope() -> Result<(), HarnessError> {
         &json!({"command":"touch new.txt","cwd":"~/work","summary":"Create file","state_effect":"mutation"}))]);
     use butler_platform::command_sandbox;
     if command_sandbox::project_write_mechanism() == "seatbelt"
-        || (command_sandbox::WINDOWS_SHELL && command_sandbox::project_write_available())
+        || (command_sandbox::WINDOWS_SHELL && command_sandbox::folder_write_available())
         || command_sandbox::metadata_tier_available()
         || command_sandbox::mount_tier_available()
     {

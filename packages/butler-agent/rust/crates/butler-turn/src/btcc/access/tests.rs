@@ -326,6 +326,8 @@ fn access_boundary_matches_the_owner_table() {
         }
     }
     classification::boundaries();
+    let (request, expected) = classification::folder_mutation_with_ineligible_cwd();
+    assert_eq!(decide(&Auto, request), expected);
     for (args, kind) in [
         (
             serde_json::json!({}),
