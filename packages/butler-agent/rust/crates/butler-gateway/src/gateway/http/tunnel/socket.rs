@@ -187,7 +187,7 @@ async fn connect(account: &TunnelAccount, tls: Option<&Connector>) -> Result<Opt
         let host = url.host_str().ok_or_else(invalid_url)?;
         let port = url.port_or_known_default().ok_or_else(invalid_url)?;
         let mut request = url.as_str().into_client_request()?;
-        let mut auth = HeaderValue::from_str(&format!("Bearer {}", &*account.device_token))
+        let mut auth = HeaderValue::from_str(&format!("Bearer {}", *account.device_token))
             .map_err(|_| invalid_url())?;
         auth.set_sensitive(true);
         request.headers_mut().insert(header::AUTHORIZATION, auth);
