@@ -1,4 +1,4 @@
-import { fileSource } from "@/outputs/fileAccess";
+import { fileSource } from "@/connection/access";
 import { useState } from "react";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { GatewayError } from "../../../butler-protocol/src/client/index.ts";

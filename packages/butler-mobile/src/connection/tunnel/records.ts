@@ -19,13 +19,16 @@ export class RecordDecoder {
   push(bytes: Uint8Array): Uint8Array[] {
     this.buffer = concat(this.buffer, bytes);
     const out: Uint8Array[] = [];
-    while (this.buffer.length >= 4) {
-      const length = new DataView(this.buffer.buffer, this.buffer.byteOffset, 4).getUint32(0, false);
+    let offset = 0;
+    while (this.buffer.length - offset >= 4) {
+      const length = new DataView(this.buffer.buffer, this.buffer.byteOffset + offset, 4).getUint32(0, false);
       if (length < 1 || length > MAX_RECORD) throw new Error("tunnel_protocol");
-      if (this.buffer.length < 4 + length) break;
-      out.push(this.buffer.slice(4, 4 + length));
-      this.buffer = this.buffer.slice(4 + length);
+      const end = offset + 4 + length;
+      if (this.buffer.length < end) break;
+      out.push(this.buffer.subarray(offset + 4, end));
+      offset = end;
     }
+    if (offset > 0) this.buffer = this.buffer.slice(offset);
     return out;
   }
 }

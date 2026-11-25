@@ -1,4 +1,4 @@
-import { fileSource } from "@/outputs/fileAccess";
+import { fileSource } from "@/connection/access";
 import { MessageResults } from "@/outputs/MessageResults";
 import { memo, useState } from "react";
 import { Platform, View } from "react-native";

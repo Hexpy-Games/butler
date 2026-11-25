@@ -1,4 +1,4 @@
-import type { Access } from "@/connection/access";
+import { fileSource, type Access } from "@/connection/access";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { readOutputPage } from "./operationOutput.ts";
 
@@ -49,7 +49,6 @@ export async function readImageAssets(
 
 export function assetImage(asset: ImageAsset, access: Access, width?: number): { uri: string; headers: Record<string, string> } {
   const w = width === undefined ? "" : `${asset.image_url.includes("?") ? "&" : "?"}w=${Math.max(1, Math.min(1280, Math.ceil(width)))}`;
-  const { fileSource } = require("@/outputs/fileAccess") as typeof import("@/outputs/fileAccess");
   return fileSource(access, asset.image_url + w);
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import type { ConversationMessage } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import type { Access } from "@/connection/access";
+import { fileSource, type Access } from "@/connection/access";
 import { useConversation } from "@/conversation/live";
 import { frameFit, imageAspect } from "@/conversation/imageOutputs";
 import { WorkResultRow } from "@/conversation/WorkResultRow";
@@ -11,7 +11,6 @@ import { TILE_RADIUS } from "@/ds/AttachmentTiles";
 import { AnimatedPressable, usePress } from "@/ds/internal/press";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { artifactTarget, messageResults, type ResultTarget } from "./results";
-import { fileSource } from "./fileAccess";
 import { openResult } from "./openResult";
 import { ResultRow } from "./ResultRow";
 

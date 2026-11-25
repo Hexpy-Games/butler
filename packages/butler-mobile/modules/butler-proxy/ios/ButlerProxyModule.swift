@@ -104,6 +104,10 @@ public final class ButlerProxyModule: Module {
           connection.cancel()
           return
         }
+        guard self.accepted.count < 32 else {
+          connection.cancel()
+          return
+        }
         let number = Int(port.rawValue)
         self.accepted[ObjectIdentifier(connection)] = (number, connection)
         connection.start(queue: self.queue)
@@ -152,6 +156,9 @@ public final class ButlerProxyModule: Module {
       }
     }
     sendEvent("onRequest", ["id": id, "port": port, "method": request[0], "target": request[1], "headers": headers])
+    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+      if isComplete || error != nil { self.cancelled(id) }
+    }
   }
 
   private func cancelled(_ id: Int) {

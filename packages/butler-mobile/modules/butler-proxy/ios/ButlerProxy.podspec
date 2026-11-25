@@ -1,13 +1,13 @@
 Pod::Spec.new do |s|
   s.name           = 'ButlerProxy'
   s.version        = '1.0.0'
-  s.summary        = 'A sample project summary'
+  s.summary        = 'Loopback proxy for Butler relay content'
   s.description    = 'A sample project description'
-  s.author         = ''
-  s.homepage       = 'https://docs.expo.dev/modules/'
+  s.author         = 'Hexpy Games'
+  s.homepage       = 'https://github.com/Hexpy-Games/butler'
+  s.license        = 'MIT'
   s.platforms      = {
-    :ios => '16.4',
-    :tvos => '16.4'
+    :ios => '16.4'
   }
   s.source         = { git: '' }
   s.static_framework = true

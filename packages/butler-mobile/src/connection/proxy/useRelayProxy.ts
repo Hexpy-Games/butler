@@ -14,9 +14,9 @@ function reply(id: number, status: number) {
   ButlerProxy.respondEnd(id);
 }
 
-async function serve(event: ProxyRequestEvent, ports: Ports, token: string, peer: RelayPeer, deviceToken: string, inflight: Map<number, AbortController>) {
+async function serve(event: ProxyRequestEvent, ports: Ports, contentToken: string, apiToken: string, peer: RelayPeer, deviceToken: string, inflight: Map<number, AbortController>) {
   const content = event.port === ports.content;
-  const auth = content ? contentAuth(token, event.target, event.headers.cookie) : apiAuth(token, event.target);
+  const auth = content ? contentAuth(contentToken, event.target, event.headers.cookie) : apiAuth(apiToken, event.target);
   if (!auth.ok) return reply(event.id, 404);
   if (event.method !== "GET" && event.method !== "HEAD") return reply(event.id, 405);
   const controller = new AbortController();
@@ -26,7 +26,7 @@ async function serve(event: ProxyRequestEvent, ports: Ports, token: string, peer
     const headers = forwardHeaders(event.headers);
     if (!content) headers.authorization = `Bearer ${deviceToken}`;
     const response = await tunnelRequest(peer, { target: content ? "content" : "api", method: event.method, path: auth.path, headers, body: null, signal: controller.signal });
-    ButlerProxy.respondHead(event.id, response.status, responseHeaders(response.headers, auth.setCookie ? token : null));
+    ButlerProxy.respondHead(event.id, response.status, responseHeaders(response.headers, auth.setCookie ? contentToken : null));
     started = true;
     if (event.method !== "HEAD") {
       for (let chunk = await response.reader.read(); !chunk.done; chunk = await response.reader.read()) {
@@ -53,12 +53,13 @@ export function useRelayProxy(peer: RelayPeer | null, deviceToken: string | null
   }, []);
   useEffect(() => {
     if (!peer || !deviceToken || !foreground) return;
-    const token = b64urlEncode(randomBytes(32));
+    const contentToken = b64urlEncode(randomBytes(32));
+    const apiToken = b64urlEncode(randomBytes(32));
     const inflight = new Map<number, AbortController>();
     const started: number[] = [];
     let ports: Ports | null = null, closed = false;
     const request = ButlerProxy.addListener("onRequest", event => {
-      if (ports && (event.port === ports.content || event.port === ports.api)) void serve(event, ports, token, peer, deviceToken, inflight);
+      if (ports && (event.port === ports.content || event.port === ports.api)) void serve(event, ports, contentToken, apiToken, peer, deviceToken, inflight);
     });
     const cancel = ButlerProxy.addListener("onCancel", ({ id }) => inflight.get(id)?.abort());
     void (async () => {
@@ -70,7 +71,7 @@ export function useRelayProxy(peer: RelayPeer | null, deviceToken: string | null
       }
       if (closed || started.length < 2) { started.forEach(port => ButlerProxy.stop(port)); return; }
       ports = { content: started[0], api: started[1] };
-      setBase({ content: `http://127.0.0.1:${started[0]}`, api: `http://127.0.0.1:${started[1]}/${token}`, bt: token });
+      setBase({ content: `http://127.0.0.1:${started[0]}`, api: `http://127.0.0.1:${started[1]}/${apiToken}`, bt: contentToken });
     })();
     return () => {
       closed = true;

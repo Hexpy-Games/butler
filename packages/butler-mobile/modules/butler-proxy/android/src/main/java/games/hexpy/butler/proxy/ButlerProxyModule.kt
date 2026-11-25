@@ -110,12 +110,22 @@ class ButlerProxyModule : Module() {
     try {
       while (true) {
         val socket = server.accept()
-        synchronized(server) {
+        val admitted = synchronized(server) {
           if (server.isClosed) {
             close(socket)
             return
           }
-          accepted[socket] = port
+          synchronized(accepted) {
+            if (accepted.size >= 32) false
+            else {
+              accepted[socket] = port
+              true
+            }
+          }
+        }
+        if (!admitted) {
+          close(socket)
+          continue
         }
         thread(isDaemon = true) { request(server, socket, port) }
       }
@@ -137,12 +147,19 @@ class ButlerProxyModule : Module() {
         val separator = if (name == "cookie") "; " else ", "
         headers[name] = headers[name]?.let { it + separator + value } ?: value
       }
-      synchronized(server) {
+      val id = synchronized(server) {
         if (server.isClosed) return close(socket)
         val id = nextId.getAndIncrement()
         conns[id] = Conn(port, socket, Executors.newSingleThreadExecutor())
         sendEvent("onRequest", mapOf("id" to id, "port" to port, "method" to request[0], "target" to request[1], "headers" to headers))
+        id
       }
+      try {
+        socket.soTimeout = 0
+        val input = socket.getInputStream()
+        while (input.read() != -1) {}
+      } catch (_: IOException) {}
+      conns[id]?.let { cancelled(id, it) }
     } catch (_: IOException) {
       close(socket)
     }
@@ -182,8 +199,8 @@ class ButlerProxyModule : Module() {
   }
 
   private fun close(socket: Socket) {
-    accepted.remove(socket)
     try { socket.close() } catch (_: IOException) {}
+    accepted.remove(socket)
   }
 
   private fun stop(port: Int) {

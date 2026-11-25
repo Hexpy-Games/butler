@@ -8,3 +8,10 @@ export function contentUri(access: Access, url: string): string {
   const [path, fragment] = hash < 0 ? [url, ""] : [url.slice(0, hash), url.slice(hash)];
   return `${access.content}${path}${path.includes("?") ? "&" : "?"}bt=${access.bt}${fragment}`;
 }
+
+/** Bytes the gateway serves on its API (message files, assets). Root-relative paths are joined as strings: new URL() would drop the proxy's /<token> prefix. */
+export function fileSource(access: Access, path: string): { uri: string; headers: Record<string, string> } {
+  if (access.kind === "relay") return path.startsWith("/") && !path.startsWith("//") ? { uri: access.api + path, headers: {} } : { uri: path, headers: {} };
+  const url = new URL(path, access.origin);
+  return { uri: url.href, headers: url.origin === new URL(access.origin).origin ? { Authorization: `Bearer ${access.token}` } : {} };
+}
