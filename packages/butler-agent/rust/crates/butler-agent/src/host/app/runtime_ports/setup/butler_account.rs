@@ -13,7 +13,10 @@ use reqwest::{Method, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::host::build_info::dev_build;
+
 const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
+const DEV_API_URL: &str = "https://butler-cloud-api-dev.hexpy-dev.workers.dev";
 
 pub(crate) struct ButlerAccount {
     http: Client,
@@ -38,7 +41,13 @@ impl ButlerAccount {
             .ok()
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| DEFAULT_API_URL.to_owned())
+            .unwrap_or_else(|| {
+                if dev_build() {
+                    DEV_API_URL.to_owned()
+                } else {
+                    DEFAULT_API_URL.to_owned()
+                }
+            })
             .trim_end_matches('/')
             .to_owned();
         let client = |timeout| {
@@ -68,7 +77,7 @@ impl ButlerAccount {
         request: ButlerAccountRequest,
     ) -> Result<Value, GatewayApplicationError> {
         match request {
-            ButlerAccountRequest::Status => self.status().await,
+            ButlerAccountRequest::Status => self.status(None).await,
             ButlerAccountRequest::Start { email } => {
                 let response = self
                     .send(
@@ -78,10 +87,18 @@ impl ButlerAccount {
                         Some(json!({"email": email})),
                     )
                     .await?;
-                check(response, 202).await?;
-                Ok(json!({"sent": true}))
+                let value: Value = check(response, 202)
+                    .await?
+                    .json()
+                    .await
+                    .unwrap_or(Value::Null);
+                match value["dev_code"].as_str() {
+                    Some(code) => Ok(json!({"sent": true, "dev_code": code})),
+                    None => Ok(json!({"sent": true})),
+                }
             }
             ButlerAccountRequest::Verify { email, code } => self.verify(email, code).await,
+            ButlerAccountRequest::DevPlan { plan } => self.status(Some(plan)).await,
             ButlerAccountRequest::SignOut => {
                 if let Some(stored) = self.read().await? {
                     let response = self
@@ -138,12 +155,16 @@ impl ButlerAccount {
         }
     }
 
-    async fn status(&self) -> Result<Value, GatewayApplicationError> {
+    async fn status(&self, plan: Option<String>) -> Result<Value, GatewayApplicationError> {
         let Some(stored) = self.read().await? else {
             return Ok(json!({"signed_in": false}));
         };
+        let (method, path, body) = match plan {
+            Some(plan) => (Method::POST, "/v1/dev/plan", Some(json!({"plan": plan}))),
+            None => (Method::GET, "/v1/me", None),
+        };
         let response = self
-            .send(Method::GET, "/v1/me", Some(&stored.device_token), None)
+            .send(method, path, Some(&stored.device_token), body)
             .await?;
         if response.status().as_u16() == 401 {
             self.delete().await?;
@@ -154,8 +175,12 @@ impl ButlerAccount {
             .json()
             .await
             .map_err(|_| unavailable())?;
-        Ok(json!({"signed_in": true, "account": value["account"],
-            "device": value["device"], "entitlements": value["entitlements"]}))
+        let mut status = json!({"signed_in": true, "account": value["account"],
+            "device": value["device"], "entitlements": value["entitlements"]});
+        if let Some(dev) = value.get("dev") {
+            status["dev"] = dev.clone();
+        }
+        Ok(status)
     }
 
     async fn verify(&self, email: String, code: String) -> Result<Value, GatewayApplicationError> {
@@ -202,7 +227,7 @@ impl ButlerAccount {
         })
         .await
         .map_err(GatewayApplicationError::internal_from)??;
-        self.status().await
+        self.status(None).await
     }
 
     pub(crate) async fn device_token(&self) -> Result<Option<String>, GatewayApplicationError> {

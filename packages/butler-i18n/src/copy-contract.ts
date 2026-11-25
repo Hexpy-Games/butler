@@ -849,11 +849,14 @@ export interface AppCopy {
     plan: string;
     renews: (date: string) => string;
     plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
+    switchToPlus: string;
+    switchToFree: string;
     signOut: string;
     signOutConfirm: string;
     signedOut: string;
     devices: string;
     thisDevice: string;
+    justNow: string;
     platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
     revoke: string;
     revokeDevice: (name: string) => string;

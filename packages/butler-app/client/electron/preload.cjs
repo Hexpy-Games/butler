@@ -785,19 +785,14 @@ const butlerApp = Object.freeze({
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
     method: "POST", body: "{}",
   }),
-  getButlerBackup: () => requestBridgeResult("/setup/butler-backup"),
-  postButlerBackup: (request) => requestBridgeResult("/setup/butler-backup", {
-    method: "POST", body: JSON.stringify(request ?? {}),
-  }),
-  getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
-  postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
-    method: "POST", body: JSON.stringify(request ?? {}),
-  }),
-  signOutButlerAccount: () => requestBridgeResult("/setup/butler-account", { method: "DELETE" }),
-  listButlerAccountDevices: () => requestBridgeResult("/setup/butler-account/devices"),
-  revokeButlerAccountDevice: ({ id } = {}) => requestBridgeResult(`/setup/butler-account/devices/${encodeURIComponent(id ?? "")}`, {
-    method: "DELETE",
-  }),
+  getButlerBackup: () => requestSecurity("getButlerBackup"),
+  postButlerBackup: (request) => requestSecurity("postButlerBackup", { payload: request ?? {} }),
+  getButlerAccount: () => requestSecurity("getButlerAccount"),
+  postButlerAccount: (request) => requestSecurity("postButlerAccount", { payload: request ?? {} }),
+  setButlerAccountDevPlan: ({ plan }) => requestSecurity("postButlerAccount", { payload: { action: "dev_plan", plan } }),
+  signOutButlerAccount: () => requestSecurity("signOutButlerAccount"),
+  listButlerAccountDevices: () => requestSecurity("listButlerAccountDevices"),
+  revokeButlerAccountDevice: ({ id } = {}) => requestSecurity("revokeButlerAccountDevice", { id }),
   getPublishing: () => requestBridgeResult("/publishing"),
   listPublishedPages: () => requestBridgeResult("/publishing/pages"),
   unpublishPage: ({ id } = {}) => requestBridgeResult(`/publishing/pages/${encodeURIComponent(id ?? "")}`, { method: "DELETE" }),

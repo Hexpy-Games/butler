@@ -5,6 +5,7 @@ export type ButlerAccountStatus = { signed_in: false } | {
   account: { id: string; email: string; created_at: string };
   device: { id: string; name: string; platform: string };
   entitlements: { plan: string; status: string; renews_at: string | null; features: Record<string, unknown> };
+  dev?: { plan_switch: boolean };
 };
 
 export interface ButlerAccountDevice {
@@ -21,11 +22,15 @@ export function getButlerAccount() {
 }
 
 export function startButlerAccount(email: string) {
-  return api<{ sent: true }>("/setup/butler-account", { method: "POST", body: JSON.stringify({ action: "start", email }) });
+  return api<{ sent: true; dev_code?: string }>("/setup/butler-account", { method: "POST", body: JSON.stringify({ action: "start", email }) });
 }
 
 export function verifyButlerAccount(email: string, code: string) {
   return api<ButlerAccountStatus>("/setup/butler-account", { method: "POST", body: JSON.stringify({ action: "verify", email, code }) });
+}
+
+export function setButlerAccountDevPlan(plan: "free" | "plus") {
+  return api<ButlerAccountStatus>("/setup/butler-account", { method: "POST", body: JSON.stringify({ action: "dev_plan", plan }) });
 }
 
 export function signOutButlerAccount() {
