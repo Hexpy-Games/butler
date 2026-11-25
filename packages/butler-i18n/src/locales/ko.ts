@@ -617,7 +617,7 @@ export const koKrCopy: AppCopy = {
       notificationsFailed: "알림 설정을 바꾸지 못했습니다.",
       notificationsSignIn: "컴퓨터에서 버틀러 계정에 로그인하면 알림을 받을 수 있습니다.",
       notificationsAllow: "알림 허용",
-      notificationsPermissionFooter: "iOS 설정에서 알림을 허용해야 받을 수 있습니다.",
+      notificationsPermissionFooter: "설정에서 알림을 허용해야 받을 수 있습니다.",
       notificationsKindsTitle: "받을 알림",
       notificationKinds: { needs_input: "확인 필요", done: "작업 완료", failed: "작업 실패", schedule_blocked: "예약 작업 멈춤" },
       disconnect: "연결 해제",

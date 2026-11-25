@@ -619,7 +619,7 @@ export const enUsCopy: AppCopy = {
       notificationsFailed: "Couldn't change notifications.",
       notificationsSignIn: "Sign in to your Butler account on your computer to get notifications.",
       notificationsAllow: "Allow Notifications",
-      notificationsPermissionFooter: "Allow notifications for Butler in iOS Settings.",
+      notificationsPermissionFooter: "Allow notifications for Butler in Settings.",
       notificationsKindsTitle: "Notify me about",
       notificationKinds: { needs_input: "Needs your input", done: "Task done", failed: "Task failed", schedule_blocked: "Schedule stopped" },
       disconnect: "Disconnect",

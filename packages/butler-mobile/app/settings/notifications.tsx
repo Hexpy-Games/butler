@@ -71,7 +71,7 @@ export default function NotificationsSettings() {
     {needsSettings ? <ListGroup footer={copy.settings.notificationsPermissionFooter}>
       <ListRow title={copy.settings.notificationsAllow} meta={app.automations.off} navigates onPress={() => void Linking.openSettings()} />
     </ListGroup> : <ListGroup footer={available === false ? copy.settings.notificationsSignIn : undefined}>
-      <SwitchRow title={copy.settings.notificationsAllow} value={push} disabled={available === false || busy || !client || !pairing} onChange={on => void toggle(on)} />
+      <SwitchRow title={copy.settings.notificationsAllow} value={push && !denied} disabled={available === false || busy || !client || !pairing} onChange={on => void toggle(on)} />
     </ListGroup>}
     {push && available !== false && !denied ? <ListGroup label={copy.settings.notificationsKindsTitle}>
       {PUSH_KINDS.map(kind => <SwitchRow key={kind} title={copy.settings.notificationKinds[kind]}
