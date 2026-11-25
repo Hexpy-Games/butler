@@ -63,8 +63,8 @@
 .windowControls {
   position: absolute;
   z-index: calc(var(--z-drag) + 1);
-  top: calc(var(--titlebar-height) / 2);
-  inset-inline-end: 10px;
+  top: calc(var(--border-hairline) + var(--titlebar-height) / 2);
+  inset-inline-end: calc(var(--border-hairline) + 10px);
   transform: translateY(-50%);
   -webkit-app-region: no-drag;
   app-region: no-drag;
