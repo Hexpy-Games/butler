@@ -4,6 +4,7 @@ import { linkMenuItems } from "./links.mjs";
 import { configureWebSession } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
+import { passkeyPageArgs } from "../butler-platform/passkeys.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
 import { SignInSuggest } from "./signin-suggest.mjs";
@@ -177,7 +178,7 @@ class UserBrowser {
   }
   pagePreferences(tab) {
     return { preload: fileURLToPath(new URL("./page-controls.cjs", import.meta.url)),
-      nodeIntegrationInSubFrames: true, additionalArguments: [...(tab.agent ? ["--butler-agent-page"] : []), ...(tab.profile === "signed_in" ? ["--butler-signin-capture"] : [])],
+      nodeIntegrationInSubFrames: true, additionalArguments: [...(tab.agent ? ["--butler-agent-page"] : []), ...(tab.profile === "signed_in" ? ["--butler-signin-capture"] : []), ...passkeyPageArgs()],
       disableDialogs: !tab.agent, partition: tab.partition, webgl: true,
       contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false };
   }
