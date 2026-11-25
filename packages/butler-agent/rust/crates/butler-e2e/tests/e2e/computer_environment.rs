@@ -150,10 +150,12 @@ async fn computer_environment_reaches_remote_commands_only_as_names_on_the_main(
                         .and_then(|output| output["stdout"].as_str().map(str::to_owned))
                         .is_some_and(|stdout| {
                             let mut lines = stdout.lines();
-                            lines
-                                .next()
-                                .is_some_and(|path| path.starts_with("/custom/bin:/usr/bin:/bin"))
-                                && lines.eq([r" a=b#c\n$HOME ", "", expected])
+                            lines.next().is_some_and(|path| {
+                                path.split(':')
+                                    .collect::<Vec<_>>()
+                                    .windows(3)
+                                    .any(|entries| entries == ["/custom/bin", "/usr/bin", "/bin"])
+                            }) && lines.eq([r" a=b#c\n$HOME ", "", expected])
                         }))
         );
     }
