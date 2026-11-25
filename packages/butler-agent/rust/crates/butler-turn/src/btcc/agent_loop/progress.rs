@@ -94,10 +94,13 @@ pub(super) async fn operation(
     let encoded = transcript
         .as_deref()
         .or_else(|| output.map(butler_core::json::JsonDocument::as_str));
+    let pending = output
+        .is_some_and(|output| output.field("authority_pending").ok().flatten() == Some("true"));
+    if pending {
+        payload.insert("authorityPending".into(), Value::Bool(true));
+    }
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);
-        let pending = output
-            .is_some_and(|output| output.field("authority_pending").ok().flatten() == Some("true"));
         let phase = if pending {
             "authority_pending"
         } else {

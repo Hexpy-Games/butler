@@ -264,7 +264,7 @@ fn js_boundary(value: &str, offset: usize) -> bool {
         != value[offset..].chars().next().is_some_and(word)
 }
 // Passthrough: tool arguments/results/schemas, shaped by each tool.
-fn safe_optional(value: Option<&Value>) -> Option<String> {
+pub(in crate::conversation) fn safe_optional(value: Option<&Value>) -> Option<String> {
     let text = butler_core::public_text::trim_js_whitespace(value?.as_str()?);
     if text.is_empty() {
         None
@@ -272,6 +272,10 @@ fn safe_optional(value: Option<&Value>) -> Option<String> {
         let value = safe_public(text, "");
         (!value.is_empty()).then(|| utf16_prefix(&value, 240))
     }
+}
+pub(in crate::conversation) fn safe_input_label(value: Option<&str>) -> Option<String> {
+    let value = butler_core::public_text::sanitize_public_delta(value?);
+    (!value.is_empty() && !PRIVATE_SENTINEL.is_match(&value)).then(|| utf16_prefix(&value, 240))
 }
 fn safe_public(value: &str, fallback: &str) -> String {
     let stripped = strip_think(value);

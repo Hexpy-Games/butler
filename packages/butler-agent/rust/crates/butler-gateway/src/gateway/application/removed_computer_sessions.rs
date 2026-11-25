@@ -1,6 +1,13 @@
-use rusqlite::params;
+use butler_turn::conversation::TransferToolStep;
+use rusqlite::{Connection, params};
+use serde_json::json;
 
-use super::{AppApplication, AppStorageError, app_error};
+use super::{
+    AppApplication, AppStorageError, app_error,
+    events::EventSubscribers,
+    projection::{ProgressAppend, append_progress, row_from_runtime_event},
+    service,
+};
 use crate::gateway::GatewayApplicationError;
 
 pub struct RemovedComputerTurn {
@@ -9,6 +16,7 @@ pub struct RemovedComputerTurn {
     pub started_at: String,
     pub completed_at: Option<String>,
     pub messages: Vec<RemovedComputerMessage>,
+    pub tools: Vec<TransferToolStep>,
 }
 
 pub struct RemovedComputerMessage {
@@ -27,6 +35,7 @@ impl AppApplication {
         if turns.is_empty() {
             return Ok(());
         }
+        let subscribers = self.subscribers.clone();
         self.storage
             .execute(move |db| {
                 let count: usize = db
@@ -60,10 +69,58 @@ impl AppApplication {
                             params![message.id, chat_id, turn.id, message.role, message.text, status, message.created_at],
                         ).map_err(AppStorageError::sqlite)?;
                     }
+                    for step in &turn.tools {
+                        append_tool_step(&tx, &subscribers, &chat_id, &turn.id, step)?;
+                    }
                 }
                 tx.commit().map_err(AppStorageError::sqlite)
             })
             .await
             .map_err(app_error)
     }
+}
+
+fn append_tool_step(
+    db: &Connection,
+    subscribers: &EventSubscribers,
+    chat: &str,
+    turn: &str,
+    step: &TransferToolStep,
+) -> Result<(), AppStorageError> {
+    let kind = match step.status.as_deref() {
+        Some("completed") => "tool.completed",
+        Some("failed") => "tool.failed",
+        Some("cancelled") => "tool.cancelled",
+        _ => "tool.started",
+    };
+    let call = &step.tool_call_id;
+    let now = step.started_at.as_str();
+    let payload = service::map(&json!({
+        "toolName": step.safe_tool_name,
+        "safeLabel": step.safe_label,
+        "inputLabel": step.safe_input_label,
+        "toolCallId": call,
+        "activityKind": "used_tool",
+        "bridgePhase": "btcc_operation",
+        "semanticBlockId": format!("tool-{call}"),
+    }))?;
+    if let Some(row) = row_from_runtime_event(
+        kind,
+        &payload,
+        &format!("{turn}:tool:{call}"),
+        now,
+        Some(step.ord.into()),
+    ) {
+        append_progress(&ProgressAppend {
+            db,
+            subscribers,
+            chat,
+            turn,
+            row,
+            event_type: "agent.turn_event.progress",
+            source_event: None,
+            now,
+        })?;
+    }
+    Ok(())
 }

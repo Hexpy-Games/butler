@@ -43,7 +43,9 @@ impl PreparedConversation for ConversationProjection {
                     }),
                 })
                 .await
-                .map_err(BtccError::from)
+                .map_err(BtccError::from)?;
+            super::tool_steps::record(&self.store, &self.turn_id, event).await;
+            Ok(())
         })
     }
 
