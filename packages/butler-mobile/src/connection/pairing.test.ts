@@ -3,15 +3,21 @@ import { readEnvelope, type FetchLike } from "../../../butler-protocol/src/clien
 import { isLocalNetworkHost } from "./localNetwork";
 import { pairDevice, pairDeviceName } from "./pair";
 import { pairParamsFromUrl, parsePairLink, type PairLink, type PairLinkParams } from "./pairLink";
-import { createPairingStore } from "./pairings";
+import { createPairingStore, noiseKeyName, type Pairing } from "./pairings";
 import { problemFrom, type Problem } from "./problems";
 import { resolveOrigin } from "./resolve";
+import { b64urlEncode } from "./tunnel/b64url";
+
+const k = b64urlEncode(new Uint8Array(32).fill(7));
+const t = "tun_0123456789ABCDEFGHJKMNPQRS";
 
 // test-category: pure-logic
 test("parsePairLink", () => {
   const origin = "http://192.0.2.5:18765";
   const second = "http://192.0.2.6:18765";
   const code = "12345678";
+  const prod = "https://api.butler.hexpy.games/v1/tunnel/" + t;
+  const dev = "https://butler-cloud-api-dev.hexpy-dev.workers.dev";
   const cases: [PairLinkParams, PairLink | null][] = [
     [{}, null],
     [{ v: "1", a: origin, c: code }, { kind: "pair", origins: [origin], code }],
@@ -25,6 +31,12 @@ test("parsePairLink", () => {
     [{ v: "1", a: [origin, second, origin, second, origin], c: code }, { kind: "invalid", origin, code }],
     [{ v: "1", a: [origin, origin + "/app"], c: code }, { kind: "invalid", origin, code }],
     [{ v: "1", a: [], c: code }, { kind: "invalid", origin: null, code }],
+    [{ v: "1", a: origin, c: code, k, t }, { kind: "pair", origins: [origin], code, tunnel: { tunnelId: t, desktopStatic: k, relay: prod } }],
+    [{ v: "1", c: code, k, t, u: dev }, { kind: "pair", origins: [], code, tunnel: { tunnelId: t, desktopStatic: k, relay: `${dev}/v1/tunnel/${t}` } }],
+    [{ v: "1", a: origin, c: code, k }, { kind: "pair", origins: [origin], code }],
+    [{ v: "1", c: code, t }, { kind: "invalid", origin: null, code }],
+    [{ v: "1", a: origin, c: code, k: k + "=", t }, { kind: "invalid", origin, code }],
+    [{ v: "1", a: origin, c: code, k, t, u: "http://cloud.example.com" }, { kind: "invalid", origin, code }],
   ];
   for (const [params, expected] of cases) expect(parsePairLink(params)).toEqual(expected);
   const scanned = (text: string) => {
@@ -79,8 +91,13 @@ test("pairDevice", async () => {
     calls.push({ url, init });
     return { status, ok: status < 300, body: null, json: async () => ({ protocol_version: "butler.app.v1", data, error: { code: "invalid_connection_code" } }) };
   };
-  const input = { origin, code, device: { name: "Test phone", platform: "ios" as const }, fetch };
-  expect(await pairDevice(input)).toEqual({ ok: true, pairing: { origin, butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" } });
+  const input = { origin, addresses: [origin], code, device: { name: "Test phone", platform: "ios" as const }, fetch };
+  expect(await pairDevice(input)).toEqual({ ok: true, pairing: { addresses: [origin], butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" } });
+  status = 201;
+  data = { butler_id: "b-1", device_id: "d1", device_token: "bdt_x.y", computer_name: "Mac mini" };
+  const relayed = await pairDevice({ ...input, noiseStatic: k, tunnel: { tunnelId: t, desktopStatic: k } });
+  expect(JSON.parse(String(calls[1].init.body))).toEqual({ code, device_name: "Test phone", platform: "ios", noise_static: k });
+  expect(relayed).toMatchObject({ ok: true, pairing: { tunnelId: t, desktopStatic: k, noiseStatic: "butler.noise.b-1" } });
   expect(calls[0].url).toBe("http://192.0.2.5:18765/devices/pair");
   expect(calls[0].init.method).toBe("POST");
   expect(JSON.parse(String(calls[0].init.body))).toEqual({ code, device_name: "Test phone", platform: "ios" });
@@ -100,7 +117,7 @@ test("Pairing store", async () => {
     set: async (key, value) => { values.set(key, value); },
     remove: async key => { values.delete(key); },
   });
-  const a = { origin: "http://192.0.2.5:18765", butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" };
+  const a = { addresses: ["http://192.0.2.5:18765"], butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" };
   const b = { ...a, butlerId: "b-2" };
   expect(await store.loadActive()).toBeNull();
   await store.save(a);
@@ -164,4 +181,21 @@ test("resolveOrigin", async () => {
   expect(await resolveOrigin([a, b], stub({ [a]: down, [b]: refused }))).toEqual({ ok: false, problem: "unreachable" });
   const notButler = async () => envelope(404, error("not_butler"));
   expect(await resolveOrigin([a, b], stub({ [a]: notButler, [b]: notButler }))).toEqual({ ok: false, problem: "notButler" });
+});
+
+// test-category: pure-logic
+test("Pairing records migrate from origin and keep the phone noise key with the pairing", async () => {
+  const values = new Map<string, string>();
+  const store = createPairingStore({ get: async key => values.get(key) ?? null, set: async (key, value) => { values.set(key, value); }, remove: async key => { values.delete(key); } });
+  const lan = "http://192.0.2.5:18765";
+  values.set("butler.active", "b-1");
+  values.set("butler.pairing.b-1", JSON.stringify({ origin: lan, butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", pushEnabled: true, pushKinds: ["done", "bogus"] }));
+  const migrated: Pairing = { addresses: [lan], butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", pushEnabled: true, pushKinds: ["done"] };
+  expect(await store.loadActive()).toEqual(migrated);
+  const relayed = { ...migrated, addresses: [lan, `https://api.butler.hexpy.games/v1/tunnel/${t}`], tunnelId: t, desktopStatic: k, noiseStatic: noiseKeyName("b-1") };
+  await store.save(relayed, "cHJpdmF0ZQ");
+  expect(await store.loadActive()).toEqual(relayed);
+  expect(await store.loadNoiseKey(relayed)).toBe("cHJpdmF0ZQ");
+  await store.clear("b-1");
+  expect(values.size).toBe(0);
 });

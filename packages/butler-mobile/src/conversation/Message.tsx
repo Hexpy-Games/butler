@@ -1,3 +1,4 @@
+import { fileSource } from "@/outputs/fileAccess";
 import { MessageResults } from "@/outputs/MessageResults";
 import { memo, useState } from "react";
 import { Platform, View } from "react-native";
@@ -24,7 +25,7 @@ export function UserMessage({ message, children, selectable }: {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
-  const { pairing } = useConversation();
+  const { access } = useConversation();
   const references = message.content_parts?.parts.filter(part => part.type === "project_source_ref") ?? [];
   const text = message.content_parts ? message.content_parts.parts.filter(part => part.type === "text").map(part => part.text).join("") : message.text;
   return <View style={{ alignSelf: "flex-end", maxWidth: "80%", gap: t.length("--space-1") }}>
@@ -32,8 +33,8 @@ export function UserMessage({ message, children, selectable }: {
       {text.trim() ? <MessageBubble><Text selectable>{text}</Text></MessageBubble> : null}
       {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
         key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
-        image: pairing && (file.kind === "image" || file.mime_type.startsWith("image/"))
-          ? { uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } } : undefined,
+        image: access && (file.kind === "image" || file.mime_type.startsWith("image/"))
+          ? fileSource(access, file.url) : undefined,
         extension: file.safe_name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
         meta: file.size_bytes < 1024 * 1024 ? `${Math.round(file.size_bytes / 1024)} KB` : `${(file.size_bytes / (1024 * 1024)).toFixed(1)} MB`,
       }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}

@@ -24,7 +24,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
-  const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
+  const address = pairing ? pairing.addresses[0].replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
   const leaving = useRef(false);
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null

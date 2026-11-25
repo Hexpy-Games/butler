@@ -32,7 +32,7 @@ export interface LiveConnectionOptions {
   onReconcile(): void; // stream.reconcile_required: refetch every view
   onRecovered(): void; // first open after a loss: refetch every view
   onLostChange(lost: boolean): void; // only on change
-  onError?(error: GatewayError): void; // non-2xx answer to the live request (e.g. revoked device)
+  onError?(error: GatewayError): void; // a non-2xx answer to the live request, or a GatewayError thrown by the transport
 }
 export interface LiveConnection {
   readonly cursor: number;
@@ -108,7 +108,10 @@ export function connectLive(options: LiveConnectionOptions): LiveConnection {
           else options.onEvent(event);
         }
       }
-    } catch { disconnect(); }
+    } catch (cause) {
+      if (cause instanceof GatewayError && isCurrent()) options.onError?.(cause);
+      disconnect();
+    }
   };
   void connect();
   return {

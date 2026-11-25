@@ -8,12 +8,12 @@ import { openResult } from "./openResult";
 
 export function ResultRow({ artifact, onBeforeOpen }: { artifact: SessionArtifactSummary; onBeforeOpen?: () => void }) {
   const target = artifactTarget(artifact);
-  const { pairing } = useConversation();
+  const { access } = useConversation();
   const copy = getAppCopy(useAppLocale());
   const M = useMobileCopy();
   return <ListRow icon={target?.kind === "image" ? icons.Image : icons.File} title={artifact.title}
     description={resultDescription(artifactName(artifact), artifact.size_bytes)} descriptionLines={1}
-    navigates={!!target} onPress={target && pairing ? () => {
-      onBeforeOpen?.(); openResult(target, pairing, M.outputs.loadFailed, copy);
+    navigates={!!target} onPress={target && access ? () => {
+      onBeforeOpen?.(); openResult(target, access, M.outputs.loadFailed, copy);
     } : undefined} />;
 }
