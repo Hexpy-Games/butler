@@ -439,6 +439,7 @@ try {
     currentFixture = { messages: [markdown] };
     await page.goto(`${base}?visual=components&theme=light&locale=${locale}`);
     await page.getByRole("link", { name: "Read the source", exact: true }).click();
+    await page.waitForFunction(() => ((window as Window & { browserTabs?: unknown[] }).browserTabs ?? []).length === 1);
     assert.deepEqual(await browserTabs(page), [{ id: "t1", owner: `conversation:${markdown.chat_id}`, url }]);
     assert.deepEqual(await page.evaluate(() => (window as Window & { openedLinks?: string[] }).openedLinks), []);
   }

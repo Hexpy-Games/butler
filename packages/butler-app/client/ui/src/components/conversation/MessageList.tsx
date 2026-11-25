@@ -50,7 +50,7 @@ function MessageListComponent({ messages, turnProgress, bottomReserve, isSending
 
   function onTranscriptLinkClick(event: MouseEvent<HTMLElement>) {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
-    if (!link || link.getAttribute("data-butler-link-target") === "external") return;
+    if (!link || link.hasAttribute("download") || link.getAttribute("data-butler-link-target") === "external") return;
     const url = new URL(link.href);
     if (url.protocol !== "http:" && url.protocol !== "https:") return;
     event.preventDefault();
