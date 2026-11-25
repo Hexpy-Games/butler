@@ -134,7 +134,7 @@ impl Headless {
         self.history.set_port(port);
     }
 
-    /// Where conversation downloads land and become outputs (the gateway).
+    /// Where conversation downloads land (the gateway).
     pub fn set_download_port(&self, port: Arc<dyn downloads::DownloadPort>) {
         self.downloads.set_port(port);
     }
