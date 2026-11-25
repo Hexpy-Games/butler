@@ -1,6 +1,6 @@
 // test-category: race
 /** A tab Butler hands over shows in the conversation's browser and takes the user's input.
- * Real App, stub model: Butler opens and reads a page, then waits for the user; "Open to check"
+ * Real App, stub model: Butler opens and reads a page, then waits for the user; the hand-off
  * opens the conversation's browser on that tab. Main may hear the pane's slot before the tab is
  * activated, or see it covered for a moment; neither may leave the handed-over page detached. */
 import { strict as assert } from "node:assert";
@@ -15,6 +15,7 @@ import { nativeAligned } from "../support/browser-shell-acceptance";
 const evidence = process.env.BUTLER_BROWSER_EVIDENCE; assert.ok(evidence); mkdirSync(evidence, { recursive: true });
 const app = await redesignApp(evidence);
 let tab = "";
+let openSeen: unknown;
 const subject = () => `globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)})`;
 /** The page shows in the App window exactly where the pane last reported its slot. */
 const shown = () => `(()=>{const t=${subject()},w=${app.win},v=t.view.getBounds(),s=globalThis.slotReports.get(t.id);
@@ -27,16 +28,16 @@ try {
   await app.main(`(()=>{const b=globalThis.browserAgentSubject,command=b.commandTab.bind(b);globalThis.slotReports=new Map();
     b.commandTab=(op,id,value,...rest)=>{if(op==='bounds')globalThis.slotReports.set(id,value);return command(op,id,value,...rest)}})()`);
   app.stub.set([describeBrowser, () => bridgeBrowser("browser_open", { url: app.url }),
-    (request) => bridgeBrowser("browser_observe", { tab: latestBrowser(request, "tab").tab }),
+    (request) => { const opened = latestBrowser(request, "tab"); openSeen = opened.seen_by_user; return bridgeBrowser("browser_observe", { tab: opened.tab }); },
     (request) => bridgeBrowser("browser_wait_for_user", { tab: latestBrowser(request, "tab").tab, reason: "sign_in" })]);
   await app.send("Open the fixture and let me sign in");
   await waitBrowser(async () => (await app.call<{ tabs: Array<{ id: string; agent: boolean; waiting: boolean }> }>("state")).tabs.some(item => item.agent && item.waiting), "Butler waits for the user");
   tab = (await app.call<{ tabs: Array<{ id: string; agent: boolean }> }>("state")).tabs.find(item => item.agent)!.id;
-  assert.equal(await app.main("globalThis.browserAgentSubject.activeId"), mine);
 
   await app.click(getAppCopy("en-US").space.general);
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[data-test-class=composer-browser-handoff]'))"), "hand-off card");
-  await app.click("Open to check");
+  await waitBrowser(async () => await app.main("globalThis.browserAgentSubject.activeId") === tab, "the hand-off opens the pane on the waiting tab");
+  assert.equal(openSeen, "in_pane", "the open result says the tab is in the pane, not on screen");
   await nativeAligned(app);
   assert.equal(await app.main("globalThis.browserAgentSubject.activeId"), tab, "the handed-over tab is the one shown");
   assert.equal(await app.main(`${subject()}.holder`), "user");

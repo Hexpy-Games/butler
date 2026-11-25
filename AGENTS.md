@@ -72,6 +72,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-11-25: Read live Butler data only through Butler/Canon APIs or a read-only `cp -c` clone; never print secrets.** Never `cat`, `grep` or otherwise open state, token or secret files under `~/.butler` directly, and never print a token, key or credential into output or a transcript.
+  - What happened: an investigation agent read a live `~/.butler` state file directly and printed a control token.
+
 - **2026-11-17 (revised 2026-11-22): Korean UI copy must not sound needlessly friendly.** Keep it plain and terse, and match the register of the neighbouring existing strings; never convert other strings' register as a side effect. Text the user says or taps (reply buttons, example inputs) may stay 해요체. Model-generated text follows the user's persona, not this rule. The owner cancelled an app-wide 합니다체 conversion on 2026-11-22.
   - What happened: the Butler account copy came out in 해요체 copied from older blocks and read as too casual next to the screens around it. A follow-up app-wide 합니다체 sweep was then cancelled by the owner: "너무 불필요하게 친근한 느낌만 없으면돼".
 

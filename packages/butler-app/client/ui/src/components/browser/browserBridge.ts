@@ -85,10 +85,11 @@ export function connectBrowser() {
         current.setView({ kind: "browser" });
         void browserCall("activate", { id: requested.id });
       }
-      if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
+      if (requested && session) {
+        // The conversation's pane opens on the tab; it shows now if that conversation is on screen, else when the user goes there.
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
-        void browserCall("activate", { id: requested.id });
+        if (current.view.kind === "session" && current.activeChatId === session) void browserCall("activate", { id: requested.id });
       }
     }
   });

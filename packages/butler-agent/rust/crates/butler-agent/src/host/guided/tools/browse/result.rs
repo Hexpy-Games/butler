@@ -43,6 +43,7 @@ impl Run {
     }
 
     pub(super) fn remember(&mut self, view: Value) {
+        self.seen_by_user = view["seen_by_user"].clone();
         self.url = json!(self.extend_seen(&view));
         self.read = Value::Null;
         if let Some(obs) = view.get("obs") {
@@ -69,6 +70,9 @@ impl Run {
             result["summary"] = result["reason"].clone();
         }
         result["tab"] = self.tab.clone();
+        if !self.seen_by_user.is_null() {
+            result["seen_by_user"] = self.seen_by_user.clone();
+        }
         result["url"] = self.url.clone();
         result["steps_used"] = json!(self.steps);
         result["executor_model"] = json!(model);
