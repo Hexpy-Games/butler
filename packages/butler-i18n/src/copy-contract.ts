@@ -1608,6 +1608,7 @@ export interface AppCopy {
       security: string;
       system: string;
       archives: string;
+      archive: string;
       about: string;
     };
     sectionDescriptions: {

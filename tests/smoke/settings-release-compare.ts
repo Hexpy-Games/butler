@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
+import { getAppCopy } from "../../packages/butler-i18n/src";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { timeBasedFiniteAnimationsSettled } from "../support/animation-settle.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
@@ -58,7 +59,7 @@ async function matrix(uiRoot: string, stage: string) {
             const settings = page.getByRole("button", { name: "Settings", exact: true });
             if (!await settings.isVisible()) await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
             await settings.click();
-            const label = stage === "after" && section === "Archives" ? "Archive" : section;
+            const label = stage === "after" && section === "Archives" ? getAppCopy("en-US").settings.sections.archive : section;
             const button = page.getByRole("button", { name: label, exact: true });
             if (!await button.count()) {
               assert(absentSections[stage]?.includes(section), `${stage}: missing ${section}`);

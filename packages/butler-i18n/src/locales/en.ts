@@ -1656,7 +1656,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   artifacts: {
     reload: "Reload",
     revision: "Version",
-    contentHostRequired: "Set an output host in Security settings.",
+    contentHostRequired: "Set an output host in Settings → Phone & devices on your computer.",
     title: "Artifacts",
     empty: "No artifacts yet",
     open: "Open",
@@ -1752,7 +1752,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       computers: "Environments",
       security: "Security",
       system: "System events",
-      archives: "Archive",
+      archives: "Archives",
+      archive: "Archive",
       about: "About",
     },
     sectionDescriptions: {
@@ -1797,7 +1798,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       connections: ["mail", "메일", "connections", "연결"],
       browser: ["브라우저", "sign-ins", "signin", "saved logins", "import", "bookmarks", "passwords"],
       devices: ["remote access", "connection code", "pair device", "LAN", "network", "allowed hosts", "tunnel", "phone", "devices"],
-      computers: ["SSH", "remote computer", "other computers", "server"],
+      computers: ["SSH", "remote computer", "other computers"],
       security: ["permissions", "approvals", "vault", "command isolation", "folders", "privacy"],
       system: ["maintenance", "memory consolidation"],
       archives: ["saved chats", "archive"],

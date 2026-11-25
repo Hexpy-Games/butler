@@ -64,7 +64,7 @@ function createSettingsSectionMap(
     computers: section("computers", settingsCopy.sections.computers, <Monitor />),
     security: section("security", settingsCopy.sections.security, <Lock />),
     system: section("system", settingsCopy.sections.system, <Activity />),
-    archives: section("archives", settingsCopy.sections.archives, <Archive />),
+    archives: section("archives", settingsCopy.sections.archive, <Archive />),
     about: section("about", settingsCopy.sections.about, <BookOpenText />),
   };
 }

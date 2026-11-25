@@ -127,7 +127,7 @@ async function paletteChecks(page: Page, prefix: string) {
   let dialog = await search(page, "");
   const expectedSections = ["general", "personalization", "appearance", "models", "memory", "archives", "usage", "devices", "computers", "browser", "security", "mcp", "hooks", "skills", "connections", "server", "updates", "system", "about"] as const;
   assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), expectedSections.length);
-  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) }).count(), 1);
+  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id === "archives" ? "archive" : id], { exact: true }) }).count(), 1);
   await capture(page, prefix, "palette-all-sections");
   await dialog.getByRole("combobox").fill("logs");
   await page.getByText(copy.commandPalette.empty, { exact: true }).waitFor();

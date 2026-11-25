@@ -1661,7 +1661,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
   artifacts: {
     reload: "새로고침",
     revision: "버전",
-    contentHostRequired: "보안 설정에서 결과물 호스트를 지정해 주세요.",
+    contentHostRequired: "컴퓨터의 설정 → 휴대폰 및 기기에서 결과물 호스트를 지정해 주세요.",
     title: "아티팩트",
     empty: "아직 아티팩트가 없습니다",
     open: "열기",
@@ -1758,6 +1758,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       security: "보안",
       system: "시스템 이벤트",
       archives: "아카이브",
+      archive: "아카이브",
       about: "정보",
     },
     sectionDescriptions: {
@@ -1802,7 +1803,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       connections: ["mail", "메일", "connections", "연결"],
       browser: ["browser", "signin", "로그인", "로그인 저장", "가져오기", "북마크", "비밀번호"],
       devices: ["원격 접속", "연결 코드", "기기 연결", "LAN", "네트워크", "허용 호스트", "터널", "휴대폰", "기기"],
-      computers: ["SSH", "원격 컴퓨터", "다른 컴퓨터", "서버"],
+      computers: ["SSH", "원격 컴퓨터", "다른 컴퓨터"],
       security: ["권한", "허용한 작업", "금고", "명령 격리", "폴더", "개인정보"],
       system: ["유지보수", "기억 정리"],
       archives: ["보관", "아카이브"],
