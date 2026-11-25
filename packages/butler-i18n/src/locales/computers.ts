@@ -1,6 +1,7 @@
 export const COMPUTERS_COPY = {
   "ko-KR": {
     title: "다른 컴퓨터",
+    listTitle: "추가한 컴퓨터",
     description: "여기서 시작한 대화를 다른 컴퓨터에서 실행합니다. SSH로 접속할 수 있으면 됩니다.",
     location: "실행 위치",
     thisComputer: "이 컴퓨터",
@@ -133,6 +134,7 @@ export const COMPUTERS_COPY = {
   },
   "en-US": {
     title: "Other computers",
+    listTitle: "Your computers",
     description: "Run conversations started here on another computer. It only needs SSH access.",
     location: "Run on",
     thisComputer: "This computer",

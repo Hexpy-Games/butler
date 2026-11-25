@@ -11,10 +11,12 @@ import {
   IdCard,
   MagicWand,
   McpServer,
+  Monitor,
   Palette,
   RefreshCcw,
   Server,
   SlidersHorizontal,
+  Smartphone,
   Terminal,
   UserRound,
 } from "@/butler-ds";
@@ -58,6 +60,8 @@ function createSettingsSectionMap(
     account: section("account", settingsCopy.sections.account, <IdCard />),
     connections: section("connections", settingsCopy.sections.connections, <Blocks />),
     browser: section("browser", settingsCopy.sections.browser, <Globe2 />),
+    devices: section("devices", settingsCopy.sections.devices, <Smartphone />),
+    computers: section("computers", settingsCopy.sections.computers, <Monitor />),
     security: section("security", settingsCopy.sections.security, <Lock />),
     system: section("system", settingsCopy.sections.system, <Activity />),
     archives: section("archives", settingsCopy.sections.archives, <Archive />),
@@ -82,29 +86,29 @@ type SettingsSectionGroupDefinition = {
 
 const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
-    id: "general",
-    label: "preferences",
-    sectionIds: ["general", "appearance", "personalization", "account", "memory", "models", "connections"],
+    id: "personal",
+    label: "personal",
+    sectionIds: ["general", "account", "personalization", "appearance"],
   },
   {
-    id: "app-and-system",
-    label: "appAndSystem",
-    sectionIds: [
-      "updates",
-      "usage",
-      "logs",
-      "browser",
-      "security",
-      "system",
-      "archives",
-      "about",
-    ],
+    id: "butler",
+    label: "butler",
+    sectionIds: ["models", "memory", "archives", "usage"],
   },
-  // Agent-level settings most people never need; always the last group.
   {
-    id: "advanced",
-    label: "advanced",
-    sectionIds: ["mcp", "hooks", "skills", "server"],
+    id: "devices-security",
+    label: "devicesAndSecurity",
+    sectionIds: ["devices", "computers", "browser", "security"],
+  },
+  {
+    id: "extensions",
+    label: "extensions",
+    sectionIds: ["mcp", "hooks", "skills", "connections"],
+  },
+  {
+    id: "app",
+    label: "app",
+    sectionIds: ["server", "updates", "system", "logs", "about"],
   },
 ];
 

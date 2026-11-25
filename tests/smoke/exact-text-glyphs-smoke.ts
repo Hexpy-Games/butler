@@ -86,9 +86,6 @@ try {
     if (url.pathname === "/session-view") return route.fulfill({ json: { protocol_version: "butler.app.v1", data: view } });
     if (url.pathname === "/authority-requests") return route.fulfill({ json: { ok: true, data: { requests: view.authority_requests } } });
     if (url.pathname === "/authority-permissions") return route.fulfill({ json: { ok: true, data: { permissions: [grant] } } });
-    // Security settings around the grants list: no remote access view, no saved keys or accounts.
-    if (url.pathname === "/security") return route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "stub" } } });
-    if (url.pathname === "/credentials" || url.pathname === "/security/oauth") return route.fulfill({ json: { ok: true, data: { credentials: [] } } });
     if (url.pathname === "/messages") return route.fulfill({ json: { ok: true, data: { messages: view.messages } } });
     if (url.pathname === "/navigation") return route.fulfill({ json: { ok: true, data: HARNESS_NAVIGATION } });
     if (url.pathname === "/projects/butler/canon/sidebar") return route.fulfill({ json: { ok: true, data: { project_id: "butler", groups: [] } } });

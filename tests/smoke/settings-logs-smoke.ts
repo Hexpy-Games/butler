@@ -126,7 +126,7 @@ async function developerOffChecks(page: Page, prefix: string) {
     "로그 is hidden outside developer mode");
   await page.keyboard.press("Escape");
   await openSettings(page, copy.settings.sections.security);
-  await section(page, "grants").waitFor();
+  await section(page, "command-isolation").waitFor();
   assert.equal(await section(page, "diagnostics").count(), 0, "보안 has no 진단 section");
   await capture(page, `${prefix}-security`);
   await openSettings(page, copy.settings.sections.about);

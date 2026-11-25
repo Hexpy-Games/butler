@@ -60,6 +60,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
     { id: "image-models", kind: "form", fields: ["image-model", "hosted-credential-select", "hosted-api-key-masked", "hosted-credential-label", "hosted-api-key", "image-quality"] },
+    { id: "connected-accounts", kind: "list", fields: [], optional: true },
+    { id: "saved-keys", kind: "list", fields: [] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "worker-profiles", kind: "list", fields: ["worker-max-simultaneous", ...WORKER_PROFILE_FIELDS], optional: true },
   ],
@@ -118,20 +120,24 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   account: [
     { id: "butler-account", kind: "form", fields: [] },
     { id: "butler-account-devices", kind: "list", fields: [], optional: true },
+    { id: "butler-backup", kind: "status", fields: [], optional: true },
     { id: "butler-pages", kind: "list", fields: [], optional: true },
   ],
-  // Remote-only controls hide when refused. Authority and keys stay visible.
-  security: [
+  // Remote-only controls hide when refused.
+  devices: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },
+    { id: "security-advanced", kind: "form", fields: ["allowed-hosts"], optional: true },
+  ],
+  computers: [
     { id: "computers", kind: "list", fields: [], optional: true },
+  ],
+  security: [
+    { id: "butler-vault", kind: "form", fields: [] },
     { id: "command-isolation", kind: "form", fields: ["command-sandbox"] },
     { id: "allowed-folders", kind: "list", fields: [] },
     { id: "grants", kind: "list", fields: [] },
-    { id: "saved-keys", kind: "list", fields: [] },
-    { id: "connected-accounts", kind: "list", fields: [], optional: true },
-    { id: "security-advanced", kind: "form", fields: ["allowed-hosts"], optional: true },
   ],
   system: [{ id: "system-events", kind: "list", fields: [] }],
   archives: [{ id: "archives", kind: "list", fields: [] }],

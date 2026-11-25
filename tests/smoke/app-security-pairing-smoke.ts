@@ -65,10 +65,10 @@ try {
   await admin("/settings", { method: "PATCH", body: JSON.stringify({ security: { allowed_hosts: ["phone-test.local"] } }) });
   await page.goto(server.url);
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
-  await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
+  await page.getByRole("button", { name: appCopy.settings.sections.devices, exact: true }).click();
   assert.equal(await section(page, "device-pairing").count(), 0, "pairing hidden while remote access is off");
   await page.getByRole("switch", { name: copy.remoteAccess, exact: true }).click();
-  await page.getByRole("button", { name: copy.pairDevice, exact: true }).click();
+  await page.getByRole("button", { name: copy.createCode, exact: true }).click();
   let code = await codeFromUi(page);
   await verifyLayouts(page);
   const countdown = page.getByText(copy.expiresIn(60), { exact: true });
@@ -99,7 +99,7 @@ try {
   await page.getByRole("alertdialog").getByRole("button", { name: copy.revokeAll, exact: true }).click();
   await page.getByText(copy.noDevices, { exact: true }).waitFor();
   assert.equal((await admin<unknown[]>("/security/devices")).length, 0);
-  await page.getByRole("button", { name: copy.pairDevice, exact: true }).click();
+  await page.getByRole("button", { name: copy.createCode, exact: true }).click();
   const qr = page.getByRole("img", { name: copy.pairingQr, exact: true });
   await qr.waitFor();
   const link = new URL((await page.locator('[data-test-class="pairing-qr"]').getAttribute("data-pairing-link"))!);

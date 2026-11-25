@@ -187,8 +187,8 @@ async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCl
       assert.equal(await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).count(), 0);
       await page.setViewportSize({ width: 1440, height: 900 });
     }
-    await navigation.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
-    await page.getByRole("heading", { name: appCopy.settings.sections.security, exact: true }).waitFor();
+    await navigation.getByRole("button", { name: appCopy.settings.sections.devices, exact: true }).click();
+    await page.getByRole("heading", { name: appCopy.settings.sections.devices, exact: true }).waitFor();
     assert.equal(await section(page, "butler-account").count(), 0);
     if (enabled) {
       await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).click();

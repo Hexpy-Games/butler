@@ -58,14 +58,15 @@ async function matrix(uiRoot: string, stage: string) {
             const settings = page.getByRole("button", { name: "Settings", exact: true });
             if (!await settings.isVisible()) await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
             await settings.click();
-            const button = page.getByRole("button", { name: section, exact: true });
+            const label = stage === "after" && section === "Archives" ? "Archive" : section;
+            const button = page.getByRole("button", { name: label, exact: true });
             if (!await button.count()) {
               assert(absentSections[stage]?.includes(section), `${stage}: missing ${section}`);
               report.push({ stage, name, section, present: false });
               continue;
             }
             await button.click();
-            await page.locator('[data-test-class~="settings-detail-title"]').filter({ hasText: section }).waitFor();
+            await page.locator('[data-test-class~="settings-detail-title"]').filter({ hasText: label }).waitFor();
             await capture(page, directory, `settings-${section.replaceAll(" ", "-")}-${name}`);
             report.push({ stage, name, section, present: true, text: await page.locator('[data-test-class~="settings-detail"]').allTextContents() });
           }

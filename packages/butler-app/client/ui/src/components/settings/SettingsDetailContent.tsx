@@ -12,6 +12,8 @@ import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
 import { BrowserSettings } from "./BrowserSettings";
+import { DevicesSettings } from "./DevicesSettings";
+import { ComputersSettings } from "./ComputersSettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { ServerSettings } from "./ServerSettings";
 import { SkillsSettings } from "./SkillsSettings";
@@ -46,6 +48,8 @@ export function SettingsDetailContent({
       )}
       {activeSection === "account" && accountEnabled && <AccountSettings />}
       {activeSection === "browser" && <BrowserSettings />}
+      {activeSection === "devices" && <DevicesSettings />}
+      {activeSection === "computers" && <ComputersSettings />}
       {activeSection === "security" && <SecuritySettings />}
       {activeSection === "system" && <SystemEventsSettings />}
       {activeSection === "archives" && <ArchivesSettings />}
