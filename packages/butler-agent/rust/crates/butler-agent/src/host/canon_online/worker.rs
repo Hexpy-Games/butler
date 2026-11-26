@@ -69,7 +69,7 @@ pub(super) async fn run(
 ) {
     let mut worker = Worker {
         path: path(&space),
-        wake: online.wake.subscribe(),
+        wake: online.account.changes(),
         changes: online.storage.subscribe_changes(),
         online,
         space,

@@ -24,7 +24,6 @@ use crate::host::app::runtime_ports::ButlerAccount;
 pub(crate) struct CanonOnline {
     account: Arc<ButlerAccount>,
     storage: BtccStorage,
-    wake: watch::Sender<u64>,
     /// space_id → "connected" | "offline" | "error"
     connections: Arc<Mutex<HashMap<String, &'static str>>>,
 }
@@ -38,7 +37,6 @@ impl CanonOnline {
         let online = Arc::new(Self {
             account,
             storage,
-            wake: watch::channel(0).0,
             connections: Arc::default(),
         });
         tokio::spawn(supervise(online.clone(), shutdown));
@@ -54,7 +52,7 @@ impl CanonOnline {
 
     /// Every watcher sees each bump on its own next `changed()`.
     pub(crate) fn poke(&self) {
-        self.wake.send_modify(|n| *n = n.wrapping_add(1));
+        self.account.bump();
     }
 
     fn connect_state(&self, space: &str, state: &'static str) {
@@ -93,7 +91,7 @@ type Running = HashMap<String, (CancellationToken, tokio::task::JoinHandle<()>)>
 /// Starts a worker per linked space; no timers. A worker that stopped on an
 /// error is not restarted until the next wake or app start.
 async fn supervise(online: Arc<CanonOnline>, shutdown: CancellationToken) {
-    let mut wake = online.wake.subscribe();
+    let mut wake = online.account.changes();
     let errored = Arc::new(Mutex::new(HashSet::new()));
     let mut running = Running::new();
     loop {
