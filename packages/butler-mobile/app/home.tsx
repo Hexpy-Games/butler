@@ -30,13 +30,14 @@ export default function Home() {
   const [status, setStatus] = useState<Status>({ kind: "checking" });
   const latest = useRef(0);
   const { open, revoked } = useConversation();
+  const revokedRef = useRef(revoked);
+  revokedRef.current = revoked;
   const check = useCallback(async () => {
-    if (revoked) return;
     const id = ++latest.current;
     setStatus(previous => previous.kind === "ready" ? previous : { kind: "checking", origin: previous.origin });
     const pairing = await pairingStore.loadActive().catch(() => null);
     if (!pairing) {
-      if (id !== latest.current) return;
+      if (id !== latest.current || revokedRef.current) return;
       router.replace("/pair");
       return;
     }
@@ -46,7 +47,7 @@ export default function Home() {
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin }
       : { kind: "problem", origin, problem: result.problem });
-  }, [open, revoked]);
+  }, [open]);
   useFocusEffect(useCallback(() => {
     void check();
     return () => { latest.current++; };
