@@ -1,8 +1,9 @@
 import { useProjectDashboardBackground } from "@/hooks/useProjectDashboardBackground.tsx";
 import { useButlerStore } from "@/app/store.ts";
 import { useState } from "react";
+import { useCanonOnlineLock } from "@/app/canonOnline.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, DashboardHeader, ManagementPage, Notice, IconButton, Pencil, Plus, ProgressMeter, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, DashboardHeader, ManagementPage, Notice, IconButton, Pencil, Plus, ProgressMeter, Stack, Tooltip, Typo } from "@/butler-ds";
 import { EpicCreateDialog } from "./EpicCreateDialog.tsx";
 import { PlanFormDialog } from "./PlanFormDialog.tsx";
 import { PlanEpicList } from "./PlanEpicList.tsx";
@@ -11,6 +12,7 @@ import { usePlanOverview } from "./usePlanOverview.ts";
 export function PlanOverview({ projectId, planId }: { projectId: string; planId: string | null }) {
   const locale = useAppLocale();
   const state = usePlanOverview(projectId, planId);
+  const locked = useCanonOnlineLock(projectId);
   const project = useButlerStore(state => state.navigation.projects.find(project => project.id === projectId));
   const { background, onColumnRect } = useProjectDashboardBackground(project);
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
@@ -23,8 +25,8 @@ export function PlanOverview({ projectId, planId }: { projectId: string; planId:
     <Stack gap="md">
       <Typo.Caption tone="secondary">{planId ? copy.plan : copy.noPlan}</Typo.Caption>
       <DashboardHeader title={title} meta={meta} action={<ButtonContainer size="default">
-        {state.plan && <IconButton label={copy.editPlan} onClick={() => setDialog("edit")}><Pencil size="sm" /></IconButton>}
-        <Button onClick={() => setDialog("create")} disabled={!state.canon || state.busy}><Plus size="sm" />{copy.newEpic}</Button>
+        {state.plan && <IconButton label={locked ?? copy.editPlan} aria-label={copy.editPlan} disabled={Boolean(locked)} onClick={() => setDialog("edit")}><Pencil size="sm" /></IconButton>}
+        <Tooltip label={locked}><Button onClick={() => setDialog("create")} disabled={!state.canon || state.busy || Boolean(locked)}><Plus size="sm" />{copy.newEpic}</Button></Tooltip>
       </ButtonContainer>} />
       {state.plan && <Stack gap="sm">
         {state.plan.description && <Typo.Body wrap="pre">{state.plan.description}</Typo.Body>}

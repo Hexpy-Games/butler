@@ -209,6 +209,12 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   fake.links = [{ ...linked, state: "detached", connection: "offline" }];
   await captureStatus(page, board, header, `${cell}-detached`, "연결 끊김");
   assert(await newEpic.isDisabled());
+  if (!mobile) {
+    const backlogGroup = page.locator(`[data-tree-item="p:${projectId}"] [data-canon-group="backlog"]`);
+    const sidebarNew = backlogGroup.getByRole("button", { name: "백로그에 새 과제", exact: true });
+    await sidebarNew.waitFor();
+    assert(await sidebarNew.isDisabled());
+  }
   await newEpic.hover();
   const tooltip = page.getByRole("tooltip", { name: lock, exact: true });
   await tooltip.waitFor();
