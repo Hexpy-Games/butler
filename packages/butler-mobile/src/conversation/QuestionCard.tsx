@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { AnsweredUserQuestions, AuthorityDecisionResult, PendingUserQuestions, UserQuestion, UserQuestionResponse } from "../../../butler-protocol/src/index.ts";
-import { Button, ButtonGroup, DecisionCard, ListRow, Surface, Text, TextField, useTokens } from "@/ds";
+import { Button, ButtonGroup, DecisionCard, ListGroup, ListGroupItem, ListRow, Surface, Text, TextField, useTokens } from "@/ds";
 import { useAppLocale } from "@/i18n";
 import { useConversation } from "./live";
 import { answerOptions, answerWire, type QuestionDraft } from "./approval";
@@ -60,16 +60,18 @@ function QuestionFields({ question, answer, disabled, update }: {
   const options = answerOptions(question);
   if (!options.length) return <TextField label={question.title} value={answer.text} disabled={disabled}
     onChangeText={text => update({ text, skipped: false })} />;
-  return <>
+  return <ListGroup>
     {options.map((option, index) => <ListRow key={option.id} title={option.label} description={option.description} titleLines={2} descriptionLines={3}
       meta={option.recommended ? labels.recommended : undefined} selected={answer.selected.includes(index)} disabled={disabled}
       selection={question.kind === "multi" ? "multi" : "single"}
       onPress={() => update({ selected: question.kind === "multi"
         ? answer.selected.includes(index) ? answer.selected.filter(i => i !== index) : [...answer.selected, index].sort((a, b) => a - b)
         : [index], skipped: false, ...(question.kind === "single" ? { other: "" } : {}) }, question.kind === "single")} />)}
-    {question.allow_custom || options.length < question.options.length ? <TextField label={labels.other} value={answer.other} disabled={disabled}
-      onChangeText={other => update({ other, skipped: false, ...(question.kind === "single" ? { selected: [] } : {}) })} /> : null}
-  </>;
+    {question.allow_custom || options.length < question.options.length ? <ListGroupItem>
+      <TextField label={labels.other} value={answer.other} disabled={disabled}
+        onChangeText={other => update({ other, skipped: false, ...(question.kind === "single" ? { selected: [] } : {}) })} />
+    </ListGroupItem> : null}
+  </ListGroup>;
 }
 
 export function QuestionAnswerCard({ answer }: { answer: AnsweredUserQuestions }) {

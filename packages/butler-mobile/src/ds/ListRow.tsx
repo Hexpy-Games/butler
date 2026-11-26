@@ -47,7 +47,7 @@ export function ListRow({
   const reduced = useReducedMotion();
   const grouped = useContext(InListGroup);
   const press = usePress({ scale: false, disabled: disabled || (!onPress && !onLongPress) });
-  const filled = press.pressed || !!selected;
+  const filled = press.pressed || (!!selected && !grouped);
   const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
   useEffect(() => {
     if (reduced) underlay.setValue(filled ? 1 : 0);
