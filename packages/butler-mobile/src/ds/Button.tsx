@@ -8,7 +8,7 @@ import type { IconGlyph } from "./icons";
 import { IconSlot } from "./internal/IconSlot";
 import { AnimatedPressable, usePress } from "./internal/press";
 import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
-import { variantColors, type ButtonVariant } from "./internal/variants";
+import { disabledColors, variantColors, type ButtonVariant } from "./internal/variants";
 import { SpinnerArc } from "./Spinner";
 
 export type { ButtonVariant };
@@ -45,7 +45,7 @@ export function Button({
 }: ButtonProps) {
   const t = useTokens();
   const press = usePress({ scale: true, disabled: disabled || loading });
-  const colors = variantColors(t, variant);
+  const colors = disabled && !loading ? disabledColors(t, variant) : variantColors(t, variant);
   const target = t.length("--control-hit-target");
   const height = size === "sm" ? t.length("--control-height-sm") : target;
   const hitSlop = Math.max(0, (target - height) / 2);
@@ -85,7 +85,7 @@ export function Button({
           maxWidth: "100%",
           flexShrink: 1,
           alignSelf: stretch ? "stretch" : undefined,
-          opacity: disabled ? 0.48 : press.opacity,
+          opacity: press.opacity,
         },
         press.scaleStyle,
         press.focused ? { boxShadow: t.shadow("--focus-ring") } : null,
@@ -117,7 +117,7 @@ export function IconButton({
 }: IconButtonProps) {
   const t = useTokens();
   const press = usePress({ scale: true, disabled: disabled || loading });
-  const colors = variantColors(t, variant);
+  const colors = disabled && !loading ? disabledColors(t, variant) : variantColors(t, variant);
   const target = t.length("--control-hit-target");
   const box = size === "control" ? t.length("--control-height-lg") : size === "sm" ? t.length("--control-height-sm") : target;
   const iconSize = t.length(size === "sm" ? "--icon-size-md" : "--icon-size-lg");
@@ -141,7 +141,7 @@ export function IconButton({
           backgroundColor: colors.background,
           alignItems: "center",
           justifyContent: "center",
-          opacity: disabled ? 0.48 : press.opacity,
+          opacity: disabled && !loading && React.isValidElement(icon) ? 0.48 : press.opacity,
         },
         press.scaleStyle,
         press.focused ? { boxShadow: t.shadow("--focus-ring") } : null,
