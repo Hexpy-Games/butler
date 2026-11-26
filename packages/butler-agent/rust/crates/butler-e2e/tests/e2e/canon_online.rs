@@ -248,7 +248,7 @@ async fn delete_and_resync(
     e2
 }
 
-/// Step 9: a 403 demotes B to viewer, drops its queue and resyncs it.
+/// Step 9: a 403 demotes B to viewer, drops its queue and resyncs it; a role change then reaches a connected B with no write from B.
 async fn viewer_downgrade(
     fake: &FakeButlerCloud,
     a: &Device,
@@ -289,6 +289,20 @@ async fn viewer_downgrade(
             .unwrap();
     assert_eq!(reply.status, 403, "{}", reply.text);
     assert_eq!(reply.error_code(), Some("permission"));
+    let promote =
+        json!({"action": "set_role", "project_id": ap, "account_id": account, "role": "editor"});
+    a.online(promote).await;
+    eventually("B is an editor without writing", move || async move {
+        b.link(bp).await["role"] == "editor"
+    })
+    .await;
+    let demote =
+        json!({"action": "set_role", "project_id": ap, "account_id": account, "role": "viewer"});
+    a.online(demote).await;
+    eventually("B is a viewer without writing", move || async move {
+        b.link(bp).await["role"] == "viewer"
+    })
+    .await;
 }
 
 #[tokio::test]

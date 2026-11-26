@@ -307,7 +307,20 @@ impl Space {
         else {
             return failure(StatusCode::NOT_FOUND, "not_found");
         };
-        member["role"] = json!(role);
+        if member["role"] != role {
+            member["role"] = json!(role);
+            let email = member["email"].as_str().unwrap_or_default().to_owned();
+            self.sockets.retain(|(recipient, socket)| {
+                if *recipient != email {
+                    return !socket.is_closed();
+                }
+                let _ = socket.send(Message::Close(Some(CloseFrame {
+                    code: 4005,
+                    reason: "role".into(),
+                })));
+                false
+            });
+        }
         Json(json!({"member": {"account_id": account, "role": role}})).into_response()
     }
 
