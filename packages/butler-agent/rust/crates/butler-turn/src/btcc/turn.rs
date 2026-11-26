@@ -15,6 +15,7 @@ mod supervisor;
 mod test_support;
 #[cfg(test)]
 mod tests;
+mod tool_steps;
 mod transition;
 #[cfg(test)]
 pub(crate) use transition::tests::payload_body_with_changed_files_is_byte_stable;

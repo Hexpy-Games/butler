@@ -1,20 +1,26 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { router } from "expo-router";
-import { connectLive, createGatewayClient, type GatewayClient, type LiveConnection, type LiveEvent } from "../../../butler-protocol/src/client/index.ts";
-import { nativeFetch } from "@/connection/nativeFetch";
+import { createGatewayClient, type FetchLike, type GatewayClient, type LiveConnection, type LiveEvent } from "../../../butler-protocol/src/client/index.ts";
+import type { Access } from "@/connection/access";
 import type { Pairing } from "@/connection/pairings";
+import type { ProbeResult } from "@/connection/probe";
+import type { Problem } from "@/connection/problems";
+import type { Route } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
-import { showToast } from "@/ds";
+import type { RelayPeer } from "@/connection/tunnel/transport";
 import { useMobileCopy } from "@/i18n";
 import { clearSessionViews } from "./sessionViewCache";
+import { useLiveRoute } from "./useLiveRoute";
 
 interface ConversationContext {
-  connect(pairing: Pairing): void;
+  open(pairing: Pairing): Promise<ProbeResult>; // replaces connect: chooses the route, connects when ready
   disconnect(): Promise<void>;
   client: GatewayClient | null;
   pairing: Pairing | null;
+  route: Route | null;
+  access: Access | null;
   lost: boolean;
+  problem: Problem | null; // only "desktopOffline", from the last relay error; cleared when the stream is back
   reconcile: number;
   subscribe(listener: (event: LiveEvent) => void): () => void;
 }
@@ -23,10 +29,16 @@ const Context = createContext<ConversationContext | null>(null);
 export function ConversationProvider({ children }: { children: React.ReactNode }) {
   const copy = useMobileCopy();
   const pairing = useRef<Pairing | null>(null);
+  const route = useRef<Route | null>(null);
+  const relay = useRef<{ peer: RelayPeer; fetch: FetchLike } | null>(null);
+  const rerouting = useRef(0);
   const live = useRef<LiveConnection | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listeners = useRef(new Set<(event: LiveEvent) => void>());
   const [activePairing, setPairing] = useState<Pairing | null>(null);
+  const [activeRoute, setRoute] = useState<Route | null>(null);
+  const [peer, setPeer] = useState<RelayPeer | null>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
   const [client, setClient] = useState<GatewayClient | null>(null);
   const [lost, setLost] = useState(false);
   const [reconcile, setReconcile] = useState(0);
@@ -40,6 +52,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     clearTimeout(timer.current);
     setLost(false);
     pairing.current = null;
+    route.current = null;
+    relay.current = null;
+    rerouting.current++;
+    setRoute(null);
+    setPeer(null);
+    setProblem(null);
     setPairing(null);
     setClient(null);
     try {
@@ -54,12 +72,13 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   }, []);
   const disconnect = useCallback(async () => {
     const current = pairing.current;
+    const currentRoute = route.current;
     live.current?.close(); // before the revoke, so the closed stream cannot fire the 401 toast
-    if (current) {
+    if (current && currentRoute) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
       try {
-        await createGatewayClient({ origin: current.origin, fetch: nativeFetch, token: () => current.deviceToken })
+        await createGatewayClient({ origin: currentRoute.origin, fetch: currentRoute.fetch, token: () => current.deviceToken })
           .request<void>("/devices/self", { method: "DELETE", signal: controller.signal });
       } catch {
         // Best effort: the computer may be off or the token already revoked.
@@ -69,46 +88,11 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     }
     await teardown();
   }, [teardown]);
-  const connect = useCallback((next: Pairing) => {
-    if (pairing.current?.origin === next.origin && pairing.current.deviceToken === next.deviceToken) return;
-    live.current?.close();
-    clearTimeout(timer.current);
-    setLost(false);
-    pairing.current = next;
-    setPairing(next);
-    const gateway = createGatewayClient({ origin: next.origin, fetch: nativeFetch, token: () => next.deviceToken });
-    setClient(gateway);
-    live.current = connectLive({
-      client: gateway, cursor: 0,
-      onEvent: event => listeners.current.forEach(listener => listener(event)),
-      onReconcile: () => setReconcile(value => value + 1),
-      onRecovered: () => setReconcile(value => value + 1),
-      onLostChange(value) {
-        clearTimeout(timer.current);
-        if (value) timer.current = setTimeout(() => setLost(true), 2000);
-        else setLost(false);
-      },
-      onError(error) {
-        if (error.status !== 401 && error.code !== "local_auth_required") return;
-        void teardown().then(() => {
-          showToast({ message: copy.problems.needsPairing, tone: "warning" });
-        });
-      },
-    });
-    if (AppState.currentState === "background") live.current.pause();
-  }, [copy, teardown]);
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", state => {
-      if (state === "background") live.current?.pause();
-      if (state === "active") live.current?.resume();
-    });
-    return () => {
-      subscription.remove();
-      live.current?.close();
-      clearTimeout(timer.current);
-    };
-  }, []);
-  return <Context.Provider value={{ connect, disconnect, client, pairing: activePairing, lost, reconcile, subscribe }}>{children}</Context.Provider>;
+  const { access, open } = useLiveRoute({
+    copy, pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
+    setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, teardown,
+  });
+  return <Context.Provider value={{ open, disconnect, client, pairing: activePairing, route: activeRoute, access, lost, problem, reconcile, subscribe }}>{children}</Context.Provider>;
 }
 
 export function useConversation(): ConversationContext {

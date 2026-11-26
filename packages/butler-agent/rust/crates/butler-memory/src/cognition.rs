@@ -114,7 +114,7 @@ pub use generation::{
     resolve_generation,
 };
 pub use generation_vectors::GenerationVectorAdapter;
-pub use graph::{GraphProgress, JobOutcome, StageState, StageStatus};
+pub use graph::{GRAPH_BUSY_TIMEOUT, GraphProgress, JobOutcome, StageState, StageStatus};
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::FeedbackTarget;

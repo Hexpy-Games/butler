@@ -1,6 +1,5 @@
 //! Stub-only Butler account service.
 use sha2::{Digest, Sha256};
-use std::sync::PoisonError;
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{
@@ -13,18 +12,26 @@ use axum::{
     Json, Router,
     body::Bytes,
     extract::{
-        DefaultBodyLimit, Path, State as AxumState, WebSocketUpgrade,
-        ws::{CloseFrame, Message, rejection::WebSocketUpgradeRejection},
+        DefaultBodyLimit, State as AxumState,
+        ws::{WebSocket, WebSocketUpgrade, rejection::WebSocketUpgradeRejection},
     },
     http::{HeaderMap, Method, StatusCode, Uri},
     response::{IntoResponse, Response},
 };
 use serde_json::{Value, json};
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{Mutex as AsyncMutex, mpsc},
+    task::JoinHandle,
+};
 
 use super::HarnessError;
 
 mod canon;
+mod canon_socket;
+mod tunnel;
+
+use canon_socket::{account, pending, timestamp};
+use tunnel::FakePush;
 
 const PAGE_ID: &str = "k7m2q9xd4b3hn";
 const PAGE_URL: &str = "https://pages.test/p/k7m2q9xd4b3hn/";
@@ -38,18 +45,22 @@ struct State {
     backup: Mutex<Backup>,
     blobs: Mutex<BTreeSet<String>>,
     page: Mutex<Option<(String, u64)>>,
+    tunnel: mpsc::UnboundedSender<WebSocket>,
+    push: Mutex<FakePush>,
 }
 
 pub struct FakeButlerCloud {
     pub url: String,
     state: Arc<State>,
     task: JoinHandle<()>,
+    tunnel: AsyncMutex<mpsc::UnboundedReceiver<WebSocket>>,
 }
 
 impl FakeButlerCloud {
     pub async fn start() -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let url = format!("http://{}", listener.local_addr()?);
+        let (sender, tunnel) = mpsc::unbounded_channel();
         let state = Arc::new(State {
             seen: Mutex::new(Vec::new()),
             plan: Mutex::new("free".into()),
@@ -59,11 +70,13 @@ impl FakeButlerCloud {
             backup: Mutex::default(),
             blobs: Mutex::new(BTreeSet::new()),
             page: Mutex::new(None),
+            tunnel: sender,
+            push: Mutex::default(),
         });
         let router = Router::new()
             .route(
                 "/v1/canon/spaces/{id}/socket",
-                axum::routing::get(canon_socket),
+                axum::routing::get(canon_socket::canon_socket),
             )
             .fallback(route)
             .layer(DefaultBodyLimit::max(8 * 1024 * 1024 + 32))
@@ -71,7 +84,12 @@ impl FakeButlerCloud {
         let task = tokio::spawn(async move {
             let _ = axum::serve(listener, router).await;
         });
-        Ok(Self { url, state, task })
+        Ok(Self {
+            url,
+            state,
+            task,
+            tunnel: AsyncMutex::new(tunnel),
+        })
     }
 
     pub fn seen(&self) -> Vec<String> {
@@ -118,6 +136,7 @@ async fn route(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
+    upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
     body: Bytes,
 ) -> Response {
     let path = uri.path();
@@ -155,13 +174,19 @@ async fn route(
         return failure(StatusCode::UNAUTHORIZED, "unauthorized");
     };
     let account = account(&email);
-    let device = device(device_id);
     if let Some(path) = path.strip_prefix("/v1/canon/") {
         return state
             .canon
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .route(method, path, uri.query(), &account, &device, &body);
+            .route(
+                method,
+                path,
+                uri.query(),
+                &account,
+                &device(device_id),
+                &body,
+            );
     }
     if let Some(path) = path.strip_prefix("/v1/backup") {
         let quota = match state
@@ -181,29 +206,18 @@ async fn route(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .route(&method, path, &headers, body, quota);
     }
-    authenticated(&state, method, path, &account, &device, &body)
-}
-
-impl State {
-    fn bearer(&self, headers: &HeaderMap) -> Option<(u64, String)> {
-        let id = headers
-            .get("authorization")?
-            .to_str()
-            .ok()?
-            .strip_prefix("Bearer bct_fake")?
-            .parse()
-            .ok()?;
-        let emails = self
-            .emails
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        Some((id, emails.get(&id)?.clone()))
+    if method == Method::GET && path == "/v1/tunnel/connect" {
+        return match upgrade {
+            Ok(upgrade) => {
+                let tunnel = state.tunnel.clone();
+                upgrade.on_upgrade(move |socket| async move {
+                    let _ = tunnel.send(socket);
+                })
+            }
+            Err(rejection) => rejection.into_response(),
+        };
     }
-}
-
-fn account(email: &str) -> Value {
-    let hash = format!("{:x}", Sha256::digest(email.as_bytes()));
-    json!({"id": format!("acc_{}", &hash[..16]), "email": email})
+    authenticated(&state, method, path, &account, &device(device_id), &body)
 }
 
 fn device(id: u64) -> Value {
@@ -224,16 +238,55 @@ fn authenticated(
     body: &[u8],
 ) -> Response {
     match (method, path) {
+        (Method::POST, "/v1/tunnel") => {
+            let plan = state.plan.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            if plan.as_str() == "plus" {
+                Json(json!({"tunnel_id": "tun_0123456789ABCDEFGHJKMNPQRS"})).into_response()
+            } else {
+                failure(StatusCode::FORBIDDEN, "tunnel_not_in_plan")
+            }
+        }
         (Method::GET, "/v1/me") => {
             let plan = state.plan.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
             Json(json!({"account": account, "device": device,
-                "entitlements": {"plan": plan, "status": "active", "renews_at": null, "features": {}}})).into_response()
+                "entitlements": {"plan": plan, "status": "active", "renews_at": null, "features": {"tunnel": plan != "free"}}})).into_response()
         }
         (Method::GET, "/v1/devices") => Json(json!({"devices": [
             {"id": "dev_fake", "name": "Butler", "platform": "macos", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": true},
             {"id": "dev_other", "name": "Other", "platform": "linux", "created_at": "2026-01-01T00:00:00Z", "last_seen_at": null, "current": false}
         ]})).into_response(),
-        (Method::DELETE, "/v1/devices/dev_other") | (Method::POST, "/v1/auth/sign-out") => StatusCode::NO_CONTENT.into_response(),
+        (Method::DELETE, "/v1/tunnel" | "/v1/devices/dev_other")
+        | (Method::POST, "/v1/auth/sign-out") => StatusCode::NO_CONTENT.into_response(),
+        (Method::PUT, "/v1/push/tokens") => {
+            let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+            let mut push = state.push.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            push.registered = input["tokens"].as_array().into_iter().flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect();
+            StatusCode::NO_CONTENT.into_response()
+        }
+        (Method::POST, "/v1/push/send") => {
+            let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+            let mut push = state.push.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            push.sends.push(input.clone());
+            let mut sent = 0;
+            let mut gone = Vec::new();
+            let mut not_registered = Vec::new();
+            for token in input["messages"].as_array().into_iter().flatten()
+                .filter_map(|message| message["to"].as_str())
+            {
+                if !push.registered.contains(token) {
+                    not_registered.push(token);
+                } else if push.gone.as_deref() == Some(token) {
+                    gone.push(token);
+                    push.registered.remove(token);
+                } else {
+                    sent += 1;
+                }
+            }
+            Json(json!({"sent": sent, "gone": gone, "not_registered": not_registered})).into_response()
+        }
         (Method::POST, "/v1/pages") => {
             let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
             let mut page = state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -431,66 +484,4 @@ fn valid_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn pending(invite: &Value, now: &str) -> bool {
-    invite["active"] == true
-        && invite["view"]["expires_at"]
-            .as_str()
-            .is_some_and(|expires| expires > now)
-}
-
-fn timestamp() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
-
-async fn canon_socket(
-    AxumState(state): AxumState<Arc<State>>,
-    Path(id): Path<String>,
-    headers: HeaderMap,
-    upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
-) -> Response {
-    state
-        .seen
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(format!("GET /v1/canon/spaces/{id}/socket"));
-    let Some((_, email)) = state.bearer(&headers) else {
-        return failure(StatusCode::UNAUTHORIZED, "unauthorized");
-    };
-    let account = account(&email);
-    let (tx, mut rx) = mpsc::unbounded_channel();
-    let mut canon = state.canon.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(space) = canon.spaces.get_mut(&id).filter(|space| {
-        space
-            .role(account["id"].as_str().unwrap_or_default())
-            .is_some()
-    }) else {
-        return failure(StatusCode::NOT_FOUND, "not_found");
-    };
-    let Ok(upgrade) = upgrade else {
-        return failure(StatusCode::UPGRADE_REQUIRED, "upgrade_required");
-    };
-    space.sockets.push((email, tx));
-    upgrade.on_upgrade(move |mut socket| async move {
-        loop {
-            tokio::select! {
-                frame = rx.recv() => {
-                    let Some(frame) = frame else { break };
-                    let closing = matches!(frame, Message::Close(_));
-                    if socket.send(frame).await.is_err() || closing {
-                        break;
-                    }
-                }
-                incoming = socket.recv() => match incoming {
-                    Some(Ok(Message::Text(_) | Message::Binary(_))) => {
-                        let _ = socket.send(Message::Close(Some(CloseFrame { code: 1008, reason: "read-only".into() }))).await;
-                        break;
-                    }
-                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
-                    _ => break,
-                },
-            }
-        }
-    })
 }

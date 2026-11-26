@@ -1,16 +1,7 @@
-import { appCopy, getAppLocale } from "@/app/copy";
+import { appCopy } from "@/app/copy";
 import { Button, ListRow, Monitor, SettingsSection, Stack, Tooltip } from "@/butler-ds";
+import { relativeTimeSince } from "@/lib/relativeTime";
 import type { useButlerAccount } from "./hooks/useButlerAccount";
-
-function lastSeen(value: string | null, now: number) {
-  if (!value) return undefined;
-  const elapsed = Math.max(0, now * 60 - Date.parse(value) / 1000);
-  const format = new Intl.RelativeTimeFormat(getAppLocale(), { numeric: "auto" });
-  if (elapsed < 60) return format.format(0, "minute");
-  if (elapsed < 3600) return format.format(-Math.floor(elapsed / 60), "minute");
-  if (elapsed < 86400) return format.format(-Math.floor(elapsed / 3600), "hour");
-  return format.format(-Math.floor(elapsed / 86400), "day");
-}
 
 export function butlerAccountDevicesSection({ account, now }: {
   account: ReturnType<typeof useButlerAccount>;
@@ -26,7 +17,9 @@ export function butlerAccountDevicesSection({ account, now }: {
           <Stack grow minWidth="0">
             <ListRow icon={<Monitor size="md" />} title={device.name}
               description={device.current ? copy.thisDevice : copy.platforms[device.platform] ?? device.platform}
-              meta={lastSeen(device.last_seen_at, now)} />
+              meta={device.last_seen_at
+                ? relativeTimeSince(Math.max(0, now * 60 - Date.parse(device.last_seen_at) / 1000))
+                : undefined} />
           </Stack>
           {!device.current && <Tooltip label={account.busy ? copy.working : copy.revokeDevice(device.name)}>
             <Button size="sm" variant="outline" disabled={account.busy}

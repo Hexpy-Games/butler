@@ -156,15 +156,13 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
 }
 
 async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCloud>>) {
-  const butlerData = enabled ? mkdtempSync(join(tmpdir(), "butler-account-smoke-")) : undefined;
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-account-smoke-"));
   let server: Awaited<ReturnType<typeof createNativeAppServer>> | undefined;
   let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
   let secret = "";
   try {
-    if (butlerData) {
-      mkdirSync(join(butlerData, "gateways"));
-      writeFileSync(join(butlerData, "gateways/app.json"), JSON.stringify({ config: { butlerAccountEnabled: true } }));
-    }
+    mkdirSync(join(butlerData, "gateways"));
+    writeFileSync(join(butlerData, "gateways/app.json"), JSON.stringify({ config: { butlerAccountEnabled: enabled } }));
     server = await createNativeAppServer({ butlerData, uiRoot: resolve("packages/butler-app/client/ui/dist"),
       config: { user: { name: "Smoke", language } }, env: { BUTLER_CLOUD_API_URL: fake.url } });
     secret = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret;
@@ -189,8 +187,8 @@ async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCl
       assert.equal(await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).count(), 0);
       await page.setViewportSize({ width: 1440, height: 900 });
     }
-    await navigation.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
-    await page.getByRole("heading", { name: appCopy.settings.sections.security, exact: true }).waitFor();
+    await navigation.getByRole("button", { name: appCopy.settings.sections.devices, exact: true }).click();
+    await page.getByRole("heading", { name: appCopy.settings.sections.devices, exact: true }).waitFor();
     assert.equal(await section(page, "butler-account").count(), 0);
     if (enabled) {
       await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).click();
@@ -203,7 +201,7 @@ async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCl
   } finally {
     await browser?.close();
     await server?.stop();
-    if (butlerData) rmSync(butlerData, { recursive: true, force: true });
+    rmSync(butlerData, { recursive: true, force: true });
   }
 }
 

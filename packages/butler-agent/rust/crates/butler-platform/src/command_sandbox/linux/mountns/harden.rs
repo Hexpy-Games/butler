@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 fn roots(policy: &Policy) -> Vec<PathBuf> {
     let mut roots = policy.writable.clone();
     roots.extend(policy.project.iter().cloned());
+    roots.extend(policy.extra.iter().cloned());
     outermost(&roots)
 }
 

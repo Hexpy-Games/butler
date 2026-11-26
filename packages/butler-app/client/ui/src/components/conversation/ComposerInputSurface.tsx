@@ -1,6 +1,7 @@
 import { useActiveCanonEpic } from "../canon/useActiveCanonEpic.ts";
-import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { useButlerStore } from "@/app/store.ts";
+import { sessionFromNavigation } from "@/app/utils";
 import type { RefObject } from "react";
 import { ComposerCardExpandedBody } from "@/butler-ds";
 import { ComposerAttachments } from "./ComposerAttachments";
@@ -29,6 +30,10 @@ export function ComposerInputSurface({
   useAppLocale();
   const epic = useActiveCanonEpic();
   const { item, computerName, refresh, remove } = usePendingInstructions();
+  const computerRemoved = useButlerStore(({ navigation, activeChatId }) => {
+    const session = sessionFromNavigation(navigation, activeChatId);
+    return Boolean(session?.computer_id && !session.computer_name);
+  });
   if (authorityDecision && !authorityDecision.composingMessage) {
     return <ComposerAuthorityDecisionSurface decision={authorityDecision} />;
   }
@@ -39,6 +44,8 @@ export function ComposerInputSurface({
     return <PendingInstructionCard key={item.id} {...{ item, refresh, remove }}
       computerName={computerName ?? appCopy.computers.removedComputer} />;
   }
+  const placeholder = computerRemoved ? appCopy.computers.removedComputerSend
+    : authorityDecision ? undefined : planDecision?.instructionPlaceholder ?? (epic ? appCopy.canon.epicPlaceholder : undefined);
   return (
     <>
       <ComposerCardExpandedBody>
@@ -47,10 +54,10 @@ export function ComposerInputSurface({
         ) : planDecision?.editingInstruction ? (
           <ComposerPlanInstructionContext decision={planDecision} />
         ) : null}
-        <ComposerTextArea placeholder={authorityDecision ? undefined : planDecision?.instructionPlaceholder ?? (epic ? appCopy.canon.epicPlaceholder : undefined)} />
+        <ComposerTextArea placeholder={placeholder} />
         <ComposerAttachments />
       </ComposerCardExpandedBody>
-      <ComposerToolbar />
+      <ComposerToolbar computerRemoved={computerRemoved} />
       <ComposerFileInput inputRef={fileInputRef} onFiles={onFiles} />
     </>
   );

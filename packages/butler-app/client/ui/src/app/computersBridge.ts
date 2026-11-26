@@ -1,6 +1,6 @@
 import type { DeleteComputerInput } from "../../../electron/app-security-admin.mjs";
 
-/** Settings → Security → Other computers: main adds the admin credential. */
+/** Settings → Environments: main adds the admin credential. */
 export function computerBridgeCall(method: string, path: string, body: unknown, query?: URLSearchParams): { action: string; input?: unknown } | null {
   const payload = () => typeof body === "string" ? JSON.parse(body) : (body ?? {});
   if (path === "/computers") {

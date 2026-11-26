@@ -37,8 +37,10 @@ export function ButlerAccountSignInDialog({ open, onOpenChange, account }: {
     const result = step === "email" ? await account.start(email.trim()) : await account.verify(email.trim(), code);
     if (!result.ok) { setError(errorMessage(result.code, step)); return; }
     setError("");
-    if (step === "email") setStep("code");
-    else {
+    if (step === "email") {
+      if ("dev_code" in result.value && result.value.dev_code !== undefined) setCode(result.value.dev_code);
+      setStep("code");
+    } else {
       onOpenChange(false);
       notifyStatus(copy.signedIn, { id: "butler-account", tone: "ok" });
     }
@@ -46,6 +48,7 @@ export function ButlerAccountSignInDialog({ open, onOpenChange, account }: {
   async function resend() {
     const result = await account.start(email.trim());
     if (!result.ok) { setError(errorMessage(result.code, step)); return; }
+    if (result.value.dev_code !== undefined) setCode(result.value.dev_code);
     notifyStatus(copy.resent, { id: "butler-account", tone: "ok" });
     setError("");
   }

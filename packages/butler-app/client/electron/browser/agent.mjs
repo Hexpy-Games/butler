@@ -19,6 +19,9 @@ import { devtoolsRead, onLocalPage, watchDevtools } from "./devtools.mjs";
 import { attachView } from "./view-capture.mjs";
 import { loadOutsideNavigation } from "./settled-load.mjs";
 
+/** The hidden App host (no window): the user sees none of its tabs. */
+const HIDDEN_HOST = process.argv.some(arg => arg.startsWith("--butler-browser-host="));
+
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
   // A pop-up the user took somewhere Butler may not go closes instead of returning.
@@ -158,7 +161,15 @@ async function executeCall(browser, frame, tracked) {
     result.steps = Array.from({length: count}, (_, index) => ({index, status, reason: result.reason ?? "browser_refused"}));
     if (status === "unknown") result.observe_required = true;
   }
+  seenByUser(browser, frame, result);
   return drainEvents(browser, frame, result);
+}
+/** What the user sees of the call's tab, read from the App's own window state. */
+function seenByUser(browser, frame, result) {
+  if (!result || typeof result !== "object") return;
+  const tab = browser.tabs.get(typeof result.tab === "string" ? result.tab : frame.tab);
+  if (tab?.owner !== `conversation:${frame.session}`) return;
+  result.seen_by_user = HIDDEN_HOST ? "background" : browser.shown(tab) ? "showing" : "in_pane";
 }
 async function executeFrame(browser, frame) {
   if (browser.disposing || !browser.enabled()) return { status: "refused", reason: "browsing_disabled" };
@@ -184,7 +195,10 @@ async function executeFrame(browser, frame) {
   // A durable wait hands the tab to the user (as a sign-in step does) with a sticky hold; only their hand-back resumes it.
   if (op === "tab.wait") {
     if (!tab.dialog) { if (tab.holder === "user") tab.sticky = true; else controlTab(browser, tab, "user", true); }
-    tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user"; browser.publish();
+    tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user";
+    // A tab handed to the user opens in its conversation's browser pane (the renderer's focus request).
+    if (tab.holder === "user") browser.focusRequest = tab.id;
+    browser.publish();
     return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch };
   }
   if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }

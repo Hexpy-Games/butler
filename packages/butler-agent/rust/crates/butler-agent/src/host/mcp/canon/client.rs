@@ -1,12 +1,18 @@
 //! HTTP only: the stdio process never opens BTCC or runs a second writer.
 use super::*;
-use crate::host::{cli::gateway::running_app_endpoint, service::configuration::data_folder_token};
+use crate::host::{
+    cli::{
+        gateway::{AppEndpoint, running_app_endpoint},
+        remote_relay::socket_request,
+    },
+    service::configuration::data_folder_token,
+};
 use butler_canon::store::sanitize_mcp_client as sanitize;
 use std::time::Duration;
 
 pub(super) struct Client {
     http: butler_log::http::Client,
-    base: String,
+    endpoint: AppEndpoint,
     token: String,
     title: String,
     name: String,
@@ -46,15 +52,19 @@ impl Client {
         if name.is_empty() || title.is_empty() {
             return Err(Error::new("permission", "Client identity required."));
         }
-        let base = running_app_endpoint(&server.data_root, &server.installation, Duration::ZERO)
-            .await
-            .map_err(|_| Error::stopped())?
-            .ok_or_else(Error::stopped)?;
-        let base = base.replace("http://0.0.0.0:", "http://127.0.0.1:");
-        let url = reqwest::Url::parse(&base).map_err(|_| Error::stopped())?;
-        if url.scheme() != "http" || !matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "::1"))
-        {
-            return Err(Error::stopped());
+        let mut endpoint =
+            running_app_endpoint(&server.data_root, &server.installation, Duration::ZERO)
+                .await
+                .map_err(|_| Error::stopped())?
+                .ok_or_else(Error::stopped)?;
+        if let AppEndpoint::Tcp(base) = &mut endpoint {
+            *base = base.replace("http://0.0.0.0:", "http://127.0.0.1:");
+            let url = reqwest::Url::parse(base).map_err(|_| Error::stopped())?;
+            if url.scheme() != "http"
+                || !matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "::1"))
+            {
+                return Err(Error::stopped());
+            }
         }
         let data = server.data_root.clone();
         let token = tokio::task::spawn_blocking(move || data_folder_token(&data))
@@ -68,7 +78,7 @@ impl Client {
             .map_err(|_| Error::stopped())?;
         Ok(Self {
             http,
-            base,
+            endpoint,
             token,
             title,
             name,
@@ -80,19 +90,47 @@ impl Client {
         path: &str,
         body: Option<Value>,
     ) -> Result<Value, Error> {
-        let mut request = self
-            .http
-            .request(method, format!("{}{path}", self.base.trim_end_matches('/')))
-            .bearer_auth(&self.token)
-            .header("X-Butler-Delegate-Client", &self.title)
-            .header("X-Butler-Delegate-Client-Name", &self.name);
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let response = request.send().await.map_err(|_| Error::stopped())?;
-        let status = response.status();
-        let data: Value = response.json().await.map_err(|_| Error::stopped())?;
-        if !status.is_success() {
+        let headers = [
+            ("X-Butler-Delegate-Client", self.title.as_str()),
+            ("X-Butler-Delegate-Client-Name", self.name.as_str()),
+        ];
+        let (status, data): (u16, Value) = match &self.endpoint {
+            AppEndpoint::Tcp(base) => {
+                let mut request = self
+                    .http
+                    .request(method, format!("{}{path}", base.trim_end_matches('/')))
+                    .bearer_auth(&self.token);
+                for (name, value) in headers {
+                    request = request.header(name, value);
+                }
+                if let Some(body) = body {
+                    request = request.json(&body);
+                }
+                let response = request.send().await.map_err(|_| Error::stopped())?;
+                let status = response.status().as_u16();
+                (status, response.json().await.map_err(|_| Error::stopped())?)
+            }
+            AppEndpoint::Remote(socket) => {
+                let body = body.map(|body| body.to_string()).unwrap_or_default();
+                let reply = socket_request(
+                    socket,
+                    method.as_str(),
+                    path,
+                    &self.token,
+                    None,
+                    &headers,
+                    body.as_bytes(),
+                )
+                .await
+                .map_err(|_| Error::stopped())?;
+                let status = reply["status"]
+                    .as_u64()
+                    .and_then(|status| u16::try_from(status).ok())
+                    .ok_or_else(Error::stopped)?;
+                (status, reply["body"].clone())
+            }
+        };
+        if !(200..300).contains(&status) {
             return Err(Error {
                 code: data
                     .pointer("/error/code")

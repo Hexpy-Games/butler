@@ -257,6 +257,7 @@ async fn guided_sweep_uses_command_auth_profile_inventory() -> Result<(), Harnes
     host_environment.insert("PATH".into(), std::env::var("PATH").unwrap());
     let result = owner
         .submit_guided(GuidedCommandInput {
+            computer_environment: Default::default(),
             allowed_folders: Vec::new(),
             extra_write_roots: Vec::new(),
             protected_roots: Vec::new(),

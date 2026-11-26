@@ -5,7 +5,7 @@ import { computerFixtures } from "./computers-fixtures.ts";
 export async function auditComputersFocus(page: Page, audit: (screen: string, selector: string) => Promise<void>) {
   const copy = getAppCopy("ko-KR");
   await page.getByRole("button", { name: copy.sidebar.settings }).first().click();
-  await page.getByRole("button", { name: copy.settings.sections.security, exact: true }).click();
+  await page.getByRole("button", { name: copy.settings.sections.computers, exact: true }).click();
   const scope = '[data-settings-section-id="computers"]';
   const section = page.locator(scope);
   const remove = section.getByRole("button", { name: copy.computers.removeComputer(computerFixtures[0]!.name), exact: true });

@@ -1,17 +1,21 @@
+import type { SecurityView } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Button, QrCode, SettingsField, SettingsSection, Stack, Tooltip, Typo } from "@/butler-ds";
 import { pairingLink } from "./pairingLink";
 import type { usePairingSession } from "./usePairingSession";
 
-export function securityPairingSection({ disabled, addresses, pairing }: {
+export function securityPairingSection({ disabled, addresses, pairing, tunnel }: {
   disabled: boolean;
   addresses: readonly string[];
   pairing: ReturnType<typeof usePairingSession>;
+  tunnel: SecurityView["tunnel"];
 }) {
   const copy = appCopy.settings.security;
   const unavailable = disabled || pairing.busy || Boolean(pairing.code);
   const digits = pairing.busy ? undefined : pairing.code?.code;
-  const link = digits ? pairingLink(addresses, digits) : null;
+  const link = digits ? pairingLink(addresses, digits, tunnel?.enabled && tunnel.public_key && tunnel.tunnel_id
+    ? { publicKey: tunnel.public_key, tunnelId: tunnel.tunnel_id, cloud: tunnel.cloud }
+    : null) : null;
   return (
     <SettingsSection id="device-pairing" kind="form" title={copy.pairDevice}>
       <SettingsField settingId="pairing-code" label={copy.code} controlWidth="full" control={(
@@ -31,9 +35,9 @@ export function securityPairingSection({ disabled, addresses, pairing }: {
           {pairing.invalidated && <Typo.Caption tone="secondary">{copy.invalidated}</Typo.Caption>}
           {pairing.paired && <Typo.Caption tone="success" role="status">{copy.paired}</Typo.Caption>}
           {!digits && (
-            <Tooltip label={unavailable ? copy.working : copy.pairDevice}>
+            <Tooltip label={unavailable ? copy.working : copy.createCode}>
               <Button size="sm" variant="outline" disabled={unavailable} onClick={() => void pairing.issue()}>
-                {copy.pairDevice}
+                {copy.createCode}
               </Button>
             </Tooltip>
           )}

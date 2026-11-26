@@ -5,18 +5,18 @@
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "88fc18a1f44f39f0e3525ae2f019d58324a4c90cff21ac282b497d71a24493ff",
-    "packages/butler-agent/rust/Cargo.lock": "495107eb0cb41155b42f567ff303bd2750453be88f82e896063f2f659dc3c1d1",
+    "packages/butler-agent/rust/Cargo.lock": "7ba7d0dff3d13ec6e41fbc5660ce9d01277c8677181705b2e09fbd2d7beb94e8",
     "packages/butler-agent/rust/Cargo.toml": "987760f70c10f5d8b01e83a91cf1c1a978d390f1695ba8c7a989ccdb8485546d",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "d8d1a971b897a3881bc3cc975e8f10180ec468e2c5d2ca757021bf9dcca235f9",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "c4b86c3dddcce10669a0771f91c9548c5afc98bf9232190054cb32bdd8818dd2",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-backup/Cargo.toml": "06555e94c15ddf44638733ae80fbc320a02531b7e165fe66567210c0c31dde2a",
     "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "6fbaad62c0bdd80654f846a11dffff9538849d496374a0486bb93f973056d92b",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "8980355c6fd1165999243382e2529b44c8e1f4a734b7dfe3b11d6840a87b0b9e",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
-    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "19046d8793921caae7282982a2ba8a7424aae07cc95e873fbefd905c15c3ca43",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "7b3bf038f6c257b5187bf544584cf61b26499be6da2c1226ded87c6c431e6968",
+    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "6bf922df4e2984a9d1f90507615a6fbaf8207da2a2644f0731c6d81f68ec9bcb",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "c30bacc6234f80cb5439e9712741a1e1c70b4505d40d90079749f6d8415a907c",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-mail-connector/Cargo.toml": "d39c21cf1e751b767f37cd97b1ec040361457f37e8f19abca449778284a794aa",
@@ -28175,6 +28175,34 @@
       "copyright": [
         "Copyright 2019- Jake Goulding",
         "Copyright (c) 2019- Jake Goulding"
+      ]
+    },
+    {
+      "id": "rust:snow@0.9.6",
+      "name": "snow",
+      "version": "0.9.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/mcginty/snow/tree/a4be73faa042c5967f39662aa66919f774831a9a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "7fe0ec5fd291b829e20056d50b1c56f947d515655f7eddfe9ce493753550bff0",
+        "dd6a6177e441f98b36c8e0e92e399a90e94fe09c3fed92d8bf21fe00a840a6ed"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-APACHE",
+        "https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2021 Jake McGinty"
       ]
     },
     {

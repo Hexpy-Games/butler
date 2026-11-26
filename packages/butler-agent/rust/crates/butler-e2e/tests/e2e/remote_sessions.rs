@@ -56,8 +56,15 @@ pub(super) async fn remote_chat_on(
 > {
     let (url, script, server) = stub::start().await?;
     let authority = FakeChatGptAuthority::start().await?;
-    let (d, chat) =
-        remote_chat_with_model(id, access, &format!("{url}/v1"), &authority, main_model).await?;
+    let (d, chat) = remote_chat_with_model(
+        id,
+        access,
+        &format!("{url}/v1"),
+        &authority,
+        main_model,
+        false,
+    )
+    .await?;
     Ok((d, script, server, authority, chat))
 }
 
@@ -67,6 +74,7 @@ pub(super) async fn remote_chat_with_model(
     base: &str,
     authority: &FakeChatGptAuthority,
     main_model: bool,
+    system_store: bool,
 ) -> Result<(Deployed, String), HarnessError> {
     let main_env = [("BUTLER_CHATGPT_API_BASE_URL", base)];
     let d = deployed_with(
@@ -76,6 +84,7 @@ pub(super) async fn remote_chat_with_model(
             ("BUTLER_CHATGPT_API_BASE_URL", base),
         ],
         if main_model { main_env.as_slice() } else { &[] },
+        system_store,
     )
     .await?;
     let base = format!("/computers/{}/oauth", d.id);

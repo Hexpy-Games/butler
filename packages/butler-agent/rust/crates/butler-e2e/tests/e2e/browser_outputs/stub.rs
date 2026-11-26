@@ -21,6 +21,7 @@ pub(crate) fn cassette() -> Result<Cassette, HarnessError> {
             ("Many", "many"),
             ("Large", "large"),
             ("Spaced", "site/space +%.html"),
+            ("Vite", "dist"),
         ] {
             let mut steps = Vec::new();
             if prompt == "Tools" {

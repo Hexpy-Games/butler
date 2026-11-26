@@ -44,8 +44,8 @@ try {
         await page.locator('[data-test-class~="composer-card"]').waitFor();
         await page.keyboard.press("ControlOrMeta+k");
         const palette = page.getByRole("dialog", { name: copy.commandPalette.label });
-        await palette.getByRole("combobox").fill(copy.settings.sections.archives);
-        await palette.getByRole("option").filter({ hasText: copy.settings.sections.archives }).click();
+        await palette.getByRole("combobox").fill(copy.settings.sections.archive);
+        await palette.getByRole("option").filter({ hasText: copy.settings.sections.archive }).click();
       };
       await page.goto("http://127.0.0.1:43827/");
       await openArchives();

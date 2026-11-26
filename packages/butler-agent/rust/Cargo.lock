@@ -1071,6 +1071,7 @@ dependencies = [
  "butler-turn",
  "butler-vault",
  "bytes",
+ "chacha20poly1305",
  "chrono",
  "dom_query",
  "flate2",
@@ -1091,6 +1092,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "snow",
  "tar",
  "tiktoken-rs",
  "tokio",
@@ -1119,6 +1121,7 @@ dependencies = [
  "butler-turn",
  "butler-vault",
  "bytes",
+ "chacha20poly1305",
  "chrono",
  "futures-core",
  "futures-util",
@@ -1133,12 +1136,16 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
+ "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "snow",
  "subtle",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "tower",
  "tracing",
@@ -1146,6 +1153,7 @@ dependencies = [
  "unicode-normalization",
  "url",
  "uuid",
+ "x25519-dalek",
  "zeroize",
  "zip",
 ]
@@ -1200,6 +1208,7 @@ dependencies = [
  "unicode-segmentation",
  "url",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -8277,6 +8286,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "snow"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "850948bee068e713b8ab860fe1adc4d109676ab4c3b621fd8147f06b261f2f85"
+dependencies = [
+ "aes-gcm",
+ "blake2",
+ "chacha20poly1305",
+ "curve25519-dalek",
+ "rand_core 0.6.4",
+ "rustc_version",
+ "sha2 0.10.9",
+ "subtle",
 ]
 
 [[package]]

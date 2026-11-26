@@ -23,6 +23,15 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
         .as_array()
         .map(|urls| urls.iter().filter_map(|url| url.as_str()).collect())
         .unwrap_or_default();
+    let tunnel = &view["tunnel"];
+    let relay = (tunnel["enabled"] == true)
+        .then(|| {
+            tunnel["public_key"]
+                .as_str()
+                .zip(tunnel["tunnel_id"].as_str())
+                .map(|(key, id)| (key, id, tunnel["cloud"].as_str()))
+        })
+        .flatten();
     for origin in &origins {
         println!("Address: {origin}");
     }
@@ -33,8 +42,8 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
         let code = issued["code"]
             .as_str()
             .ok_or_else(|| CliError::failed("pairing_unavailable", "Pairing unavailable."))?;
-        if !origins.is_empty() {
-            let link = pair_link(&origins, code);
+        if !origins.is_empty() || relay.is_some() {
+            let link = pair_link(&origins, code, relay);
             println!("\n{}", qr_text(&link)?);
             println!("Link: {link}");
         }
@@ -64,11 +73,18 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
 }
 
 /// The phone app's pairing payload v1; matches the desktop QR.
-fn pair_link(origins: &[&str], code: &str) -> String {
+fn pair_link(origins: &[&str], code: &str, relay: Option<(&str, &str, Option<&str>)>) -> String {
     let mut query = url::form_urlencoded::Serializer::new(String::new());
     query.append_pair("v", "1");
     for origin in origins.iter().take(4) {
         query.append_pair("a", origin);
+    }
+    if let Some((key, id, cloud)) = relay {
+        query.append_pair("k", key);
+        query.append_pair("t", id);
+        if let Some(cloud) = cloud {
+            query.append_pair("u", cloud);
+        }
     }
     query.append_pair("c", code);
     format!("butler://pair?{}", query.finish())

@@ -27,6 +27,8 @@ struct Corpus {
     claim_sql: String,
     source_sql: String,
     args: Vec<SqlValue>,
+    /// `memory_alias_postings` with node, source and surface columns.
+    postings: &'static str,
 }
 
 /// Ranked alias candidates for the cue, and whether the deadline cut the
@@ -49,6 +51,7 @@ pub(super) fn select(
         claim_sql: claim.sql,
         source_sql: source.sql,
         args,
+        postings: crate::cognition::graph::postings_relation(db).map_err(db_error)?,
     };
     let corpus_size = corpus.size(db)?;
     let (documents, partial) = corpus.postings(db, &query_grams, deadline_at, now_millis)?;
@@ -103,13 +106,13 @@ impl Corpus {
     ) -> CognitionResult<(Documents, bool)> {
         let sql = format!(
             "SELECT DISTINCT p.node_id,p.source_id,p.surface_original
-             FROM memory_alias_postings p
+             FROM {} p
              JOIN memory_nodes e ON e.id=p.node_id
              JOIN memory_chunk_sources s ON s.source_id=p.source_id
              JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
              WHERE p.gram IN (SELECT value FROM json_each(?)) AND {} AND {}
              ORDER BY p.node_id,p.source_id,p.surface_original",
-            self.claim_sql, self.source_sql
+            self.postings, self.claim_sql, self.source_sql
         );
         let mut args = vec![SqlValue::Text(
             serde_json::to_string(query_grams).map_err(json_error)?,
@@ -140,10 +143,10 @@ impl Corpus {
                SELECT DISTINCT a.node_id,a.source_id FROM memory_aliases a {ALIAS_JOIN}
                WHERE {} AND {}
              )
-             SELECT p.gram,COUNT(*) FROM memory_alias_postings p
+             SELECT p.gram,COUNT(*) FROM {} p
              CROSS JOIN eligible d ON d.node_id=p.node_id AND d.source_id=p.source_id
              WHERE p.gram IN (SELECT value FROM json_each(?)) GROUP BY p.gram",
-            self.claim_sql, self.source_sql
+            self.claim_sql, self.source_sql, self.postings
         );
         let mut df = grams
             .iter()

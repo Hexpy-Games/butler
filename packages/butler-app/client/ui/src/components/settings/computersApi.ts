@@ -1,9 +1,10 @@
 import { api } from "@/app/api.ts";
 import type { SignInTransport } from "@/components/first-run/useSignIn";
-import type { Computer, ComputerConnection, ComputerModelSource, MainModelKind } from "./computerTypes";
+import type { Computer, ComputerConnection, ComputerModelSource } from "./computerTypes";
 import type { MemoryInventory, MemoryReceipt } from "./memoryTypes";
 import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
 
+export { listComputers } from "@/app/computerEvents.ts";
 export type { Computer } from "./computerTypes";
 
 export type HostKeyCheck = { trusted: true };
@@ -14,19 +15,23 @@ export interface HostTarget {
   key_file?: string;
 }
 
-export async function listComputers(): Promise<{ computers: Computer[]; main_model: MainModelKind }> {
-  return api("/computers");
+interface ComputerInput extends HostTarget {
+  name: string;
+  folder: string;
+  model_source: ComputerModelSource;
+  environment?: Array<{ name: string; value?: string }>;
+  environment_text?: string;
 }
 
 export function checkHostKey(target: HostTarget) {
   return api<HostKeyCheck>("/computers/host-key", { method: "POST", body: JSON.stringify(target) });
 }
 
-export async function addComputer(input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource }): Promise<Computer> {
+export async function addComputer(input: ComputerInput): Promise<Computer> {
   return (await api<{ computer: Computer }>("/computers", { method: "POST", body: JSON.stringify(input) })).computer;
 }
 
-export async function editComputer(id: string, input: HostTarget & { name: string; folder: string; model_source: ComputerModelSource }): Promise<Computer> {
+export async function editComputer(id: string, input: ComputerInput): Promise<Computer> {
   return (await api<{ computer: Computer }>(`/computers/${encodeURIComponent(id)}`, {
     method: "PUT", body: JSON.stringify(input),
   })).computer;

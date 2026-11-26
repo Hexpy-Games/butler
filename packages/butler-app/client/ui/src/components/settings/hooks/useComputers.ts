@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiErrorCode } from "@/app/api.ts";
-import { setComputerConnection, useComputerConnections } from "@/app/computerEvents.ts";
+import { setComputerConnection, useComputerChanges, useComputerConnections } from "@/app/computerEvents.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { ComputerConnection, MainModelKind } from "../computerTypes";
@@ -23,6 +23,7 @@ export function useComputers() {
   const mounted = useRef(false);
   const revision = useRef(0);
   const removing = useRef(false);
+  const changes = useComputerChanges((store) => store.revision);
   const states = useComputerConnections((store) => store.states);
 
   const refresh = useCallback(async () => {
@@ -47,7 +48,7 @@ export function useComputers() {
     mounted.current = true;
     void refresh();
     return () => { mounted.current = false; revision.current++; };
-  }, [refresh]);
+  }, [refresh, changes]);
 
   function statusOf(computer: Computer): ComputerStatus {
     return computerStatus(computer, states[computer.id] ?? "idle");
@@ -74,6 +75,8 @@ export function useComputers() {
       if (code === "computer_unreachable") return "unreachable";
       if (code === "computer_not_synced") {
         notifyStatus(copy.notSynced, { id: "computers", tone: "error" });
+      } else if (code === "computer_busy") {
+        notifyStatus(copy.busy, { id: "computers", tone: "error" });
       } else {
         notifyError(error, copy.removeFailed, { id: "computers" });
       }

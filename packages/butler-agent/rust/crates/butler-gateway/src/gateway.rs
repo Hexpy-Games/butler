@@ -20,6 +20,11 @@ mod crypto;
 mod devices;
 mod event_kinds;
 mod http;
+mod tunnel;
+pub use http::new_tunnel_key;
+#[cfg(feature = "test-support")]
+pub use http::{FixtureOutput, FixtureResponder};
+pub use tunnel::{GatewayTunnelPort, TunnelAccount};
 mod idle_probe;
 mod image_files;
 mod live;
@@ -34,6 +39,7 @@ mod remote_computers;
 mod remote_socket;
 pub use remote_socket::{RemoteSocket, SocketActivity};
 mod security_settings;
+pub(crate) use devices::PUSH_KINDS;
 pub use devices::{DeviceKind, GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
@@ -55,6 +61,7 @@ pub use crate::gateway::message_file_store::AppMessageFiles;
 pub use application::briefing_snapshot::{
     AppSuggestionChat, AppSuggestionContext, read_suggestion_context,
 };
+pub use application::removed_computer_sessions::{RemovedComputerMessage, RemovedComputerTurn};
 pub use application::settings::{
     browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
     producer_log_config, startup_log_config, stored_ui_language_readonly,

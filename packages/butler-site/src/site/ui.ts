@@ -33,7 +33,7 @@ export interface UiCopy {
   };
   planned: { badge: string; reason: string; card: string };
   page: { toc: string; previous: string; next: string; pager: string; copyCode: string };
-  footer: { status: string; designSystem: string; releases: string };
+  footer: { status: string; designSystem: string; releases: string; privacy: string };
   home: { title: string; description: string };
   notFound: { title: string; description: string; home: string };
 }
@@ -64,7 +64,7 @@ export const UI: Record<Locale, UiCopy> = {
     },
     planned: { badge: "예정", reason: "준비 중인 문서", card: "준비 중" },
     page: { toc: "이 페이지", previous: "이전", next: "다음", pager: "이전 및 다음 문서", copyCode: "코드 복사" },
-    footer: { status: "정식 출시 전", designSystem: "디자인 시스템", releases: "릴리스" },
+    footer: { status: "정식 출시 전", designSystem: "디자인 시스템", releases: "릴리스", privacy: "개인정보처리방침" },
     home: {
       title: "Butler 사용 설명서",
       description: "설치부터 모델, 확장, 문제 해결까지 Butler 앱을 쓰는 방법을 정리합니다.",
@@ -100,7 +100,7 @@ export const UI: Record<Locale, UiCopy> = {
     },
     planned: { badge: "Planned", reason: "Page in progress", card: "Coming soon" },
     page: { toc: "On this page", previous: "Previous", next: "Next", pager: "Previous and next pages", copyCode: "Copy code" },
-    footer: { status: "Pre-release", designSystem: "Design system", releases: "Releases" },
+    footer: { status: "Pre-release", designSystem: "Design system", releases: "Releases", privacy: "Privacy" },
     home: {
       title: "Butler manual",
       description: "How to use the Butler app, from installation to models, extensions and troubleshooting.",

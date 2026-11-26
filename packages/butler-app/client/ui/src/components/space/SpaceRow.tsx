@@ -46,7 +46,8 @@ export const SpaceRow = memo(function SpaceRow({ rowKey, flat = false, shortcut 
     <SpaceRowActions row={row} collapsible={row.node.kind !== "session" && !shortcut}
       menuOpen={menuOpen} onMenuChange={setMenuOpen} nested={subtasks.length > 0} />
   );
-  const computerName = row.session?.computer_name;
+  const computerName = row.session?.computer_name
+    ?? (row.session?.computer_id ? appCopy.computers.removedComputer : undefined);
   const label = <SpaceRowLabel row={row} flat={flat} />;
   return (
     <>

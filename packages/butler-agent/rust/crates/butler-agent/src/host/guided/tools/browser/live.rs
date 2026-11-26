@@ -16,7 +16,7 @@ pub(in crate::host::guided::tools) async fn page(
     call: &ModelRoundToolCall,
     occurrence: &str,
     executor: bool,
-) -> Result<Result<Option<LivePage>, Value>, ToolExecutionError> {
+) -> Result<Result<Option<(LivePage, Value)>, Value>, ToolExecutionError> {
     let named = args["tab"].as_str().filter(|tab| !tab.trim().is_empty());
     let url = args["url"].as_str().filter(|url| !url.trim().is_empty());
     if named.is_none() && url.is_none() {
@@ -55,12 +55,15 @@ pub(in crate::host::guided::tools) async fn page(
     .await?;
     let html = read["html"].as_str().filter(|_| read["status"] == "ok");
     Ok(match (html, read["url"].as_str()) {
-        (Some(html), Some(final_url)) => Ok(Some(LivePage {
-            tab: tab.id,
-            epoch: read["epoch"].as_u64().unwrap_or(tab.epoch),
-            final_url: final_url.to_owned(),
-            html: html.to_owned(),
-        })),
+        (Some(html), Some(final_url)) => Ok(Some((
+            LivePage {
+                tab: tab.id,
+                epoch: read["epoch"].as_u64().unwrap_or(tab.epoch),
+                final_url: final_url.to_owned(),
+                html: html.to_owned(),
+            },
+            read["seen_by_user"].clone(),
+        ))),
         _ if named.is_some()
             && read["reason"].is_string()
             && read["status"] != "needs_approval" =>

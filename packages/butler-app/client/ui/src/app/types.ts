@@ -26,6 +26,8 @@ export type SettingsSectionId =
   | "account"
   | "memory"
   | "browser"
+  | "devices"
+  | "computers"
   | "security"
   | "system"
   | "archives"
@@ -643,6 +645,13 @@ export interface SecuritySettingsView {
  * `loopback_required` or `admin_credential_required` otherwise).
  */
 export interface SecurityView {
+  tunnel?: {
+    enabled: boolean;
+    state: "off" | "connecting" | "connected";
+    public_key: string | null;
+    tunnel_id: string | null;
+    cloud: string | null;
+  } | null;
   remote_access_enabled: boolean;
   /** Every listen address, loopback first. */
   bind_addresses: string[];
@@ -1303,6 +1312,7 @@ export interface SessionViewBridgeError {
   existing?: import("../../../../../butler-protocol/src/canon-contracts.ts").CanonTag;
   current?: { revision: number };
   hook_reason?: string;
+  line?: number;
   schema: "butler.app.bridge-error.v1";
   code: string;
   status?: number;

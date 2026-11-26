@@ -39,12 +39,15 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
   const key = `${locale}-${theme}-1440`;
   await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: locale, appearance_theme: theme,
     wallpaper: { source: { kind: "none" }, motion: "paused", pauseOnBattery: false } }) });
-  await open("security", copy.settings.sections.security);
+  await open("devices", copy.settings.sections.devices);
   await section(page, "security-advanced").waitFor();
+  await open("models", copy.settings.sections.models);
+  await section(page, "saved-keys").waitFor();
+  await open("security", copy.settings.sections.security);
   assert.equal(await section(page, "sign-ins").count(), 0);
   assert.equal(await section(page, "browser-import").count(), 0);
   assert.equal(await section(page, "headless-browser").count(), 0);
-  for (const id of ["grants", "saved-keys"]) await section(page, id).waitFor();
+  await section(page, "grants").waitFor();
   await capture(`security-${key}`);
   {
     await open("browser", copy.settings.sections.browser);
@@ -72,8 +75,8 @@ async function matrix(locale: "ko" | "en", theme: "light" | "dark") {
     await page.getByRole("option", { name: defaultLabel, exact: true }).click();
     await select.getByText(defaultLabel, { exact: true }).waitFor();
     await capture(`browser-${key}`);
-    const group = page.getByText(copy.settings.groups.appAndSystem, { exact: true }).locator("..");
-    assert(await group.count(), "app and system group remains visible");
+    const group = page.getByRole("navigation", { name: copy.settings.groups.devicesAndSecurity, exact: true });
+    assert(await group.count(), "devices and security group remains visible");
     for (const link of ["signin", "security/sign-ins", "browser-import", "로그인 저장"]) {
       await open(link, copy.settings.sections.browser);
       await section(page, "browser-import").waitFor();

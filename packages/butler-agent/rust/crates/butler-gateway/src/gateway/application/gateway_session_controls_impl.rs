@@ -6,18 +6,20 @@ impl crate::gateway::GatewaySessionControls for AppApplication {
         Box::pin(async move { this.session_computer_owned(session_id).await })
     }
 
+    fn project_transferred(
+        &self,
+        chat_id: String,
+        turns: Vec<crate::gateway::RemovedComputerTurn>,
+    ) -> ApplicationFuture<()> {
+        let this = self.clone_handle();
+        Box::pin(async move { this.project_transferred(chat_id, turns).await })
+    }
+
     fn browser_download_context(&self, session_id: String) -> ApplicationFuture<Value> {
         let this = self.clone_handle();
         Box::pin(async move { this.browser_download_context_owned(session_id).await })
     }
 
-    fn browser_download_published(
-        &self,
-        output: butler_runtime::outputs::Output,
-    ) -> ApplicationFuture<()> {
-        let this = self.clone_handle();
-        Box::pin(async move { this.browser_download_published_owned(output).await })
-    }
     fn get_session_controls_view(
         &self,
         session_id: String,

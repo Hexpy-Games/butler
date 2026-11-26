@@ -7,11 +7,12 @@ use butler_e2e::e2e::{
     fake_chatgpt::FakeChatGptAuthority,
     harness_error,
     install_fixture::{build_archive, write_update_manifest},
+    listening_tcp_ports,
     remote_home::versions_on_disk,
     scenario::{Scenario, Setup},
     security::AdminClient,
     sshd::{TestSshd, user_ssh_config},
-    stop_intent::StopOnDrop,
+    stop_intent::{StopOnDrop, instance_record},
 };
 use butler_platform::local_socket;
 use reqwest::Method;
@@ -24,7 +25,8 @@ use std::{
     process::Command,
     time::{Duration, Instant},
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+mod socket;
+pub(super) use socket::socket;
 
 pub(super) struct Deployed {
     pub(super) s: Scenario,
@@ -37,13 +39,14 @@ pub(super) struct Deployed {
 }
 
 pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
-    deployed_with(id, env, &[]).await
+    deployed_with(id, env, &[], false).await
 }
 
 pub(super) async fn deployed_with(
     id: &str,
     env: &[(&str, &str)],
     main_env: &[(&str, &str)],
+    system_store: bool,
 ) -> Result<Deployed, HarnessError> {
     let setup = Setup::new(id)?;
     let mut launch = Launch::new(&setup.sandbox)?;
@@ -79,12 +82,22 @@ pub(super) async fn deployed_with(
     for (key, value) in main_env {
         setup = setup.env(key, *value);
     }
+    if system_store {
+        butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
+        setup = setup.env("BUTLER_SECRET_STORE", "");
+    }
     let home = setup.sandbox.home.clone();
     let setup = setup.env(
         butler_platform::remote_ssh::CONFIG_FIXTURE,
         user_ssh_config(&home)?.to_string_lossy(),
     );
     let s = setup.start().await?;
+    if system_store {
+        let config_path = s.sandbox.data.join("butler.config.json");
+        let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?)?;
+        config["secrets"] = json!({"store": "system"});
+        fs::write(config_path, serde_json::to_vec(&config)?)?;
+    }
     let health = s.gw.get("/health").await?;
     let version = health.data()["agent_version"]
         .as_str()
@@ -144,43 +157,6 @@ pub(super) async fn deployed_with(
     })
 }
 
-pub(super) async fn socket(
-    remote: &Launch,
-    method: &str,
-    route: &str,
-    body: Option<&Value>,
-) -> Result<(u16, Value), HarnessError> {
-    let token = remote
-        .data_folder_token()
-        .ok_or_else(|| harness_error("no local token"))?;
-    let admin = remote
-        .admin_credential()
-        .ok_or_else(|| harness_error("no admin credential"))?;
-    let mut stream = local_socket::connect(&remote.data.join("remote/agent.sock")).await?;
-    let body = body.map(ToString::to_string).unwrap_or_default();
-    let request = format!(
-        "{method} http://agent{route} HTTP/1.1\r\nHost: agent\r\nAuthorization: Bearer {token}\r\nX-Butler-Admin: {admin}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    stream.write_all(request.as_bytes()).await?;
-    let mut response = String::new();
-    stream.read_to_string(&mut response).await?;
-    let (headers, payload) = response
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| harness_error("invalid socket response"))?;
-    let status = headers
-        .split_whitespace()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| harness_error("invalid status"))?;
-    let body = if payload.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_str(payload)?
-    };
-    Ok((status, body))
-}
-
 #[tokio::test]
 async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -233,12 +209,8 @@ async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), H
             return Err(harness_error("computer identity changed after restart"));
         }
         let body = json!({"provider_id":"openai", "api_key": uuid::Uuid::new_v4().to_string()});
-        assert_eq!(
-            socket(&remote.0, "POST", "/credentials", Some(&body))
-                .await?
-                .0,
-            201
-        );
+        let (status, _) = socket(&remote.0, "POST", "/credentials", Some(&body)).await?;
+        assert_eq!(status, 201);
     }
     fs::write(public_path, Identity::generate().to_public().to_string())?;
     drop(StopOnDrop(remote.0.clone()));
@@ -266,8 +238,13 @@ async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), H
             }
         }
     }
+    let path = format!("/computers/{id}");
+    let refused = api.send(Method::DELETE, &path, None, &[]).await?;
+    assert_eq!(refused.status, 409);
+    assert_eq!(refused.error_code(), Some("computer_unreachable"));
+
     let deleted = api
-        .send(Method::DELETE, &format!("/computers/{id}"), None, &[])
+        .send(Method::DELETE, &format!("{path}?force=true"), None, &[])
         .await?;
     assert_eq!(deleted.status, 200);
     let homes: Value = serde_json::from_slice(&fs::read(homes_path)?)?;
@@ -409,14 +386,24 @@ async fn computer_chatgpt_sign_in_runs_on_the_computer() -> Result<(), HarnessEr
     assert_eq!(pending.status, 200);
     let flow = pending.data();
     assert_eq!(flow["status"], "pending");
+    let record =
+        instance_record(&remote.0.data).ok_or_else(|| harness_error("no remote service record"))?;
+    let pid = u32::try_from(
+        record["pid"]
+            .as_u64()
+            .ok_or_else(|| harness_error("no remote pid"))?,
+    )
+    .map_err(|_| harness_error("invalid remote pid"))?;
+    assert_eq!(listening_tcp_ports(pid).await?, Default::default());
     let main_port = url::Url::parse(flow["redirect_uri"].as_str().unwrap())
         .unwrap()
         .port()
         .unwrap();
-    let remote_port = u16::try_from(flow["callback_port"].as_u64().unwrap()).unwrap();
-    assert_ne!(main_port, remote_port);
+    assert!(flow.get("callback_port").is_none());
+    assert_eq!(flow["callback_socket"], true);
+    let socket = remote.0.data.join("remote/oauth.sock");
     assert!(TcpStream::connect(("127.0.0.1", main_port)).is_ok());
-    assert!(TcpStream::connect(("127.0.0.1", remote_port)).is_ok());
+    assert!(local_socket::connect(&socket).await.is_ok());
     let flow_id = flow["flow_id"].as_str().unwrap();
     let cancel = api
         .send(
@@ -428,9 +415,8 @@ async fn computer_chatgpt_sign_in_runs_on_the_computer() -> Result<(), HarnessEr
         .await?;
     assert_eq!(cancel.data()["status"], "cancelled");
     let deadline = Instant::now() + Duration::from_secs(5);
-    while [main_port, remote_port]
-        .into_iter()
-        .any(|p| TcpStream::connect(("127.0.0.1", p)).is_ok())
+    while TcpStream::connect(("127.0.0.1", main_port)).is_ok()
+        || local_socket::connect(&socket).await.is_ok()
     {
         assert!(
             Instant::now() < deadline,
@@ -438,6 +424,10 @@ async fn computer_chatgpt_sign_in_runs_on_the_computer() -> Result<(), HarnessEr
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    assert!(matches!(
+        local_socket::connect(&socket).await,
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused
+    ));
 
     let pending = api.send(Method::POST, &start, Some(json!({})), &[]).await?;
     let flow = pending.data();

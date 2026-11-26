@@ -110,14 +110,15 @@ impl ModelConfiguration {
         let secret = SecretText::new(secret.to_owned());
         let now = self.clock.now_iso();
         let (updated, view) = tokio::task::spawn_blocking(move || {
-            let mut map = sealed::read_map().map_err(CredentialStoreError::Sealed)?;
             let key = format!("{}/{}", draft.provider_id, draft.id);
             butler_log::register_secret_for(
                 &format!("credential:{}:{}", draft.provider_id, draft.id),
                 secret.expose(),
             );
-            let old = map.insert(key.clone(), secret.expose().to_owned());
-            sealed::write_map(&map).map_err(CredentialStoreError::Sealed)?;
+            let old =
+                sealed::update_map(|map| Some(map.insert(key.clone(), secret.expose().to_owned())))
+                    .map_err(CredentialStoreError::Sealed)?
+                    .flatten();
             let record = CredentialRecord {
                 fingerprint: secret_store::fingerprint(&root, &draft.provider_id, secret.expose()),
                 masked_value: credentials::mask(secret.expose()),
@@ -130,12 +131,15 @@ impl ModelConfiguration {
             };
             updated.put(&record);
             if let Err(error) = updated.save(&root.join(CREDENTIALS_FILE)) {
-                if let Some(old) = old {
-                    map.insert(key, old);
-                } else {
-                    map.remove(&key);
-                }
-                sealed::write_map(&map).map_err(CredentialStoreError::Sealed)?;
+                sealed::update_map(|map| {
+                    if let Some(old) = old {
+                        map.insert(key, old);
+                    } else {
+                        map.remove(&key);
+                    }
+                    Some(())
+                })
+                .map_err(CredentialStoreError::Sealed)?;
                 return Err(CredentialError::from(error));
             }
             Ok((updated, record.view()))
@@ -296,13 +300,7 @@ async fn remove_sealed_secret(removal: &PendingRemoval, unused: bool) -> bool {
         return true;
     }
     let key = format!("{}/{}", removal.provider_id, removal.id);
-    tokio::task::spawn_blocking(move || {
-        let mut map = sealed::read_map()?;
-        if map.remove(&key).is_some() {
-            sealed::write_map(&map)?;
-        }
-        Ok::<_, sealed::SealedError>(())
-    })
-    .await
-    .is_ok_and(|result| result.is_ok())
+    tokio::task::spawn_blocking(move || sealed::update_map(|map| map.remove(&key)))
+        .await
+        .is_ok_and(|result| result.is_ok())
 }

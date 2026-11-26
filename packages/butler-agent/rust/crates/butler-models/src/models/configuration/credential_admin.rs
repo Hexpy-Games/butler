@@ -47,6 +47,8 @@ pub enum CredentialError {
     /// The key's store failed, refused access or is unavailable.
     #[error("The API key could not be kept in the credential store.")]
     Store(#[source] CredentialStoreError),
+    #[error("Environment variable values cannot be stored securely on this device.")]
+    ComputerEnvStoreUnavailable,
     /// The record names a store entry that is gone.
     #[error("The saved API key is missing from the credential store. Replace it.")]
     SecretMissing,
@@ -65,6 +67,7 @@ impl CredentialError {
             Self::InUse { .. } => "credential_in_use",
             Self::Check(error) => error.code(),
             Self::Store(error) => error.code(),
+            Self::ComputerEnvStoreUnavailable => "computer_env_store_unavailable",
             Self::SecretMissing => "credential_secret_missing",
             Self::File(ModelCatalogError::Rejected(_)) => "credential_file_invalid",
             Self::File(_) => "credential_file_failed",

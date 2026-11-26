@@ -105,6 +105,16 @@ contextBridge.executeInMainWorld({ func: (isAgent) => {
   HTMLInputElement.prototype.showPicker = function () { if (this.type === "file") choose(this); else showPicker.call(this); };
   Object.defineProperty(window, "print", { configurable: false, value: () => { window.__butlerPageControl("print"); } });
 }, args: [agent] });
+// No passkey UI on this OS: end WebAuthn requests the way a user cancel does, so the site offers its other sign-in methods.
+if (process.argv.includes("--butler-no-passkey-ui")) contextBridge.executeInMainWorld({ func: () => {
+  const { create, get } = CredentialsContainer.prototype;
+  const refuse = method => function (options) {
+    if (options?.publicKey) return Promise.reject(new DOMException("Passkeys are not available here.", "NotAllowedError"));
+    return method.call(this, options);
+  };
+  CredentialsContainer.prototype.create = refuse(create);
+  CredentialsContainer.prototype.get = refuse(get);
+} });
 // No page API: only main can send source into this sandboxed, isolated world.
 const { webFrame }=require("electron");
 const nonce=Array.from(crypto.getRandomValues(new Uint32Array(4)), n=>n.toString(16)).join("-");

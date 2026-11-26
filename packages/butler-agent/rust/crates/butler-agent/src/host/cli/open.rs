@@ -122,6 +122,12 @@ async fn open(
                 "Butler is not running. Start it with `butler start`, then run `butler open` again.",
             )
         })?;
+    let super::gateway::AppEndpoint::Tcp(endpoint) = endpoint else {
+        return Err(CliError::failed(
+            "butler_remote_mode",
+            "Open this computer from the main Butler.",
+        ));
+    };
     let link = request_link(&endpoint, &data_root).await?;
     let opened = !options.no_browser && open_in_browser(&link.url);
     let lead = if opened {

@@ -8,6 +8,7 @@ export type MultilineSendBehavior =
 
 interface UseComposerKeyboardProps {
   isComposing: boolean;
+  sendDisabled?: boolean;
   multilineSendBehavior?: MultilineSendBehavior | string;
   setModelMenuOpen: (open: boolean) => void;
   setAccessMenuOpen: (open: boolean) => void;
@@ -27,6 +28,7 @@ export function shouldSubmitComposerEnter(input: {
 
 export function useComposerKeyboard({
   isComposing,
+  sendDisabled,
   multilineSendBehavior,
   setModelMenuOpen,
   setAccessMenuOpen,
@@ -52,11 +54,12 @@ export function useComposerKeyboard({
         })
       ) {
         event.preventDefault();
-        submit(event);
+        if (!sendDisabled) submit(event);
       }
     },
     [
       isComposing,
+      sendDisabled,
       multilineSendBehavior,
       submit,
       setModelMenuOpen,

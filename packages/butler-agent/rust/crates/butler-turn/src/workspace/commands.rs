@@ -15,7 +15,7 @@ use process::{ProcessHost, SystemProcesses};
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -51,6 +51,7 @@ pub struct GuidedCommandInput {
     pub timeout_ms: Option<f64>,
     pub access: GuidedAccess,
     pub host_environment: HashMap<String, String>,
+    pub computer_environment: Arc<BTreeMap<String, String>>,
     pub abort: CancellationToken,
 }
 
@@ -181,8 +182,9 @@ impl Commands {
     pub fn tool_environment(
         host: &HashMap<String, String>,
         butler_data: &std::path::Path,
+        computer: &BTreeMap<String, String>,
     ) -> Result<HashMap<String, String>, CommandError> {
-        environment::guided_environment(host, butler_data)
+        environment::guided_environment(host, butler_data, computer)
     }
     /// An owner that runs real processes.
     pub fn new() -> Self {

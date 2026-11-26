@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import type { MobileCopy } from "../../../butler-i18n/src/index.ts";
 import { showToast } from "@/ds";
-import { explainLocalNetwork, pairAndOpenHome, prefillOrigin } from "./connect";
+import { explainLocalNetwork, pairAndOpenHome, pairAnyAndOpenHome } from "./connect";
 import { codeDigits } from "./pair";
 import { parsePairLink, type PairLinkParams } from "./pairLink";
 import { butlerOrigin } from "./probe";
@@ -30,25 +30,38 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
       if (explainLocalNetwork(problem, origin)) setExplainer(true);
     }
   }, [copy]);
-  const { v, a, c } = params;
+  const { v, a, c, k, t, u } = params;
   useEffect(() => {
-    const link = parsePairLink({ v, a, c });
+    const link = parsePairLink({ v, a, c, k, t, u });
     if (!link) return;
-    router.setParams({ v: undefined, a: undefined, c: undefined });
+    router.setParams({ v: undefined, a: undefined, c: undefined, k: undefined, t: undefined, u: undefined });
     if (link.kind === "update_app") {
       showToast({ message: copy.pair.updateApp, tone: "warning" });
       return;
     }
     setCode(link.code ?? "");
     if (link.kind === "pair") {
-      const first = link.origins[0];
-      setAddress(first);
-      void prefillOrigin(link.origins).then(origin => setAddress(current => current === first ? origin : current));
+      setAddress(link.origins[0] ?? "");
+      setAddressError(undefined);
+      setCodeError(undefined);
+      setConnecting(true);
+      void pairAnyAndOpenHome(link).then(failure => {
+        if (!failure) return;
+        const { origin, problem, relay } = failure;
+        setConnecting(false);
+        setAddress(origin);
+        if (problem === "invalidCode") setCodeError(copy.problems.invalidCode);
+        else if (relay) showToast({ message: copy.problems[problem], tone: "error" });
+        else {
+          setAddressError(copy.problems[problem]);
+          if (explainLocalNetwork(problem, origin)) setExplainer(true);
+        }
+      });
       return;
     }
     setAddress(link.origin ?? "");
     showToast({ message: copy.pair.linkInvalid, tone: "warning" });
-  }, [v, a, c, copy, submit]);
+  }, [v, a, c, k, t, u, copy]);
   return {
     address, code, addressError, codeError, connecting, explainer,
     setAddress(t: string) { setAddress(t); setAddressError(undefined); },

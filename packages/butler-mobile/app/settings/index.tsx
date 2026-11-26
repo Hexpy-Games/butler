@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
+import { lanAddresses } from "@/connection/route";
 import { useConversation } from "@/conversation/live";
 import { Button, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
@@ -11,7 +12,7 @@ import { SETTINGS_GROUPS } from "@/settings/sections";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
 const SECTION_ICONS = {
-  general: icons.SlidersHorizontal, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
+  general: icons.SlidersHorizontal, notifications: icons.Bell, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
   updates: icons.RefreshCcw, usage: icons.Database, browser: icons.Globe2, security: icons.Lock,
   archives: icons.Archive, about: icons.Document,
 } satisfies Record<(typeof SETTINGS_GROUPS)[number]["ids"][number], IconGlyph>;
@@ -19,11 +20,12 @@ const SECTION_ICONS = {
 export default function Settings() {
   const copy = useMobileCopy();
   const S = getAppCopy(useAppLocale()).settings;
+  const sections = { ...S.sections, notifications: copy.settings.notifications };
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
-  const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
+  const computer = pairing ? pairing.computerName ?? lanAddresses(pairing)[0]?.replace(/^[^:]+:\/\//, "") : undefined;
   const [open, setOpen] = useState(false);
   const leaving = useRef(false);
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
@@ -34,11 +36,11 @@ export default function Settings() {
     <Stack.Screen options={{ ...useHeaderOptions(), title: copy.settings.title }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
-      {pairing ? <ListGroup label={copy.settings.computer}>
-        <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
+      {computer ? <ListGroup label={copy.settings.computer}>
+        <ListRow icon={icons.Computer} title={computer} />
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
-        {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}
+        {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={sections[id]}
           navigates onPress={() => router.push(`/settings/${id}`)} />)}
       </ListGroup>)}
       <ListGroup>

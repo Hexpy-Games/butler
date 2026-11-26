@@ -2,10 +2,12 @@ import { GatewayError, readEnvelope } from "./envelope.ts";
 import type { ByteReader, GatewayClient } from "./gateway.ts";
 import { createSseParser } from "./sse.ts";
 
+declare const AbortController: new () => { readonly signal: { readonly aborted: boolean }; abort(): void };
+
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 export const LIVE_OPEN_DEADLINE_MS = 30_000;
-export const LIVE_SIGNAL_DEADLINE_MS = 45_000; // server heartbeat every 15 s
+export const LIVE_SIGNAL_DEADLINE_MS = 45_000; // server heartbeat every 30 s
 export const LIVE_STABLE_CONNECTION_MS = 30_000;
 
 /** 1 s doubling to 30 s by consecutive failures (the web client's rule, moved here). */
@@ -32,7 +34,7 @@ export interface LiveConnectionOptions {
   onReconcile(): void; // stream.reconcile_required: refetch every view
   onRecovered(): void; // first open after a loss: refetch every view
   onLostChange(lost: boolean): void; // only on change
-  onError?(error: GatewayError): void; // non-2xx answer to the live request (e.g. revoked device)
+  onError?(error: GatewayError): void; // a non-2xx answer to the live request, or a GatewayError thrown by the transport
 }
 export interface LiveConnection {
   readonly cursor: number;
@@ -47,7 +49,8 @@ export function connectLive(options: LiveConnectionOptions): LiveConnection {
   let cursor = options.cursor;
   let closed = false, paused = false, lost = false;
   let generation = 0, attempts = 0, failures = 0;
-  let abort: { aborted: boolean } | undefined, reader: ByteReader | undefined;
+  let abort: InstanceType<typeof AbortController> | null = null;
+  let reader: ByteReader | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let deadline: ReturnType<typeof setTimeout> | undefined, stableTimer: ReturnType<typeof setTimeout> | undefined;
   const setLost = (value: boolean) => { if (lost !== value) { lost = value; options.onLostChange(value); } };
@@ -55,7 +58,8 @@ export function connectLive(options: LiveConnectionOptions): LiveConnection {
     generation++;
     clearTimeout(retryTimer); clearTimeout(deadline); clearTimeout(stableTimer);
     retryTimer = deadline = stableTimer = undefined;
-    if (abort) abort.aborted = true;
+    abort?.abort();
+    abort = null;
     void reader?.cancel().catch(() => {});
     reader = undefined;
   };
@@ -68,12 +72,12 @@ export function connectLive(options: LiveConnectionOptions): LiveConnection {
     tearDown(); setLost(true);
     const current = generation, recovering = attempts++ > 0;
     const isCurrent = () => !closed && !paused && current === generation;
-    const signal = { aborted: false };
-    abort = signal;
+    const controller = new AbortController();
+    abort = controller;
     const disconnect = () => { if (isCurrent()) fail(); };
     deadline = setTimeout(disconnect, LIVE_OPEN_DEADLINE_MS);
     try {
-      const response = await options.client.openLiveEvents(cursor, signal);
+      const response = await options.client.openLiveEvents(cursor, controller.signal);
       if (!isCurrent()) return;
       if (!response.ok) {
         let error: GatewayError | undefined;
@@ -108,7 +112,10 @@ export function connectLive(options: LiveConnectionOptions): LiveConnection {
           else options.onEvent(event);
         }
       }
-    } catch { disconnect(); }
+    } catch (cause) {
+      if (cause instanceof GatewayError && isCurrent()) options.onError?.(cause);
+      disconnect();
+    }
   };
   void connect();
   return {

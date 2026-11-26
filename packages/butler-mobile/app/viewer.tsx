@@ -9,11 +9,11 @@ import { ViewerBody } from "@/outputs/ViewerBody";
 
 export default function Viewer() {
   const target = paramsTarget(useLocalSearchParams<ViewerParams>());
-  const { pairing, client } = useConversation();
+  const { access, client } = useConversation();
   const M = useMobileCopy();
   const share = async () => {
     try {
-      if (target.kind === "file") await shareFile(pairing!, `/message-files/${encodeURIComponent(target.id)}`, target.name, target.title);
+      if (target.kind === "file") await shareFile(access!, `/message-files/${encodeURIComponent(target.id)}`, target.name, target.title);
       if (target.kind === "doc") {
         const { body } = await client!.request<{ body: string }>(`/documents/${encodeURIComponent(target.id)}`);
         await shareText(markdownFileName(target.title), body, target.title);

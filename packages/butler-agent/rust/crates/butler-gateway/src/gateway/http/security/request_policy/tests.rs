@@ -41,11 +41,11 @@ fn policy() -> RequestPolicy {
 }
 
 /// Security boundary: the Host names the gateway answers, the names
-/// Settings and the CLI may add to them, and the addresses remote access
-/// may bind.
+/// Settings and the CLI may add to them, the addresses remote access
+/// may bind, and the requests that qualify as local.
 // test-category: security
 #[test]
-fn host_allowlist_is_loopback_with_port_plus_configured_names() {
+fn host_allowlist_and_local_client_policy() {
     let policy = policy();
     let cases = [
         ("127.0.0.1:18765", true),
@@ -115,14 +115,8 @@ fn host_allowlist_is_loopback_with_port_plus_configured_names() {
     for (ip, lan) in cases {
         assert_eq!(is_lan_address(ip.parse().unwrap()), lan, "{ip}");
     }
-}
 
-/// Security boundary: the Host names browsers send Fetch Metadata to,
-/// and the clients that count as this computer's for Settings →
-/// Security (with the admin credential, checked separately).
-// test-category: security
-#[test]
-fn loopback_hosts_and_local_clients() {
+    // Fetch Metadata checks loopback Host names and Settings checks local clients.
     let cases = [
         ("127.0.0.1:18765", true),
         ("LOCALHOST:18765", true),

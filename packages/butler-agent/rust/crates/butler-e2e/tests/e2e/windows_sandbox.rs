@@ -9,6 +9,7 @@ macro_rules! setup_complete {
         }
     };
 }
+mod allowed_folders;
 mod boundaries;
 mod bundle;
 mod language;

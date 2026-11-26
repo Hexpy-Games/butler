@@ -1,6 +1,7 @@
 //! A remote session reads the main's memory: its instructions in the prompt,
 //! and searches the main answers while connected.
 mod reset;
+mod tool_steps;
 mod transcripts;
 
 use super::{

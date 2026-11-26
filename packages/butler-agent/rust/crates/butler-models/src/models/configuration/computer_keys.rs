@@ -21,22 +21,27 @@ pub(super) fn homes(root: &Path) -> io::Result<BTreeMap<String, String>> {
     }
 }
 
+pub(super) async fn read_homes(root: &Path) -> Result<BTreeMap<String, String>, CredentialError> {
+    let folder = root.to_owned();
+    spawn_blocking(move || homes(&folder))
+        .await
+        .map_err(CredentialStoreError::Interrupted)?
+        .map_err(|source| ModelCatalogError::Storage {
+            message: "Could not use the computer key homes file.",
+            source: source.into(),
+        })
+        .map_err(CredentialError::from)
+}
+
 impl ModelConfiguration {
     pub async fn computer_identity(
         &self,
         id: &str,
         root: &Path,
+        require_secure_store: bool,
     ) -> Result<SecretText, CredentialError> {
         let _write = self.configuration_writes.acquire().await;
-        let folder = root.to_owned();
-        let file_error = |source: io::Error| ModelCatalogError::Storage {
-            message: "Could not use the computer key homes file.",
-            source: source.into(),
-        };
-        let mut homes = spawn_blocking(move || homes(&folder))
-            .await
-            .map_err(CredentialStoreError::Interrupted)?
-            .map_err(file_error)?;
+        let mut homes = read_homes(root).await?;
         let vault_id = format!("computer_key/{id}");
         let identity = if let Some(home) = homes.get(id) {
             if home == "vault" {
@@ -51,6 +56,9 @@ impl ModelConfiguration {
             } else {
                 let backend =
                     SecretBackend::from_name(home).ok_or(CredentialStoreError::ForeignStore)?;
+                if require_secure_store && backend == SecretBackend::FallbackFile {
+                    return Err(CredentialError::ComputerEnvStoreUnavailable);
+                }
                 let store = self.secrets.holding(root, backend).await?;
                 let key = secret_store::key(root, backend, "computer_key", id)
                     .map_err(CredentialStoreError::from)?;
@@ -68,6 +76,9 @@ impl ModelConfiguration {
             } else {
                 let target = self.secrets.target(root).await?;
                 let backend = target.store.backend();
+                if require_secure_store && backend == SecretBackend::FallbackFile {
+                    return Err(CredentialError::ComputerEnvStoreUnavailable);
+                }
                 let key = secret_store::key(root, backend, "computer_key", id)
                     .map_err(CredentialStoreError::from)?;
                 self.secrets
@@ -87,7 +98,10 @@ impl ModelConfiguration {
             })
             .await
             .map_err(CredentialStoreError::Interrupted)?
-            .map_err(file_error)?;
+            .map_err(|source| ModelCatalogError::Storage {
+                message: "Could not use the computer key homes file.",
+                source: source.into(),
+            })?;
             identity
         };
         butler_log::register_secret(identity.expose());
@@ -100,18 +114,11 @@ impl ModelConfiguration {
         root: &Path,
     ) -> Result<(), CredentialError> {
         let _write = self.configuration_writes.acquire().await;
-        let folder = root.to_owned();
-        let file_error = |source: io::Error| ModelCatalogError::Storage {
-            message: "Could not use the computer key homes file.",
-            source: source.into(),
-        };
-        let mut homes = spawn_blocking(move || homes(&folder))
-            .await
-            .map_err(CredentialStoreError::Interrupted)?
-            .map_err(file_error)?;
+        let mut homes = read_homes(root).await?;
         let Some(home) = homes.remove(id) else {
             return Ok(());
         };
+        self.write_environment_item(id, root, &home, None).await?;
         if home == "vault" {
             let vault = self
                 .secrets
@@ -140,7 +147,10 @@ impl ModelConfiguration {
         })
         .await
         .map_err(CredentialStoreError::Interrupted)?
-        .map_err(file_error)?;
+        .map_err(|source| ModelCatalogError::Storage {
+            message: "Could not use the computer key homes file.",
+            source: source.into(),
+        })?;
         Ok(())
     }
 }

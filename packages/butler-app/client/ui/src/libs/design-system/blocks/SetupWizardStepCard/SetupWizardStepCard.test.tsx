@@ -7,18 +7,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { SetupWizardShell } from "../SetupWizardShell";
 import { SetupWizardStepAction, SetupWizardStepCard } from "./SetupWizardStepCard";
 
-const GLOBAL_KEYS = ["window", "document", "navigator", "HTMLElement", "Node", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"];
+const GLOBAL_KEYS = ["window", "document", "navigator", "HTMLElement", "Node", "getComputedStyle",
+  "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"];
 const saved = GLOBAL_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
 const STEPS = [{ id: "a", label: "Welcome" }, { id: "b", label: "Consent" }, { id: "c", label: "Connect AI" }];
 let root: Root | null = null;
 
 function setup(reducedMotion = false) {
-  const dom = new JSDOM('<div id="root"></div>');
+  const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true });
   const matchMedia = (query: string) => ({ matches: reducedMotion && query.includes("reduce"), media: query, addEventListener() {}, removeEventListener() {} });
   Object.assign(dom.window, { matchMedia });
   Object.assign(globalThis, {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, getComputedStyle: dom.window.getComputedStyle,
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window),
     IS_REACT_ACT_ENVIRONMENT: true,
   });
   root = createRoot(dom.window.document.getElementById("root")!);

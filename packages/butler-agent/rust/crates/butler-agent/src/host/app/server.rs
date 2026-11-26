@@ -4,6 +4,7 @@ use crate::host::AppSubsessions;
 mod composition;
 mod security_store;
 mod startup;
+mod tunnel_port;
 
 use std::net::SocketAddr;
 use std::sync::{
@@ -198,7 +199,8 @@ impl AppServer {
                 application.publish_thinking(payload);
             }
         }));
-        let gateway_config = gateway_config(app_config, data_root, installation, owners.local_auth);
+        let gateway_config =
+            gateway_config(app_config, data_root, installation, owners.local_auth)?;
         Self::activate_listener(
             listener,
             application,
@@ -311,6 +313,7 @@ async fn open_application(
         .queue
         .observe_settlements(application.inbound_settlement_listener());
     application.observe_hook_blocks();
+    application.start_push();
     Ok(application)
 }
 
@@ -327,7 +330,7 @@ fn gateway_config(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
     local_auth: LocalAuthConfig,
-) -> GatewayConfig {
+) -> Result<GatewayConfig, BtccError> {
     let mut config = app_config.gateway_config();
     config.local_auth = local_auth;
     config.output_data = Some(data_root.to_path_buf());
@@ -337,7 +340,13 @@ fn gateway_config(
         data_root.to_path_buf(),
         installation.clone(),
     )));
-    config
+    if app_config.butler_account_enabled() {
+        config.tunnel = Some(Arc::new(tunnel_port::AppTunnelPort {
+            account: Arc::new(ButlerAccount::new(data_root)?),
+            data_root: data_root.to_path_buf(),
+        }));
+    }
+    Ok(config)
 }
 
 async fn open_settings(

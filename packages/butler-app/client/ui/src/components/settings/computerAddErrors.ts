@@ -1,9 +1,9 @@
 import { appCopy } from "@/app/copy.ts";
 import type { HostTarget } from "./computersApi";
 
-export type ComputerField = "name" | "address" | "port" | "keyFile" | "folder";
+export type ComputerField = "name" | "address" | "port" | "keyFile" | "folder" | "environment" | "environmentText";
 export interface ComputerFieldError { field: ComputerField; message: string }
-export interface ComputerForm { name: string; address: string; port: string; keyFile: string; folder: string }
+export interface ComputerForm { name: string; address: string; port: string; keyFile: string; folder: string; environmentText: string }
 
 export const COMPUTER_FIELD_IDS: Record<ComputerField, string> = {
   name: "computer-name",
@@ -11,10 +11,22 @@ export const COMPUTER_FIELD_IDS: Record<ComputerField, string> = {
   port: "computer-port",
   keyFile: "computer-key-file",
   folder: "computer-folder",
+  environment: "computer-environment",
+  environmentText: "computer-environment-text",
 };
 
-export function addFailure(code: string | undefined): ComputerFieldError | null {
+export function addFailure(code: string | undefined, line?: number): ComputerFieldError | null {
   const copy = appCopy.computers.errors;
+  if (line !== undefined) {
+    const messages = new Map([
+      ["computer_env_line_invalid", copy.environment.lineInvalid],
+      ["computer_env_name_reserved", copy.environment.lineReserved],
+      ["computer_env_name_duplicate", copy.environment.lineDuplicate],
+      ["computer_env_name_secret", copy.environment.lineSecret],
+    ]);
+    const message = code === undefined ? undefined : messages.get(code);
+    return message ? { field: "environmentText", message: message(line) } : null;
+  }
   const fields = new Map<string, ComputerFieldError>([
     ["ssh_auth_failed", { field: "address", message: copy.keyLogin }],
     ["ssh_unreachable", { field: "address", message: copy.unreachable }],
@@ -31,6 +43,14 @@ export function addFailure(code: string | undefined): ComputerFieldError | null 
     ["computer_folder_missing", { field: "folder", message: copy.folderMissing }],
     ["computer_folder_required", { field: "folder", message: copy.folderInvalid }],
     ["project_folder_unsafe", { field: "folder", message: copy.homeFolder }],
+    ["computer_env_name_invalid", { field: "environment", message: copy.environment.nameInvalid }],
+    ["computer_env_name_reserved", { field: "environment", message: copy.environment.reserved }],
+    ["computer_env_name_duplicate", { field: "environment", message: copy.environment.duplicate }],
+    ["computer_env_value_required", { field: "environment", message: copy.environment.valueRequired }],
+    ["computer_env_value_invalid", { field: "environment", message: copy.environment.valueInvalid }],
+    ["computer_env_too_many", { field: "environment", message: copy.environment.tooMany }],
+    ["computer_env_too_large", { field: "environment", message: copy.environment.tooLarge }],
+    ["computer_env_store_unavailable", { field: "environment", message: copy.environment.storeUnavailable }],
   ]);
   return code === undefined ? null : fields.get(code) ?? null;
 }

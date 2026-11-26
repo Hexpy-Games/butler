@@ -1,7 +1,7 @@
 ---
 import "../../base.css";
 import { THEME_STORAGE_KEY } from "../client/theme";
-import { designSystemRoot, type NavSectionItem } from "../../../site/nav";
+import { designSystemRoot, privacyHref, type NavSectionItem } from "../../../site/nav";
 import { BUTLER_VERSION, REPOSITORY_URL } from "../../../site/meta";
 import { DEFAULT_LOCALE, LOCALES, type Locale } from "../../../site/sections";
 import { ui } from "../../../site/ui";
@@ -69,7 +69,7 @@ const hreflangs = translations.length > 1 && fallback ? [...translations, { code
         <div class={styles.page}>
           <main class={styles.main} id="content">
             <slot />
-            <SiteFooter designSystemHref={designSystemRoot(base)} locale={locale} repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
+            <SiteFooter designSystemHref={designSystemRoot(base)} locale={locale} privacyHref={privacyHref(base, locale)} repositoryUrl={REPOSITORY_URL} version={BUTLER_VERSION} />
           </main>
           <aside class={styles.toc} data-pagefind-ignore>
             <slot name="toc" />

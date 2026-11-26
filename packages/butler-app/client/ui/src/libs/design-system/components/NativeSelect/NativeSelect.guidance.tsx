@@ -41,6 +41,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["Option labels are short and parallel (Literal value / Environment variable / Keychain)."],
-  accessibility: ["Name it with a label or aria-label; the visible value mirrors the selected option.", "On phones and touch screens the trigger is 44px tall with --space-md leading side and --radius-control-touch corners, matching the button beside it."],
-  tokens: ["--control-height-md", "--radius-control", "--line", "--focus-ring", "--radius-control-touch"],
+  accessibility: ["Name it with a label or aria-label; the visible value mirrors the selected option.", "On phones and touch screens the trigger is 44px tall with --space-md leading side and --radius-control-touch corners, matching the button beside it.", "Disabled (read only, or while an action runs) shows the disabled surface, tone and cursor of Input and Select; give the reason in a Tooltip in app code."],
+  tokens: ["--control-height-md", "--radius-control", "--line", "--focus-ring", "--radius-control-touch", "--color-disabled-bg", "--interactive-disabled-fg", "--interactive-disabled-cursor"],
 };

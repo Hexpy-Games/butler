@@ -370,7 +370,7 @@ export interface BrowserCopy {
   reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
   openOutput: string; output: string; show: string; hide: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
-  bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
+  bookmarked: string; manageBookmarks: string; downloads: string; noDownloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
   signedIn: string; signinRequired: string; captcha: string; signinForm: string; savedSignIn: string; signinFillFailed: string; saveSignIn: string; signinSaved: string; signinSaveFailed: string; later: string;
   agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
@@ -378,7 +378,7 @@ export interface BrowserCopy {
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
   pointerButler: string; pointerLooking: string; pointerTyping: string; pointerWaiting: string; pointerAwaitingApproval: string;
   pointerNeedInput: string; pickMode: string; pickMulti: string; pickRegion: string; dragToChat: string; finish: string;
-  pickHint: string; pickKeys: (mac: boolean) => string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;
+  pickHint: string; pickKeys: (mac: boolean) => string; pickFirst: string; picked: (count: number) => string; attachToChat: string; saveImage: string; downloadSaved: string; downloadFailed: string; downloadCancelled: string; downloadFileLimit: string; downloadSessionLimit: string; imagesSaved: (count: number) => string; copyText: string; clearSelection: string; dropToAttach: string;
   dropAttachTo: (title: string) => string; dropSaveToLibrary: string; dropMoveTabTo: (title: string) => string; dropInvalid: string;
   attachedTo: (title: string) => string; movedTo: (title: string) => string; library: string; librarySearch: string; recentScraps: string;
   viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
@@ -463,7 +463,7 @@ export interface MobileCopy {
     rescan: string; connecting: string;
     addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
-    notButler: string; unreachable: string; failed: string };
+    notButler: string; unreachable: string; failed: string; desktopOffline: string; relayOff: string };
   localNetwork: { title: string; body: string; retry: string; cancel: string };
   conversations: {
     title: string;
@@ -519,6 +519,13 @@ export interface MobileCopy {
   settings: {
     title: string;
     computer: string;
+    notifications: string;
+    notificationsFailed: string;
+    notificationsSignIn: string;
+    notificationsAllow: string;
+    notificationsPermissionFooter: string;
+    notificationsKindsTitle: string;
+    notificationKinds: Record<"needs_input" | "done" | "failed" | "schedule_blocked", string>;
     disconnect: string;
     disconnectTitle: string;
     disconnectBody: string;
@@ -842,11 +849,14 @@ export interface AppCopy {
     plan: string;
     renews: (date: string) => string;
     plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
+    switchToPlus: string;
+    switchToFree: string;
     signOut: string;
     signOutConfirm: string;
     signedOut: string;
     devices: string;
     thisDevice: string;
+    justNow: string;
     platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
     revoke: string;
     revokeDevice: (name: string) => string;
@@ -945,6 +955,7 @@ export interface AppCopy {
     allowPaymentSite: string;
     allowSiteDescription: string;
     paymentSkipped: (site: string, amount: string) => string;
+    devicePaired: (name: string) => string;
     allowScope: string;
     allowConversation: string;
     allowAlways: string;
@@ -1567,9 +1578,13 @@ export interface AppCopy {
     searchPlaceholder: string;
     searchEmpty: (query: string) => string;
     groups: {
+      personal: string;
+      butler: string;
+      devicesAndSecurity: string;
+      extensions: string;
+      app: string;
       preferences: string;
       appAndSystem: string;
-      advanced: string;
     };
     sections: {
       general: string;
@@ -1588,9 +1603,12 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
+      archive: string;
       about: string;
     };
     sectionDescriptions: {
@@ -1610,6 +1628,8 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
@@ -1632,6 +1652,8 @@ export interface AppCopy {
       privacy: string[];
       connections: string[];
       browser: string[];
+      devices: string[];
+      computers: string[];
       security: string[];
       system: string[];
       archives: string[];
@@ -1847,6 +1869,7 @@ export interface AppCopy {
       appName: string;
       appVersion: string;
       appRepository: string;
+      appPrivacyPolicy: string;
       appProtocol: string;
       developerMode: string;
       butlerNickname: string;
@@ -2060,6 +2083,10 @@ export interface AppCopy {
     security: {
       remoteAccess: string;
       remoteAccessDescription: string;
+      tunnel: string;
+      tunnelDescription: string;
+      tunnelConnected: string;
+      tunnelQrNote: string;
       addresses: string;
       noAddresses: string;
       bindErrors: {
@@ -2072,6 +2099,7 @@ export interface AppCopy {
       copied: string;
       code: string;
       pairDevice: string;
+      createCode: string;
       pairingQr: string;
       scanWithPhone: string;
       expiresIn: (seconds: number) => string;

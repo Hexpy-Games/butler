@@ -2,7 +2,9 @@
 mod deploy;
 mod edit;
 pub(super) use edit::edit;
+pub(super) mod environment;
 mod forward;
+pub(super) use forward::{OauthStart, oauth_start};
 mod live;
 mod live_pump;
 mod live_records;
@@ -30,10 +32,9 @@ pub(super) use streams::RemoteStream;
 use super::{AppSetupPort, http::HttpError};
 use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -54,6 +55,12 @@ pub(super) struct Computer {
     model_source: ModelSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sent_credential: Option<String>,
+    #[serde(default)]
+    environment: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    environment_text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sent_environment: bool,
     host_keys: Vec<String>,
     added_at: String,
 }
@@ -76,6 +83,10 @@ impl Computer {
         if let Some(object) = value.as_object_mut() {
             object.remove("host_keys");
             object.remove("sent_credential");
+            object.remove("sent_environment");
+            object
+                .entry("environment_text")
+                .or_insert_with(|| "".into());
         }
         Ok(value)
     }
@@ -137,6 +148,9 @@ pub(super) struct AddInput {
     folder: String,
     #[serde(default)]
     model_source: ModelSource,
+    #[serde(default)]
+    environment: Option<Vec<environment::EnvInput>>,
+    environment_text: Option<String>,
 }
 
 impl AddInput {
@@ -184,6 +198,7 @@ pub(super) async fn host_key(
 }
 
 pub(super) async fn add(
+    setup: &Arc<dyn AppSetupPort>,
     data: &Path,
     input: AddInput,
     cancel: CancellationToken,
@@ -195,6 +210,10 @@ pub(super) async fn add(
         key_file: input.key_file,
     };
     target.validate()?;
+    let mut environment_text = input.environment_text.unwrap_or_default();
+    let values =
+        environment::prepare_add(&environment_text, input.environment.unwrap_or_default())?;
+    normalize_environment_text(&mut environment_text);
     let records = list(data).await?;
     store::unique_name(&records, &name)?;
     let host_keys = ssh::host_key(&target, &records, cancel.clone()).await?;
@@ -213,10 +232,28 @@ pub(super) async fn add(
         ai_connected: false,
         model_source: input.model_source,
         sent_credential: None,
+        environment: values.keys().cloned().collect(),
+        environment_text,
+        sent_environment: false,
         host_keys,
         added_at: chrono::Utc::now().to_rfc3339(),
     };
-    store::add(data.join("config/computers.json"), computer).await
+    let id = computer.id.clone();
+    let has_secrets = !values.is_empty();
+    if has_secrets {
+        setup.save_computer_environment(id.clone(), values).await?;
+    }
+    let saved = store::add(data.join("config/computers.json"), computer).await;
+    if saved.is_err() && has_secrets {
+        setup.delete_computer_key(id).await?;
+    }
+    saved
+}
+
+fn normalize_environment_text(text: &mut String) {
+    if text.trim().is_empty() {
+        text.clear();
+    }
 }
 
 pub(super) async fn delete(
@@ -229,17 +266,27 @@ pub(super) async fn delete(
 ) -> Result<bool, HttpError> {
     let reach = async {
         let installed = deploy::installed(computer, cancel.clone()).await?;
-        if installed {
-            deploy::ensure_running((data, version), computer, cancel.clone()).await?;
-            let identity = setup.computer_key(computer.id.clone()).await?;
-            relay::unlock(computer, &identity, cancel.clone()).await?;
+        if !installed {
+            return Ok(None);
         }
-        Ok::<_, HttpError>(installed)
+        deploy::ensure_running((data, version), computer, cancel.clone()).await?;
+        let identity = setup.computer_key(computer.id.clone()).await?;
+        relay::unlock(computer, &identity, cancel.clone()).await?;
+        session_state::request(computer, cancel.clone())
+            .await
+            .map(Some)
     }
     .await;
-    let cleaned = match reach {
-        Ok(installed) => {
-            if installed {
+    let reachable = match reach {
+        Ok(sessions) => {
+            if let Some(sessions) = sessions {
+                if sessions.iter().any(SessionStateRow::has_active_turn) {
+                    return Err(HttpError::public(
+                        409,
+                        "computer_busy",
+                        "A conversation is still running on this computer.",
+                    ));
+                }
                 let link = Link {
                     setup: setup.clone(),
                     root: data.to_path_buf(),
@@ -261,7 +308,7 @@ pub(super) async fn delete(
                         )
                     })?;
             }
-            deploy::remove(computer, cancel).await.is_ok()
+            true
         }
         Err(_) if force => false,
         Err(_) => {
@@ -272,6 +319,10 @@ pub(super) async fn delete(
             ));
         }
     };
+    setup
+        .save_computer_environment(computer.id.clone(), Default::default())
+        .await?;
+    let cleaned = reachable && deploy::remove(computer, cancel).await.is_ok();
     store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
     setup.delete_computer_key(computer.id.clone()).await?;
     if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
@@ -352,6 +403,15 @@ async fn connect(
         let _ = error;
     }
     relay::unlock(computer, &identity, cancel.clone()).await?;
+    if (!computer.environment_text.is_empty()
+        || !computer.environment.is_empty()
+        || computer.sent_environment)
+        && environment::push(setup, root, computer, cancel.clone())
+            .await
+            .is_err()
+    {
+        butler_core::diagnostic!("[remote-env] push failed computer={}", computer.id);
+    }
     let sync = model_sync::sync(setup, root, computer, cancel.clone()).await;
     if sync.is_err() {
         butler_core::diagnostic!("[remote-model] sync failed computer={}", computer.id);
@@ -367,63 +427,6 @@ async fn connect(
         computer.id.clone(),
     );
     Ok((state, sync))
-}
-
-#[derive(Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(super) struct OauthStart {
-    #[serde(default)]
-    kind: Option<Value>,
-}
-
-pub(super) async fn oauth_start(
-    setup: &Arc<dyn AppSetupPort>,
-    root: &Path,
-    id: &str,
-    version: &str,
-    input: OauthStart,
-    shutdown: CancellationToken,
-) -> Result<Value, HttpError> {
-    let (_lock, computer) = locked(root, id).await?;
-    let _ = connect(setup, root, version, &computer, shutdown.clone()).await?;
-    let listener = TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .map_err(|_| HttpError::Internal)?;
-    let port = listener
-        .local_addr()
-        .map_err(|_| HttpError::Internal)?
-        .port();
-    let mut body = json!({"force":true,"redirect_port":port});
-    if let Some(kind) = input.kind {
-        body["kind"] = kind;
-    }
-    let view = relay::data(
-        relay::request(
-            &computer,
-            "POST",
-            "/setup/oauth/start",
-            body.to_string().into_bytes(),
-            shutdown.clone(),
-        )
-        .await?,
-    )?;
-    if view["status"] != "pending" {
-        return Ok(view);
-    }
-    let invalid = || {
-        remote_error(
-            "remote_oauth_invalid",
-            "This computer returned an invalid sign-in.",
-        )
-    };
-    let port = view["callback_port"]
-        .as_u64()
-        .and_then(|p| u16::try_from(p).ok())
-        .ok_or_else(invalid)?;
-    let flow_id = view["flow_id"].as_str().ok_or_else(invalid)?;
-    let stop = forward::replace(id, flow_id, &shutdown);
-    tokio::spawn(forward::serve(listener, computer, port, stop));
-    Ok(view)
 }
 
 pub(super) async fn oauth_flow(

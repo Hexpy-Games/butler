@@ -54,6 +54,8 @@ zip.workspace = true
 zstd = "0.13.3"
 
 [dev-dependencies]
+chacha20poly1305 = "=0.10.1"
+snow = { version = "=0.9.6", default-features = false, features = ["default-resolver"] }
 dom_query = "=0.28.0"
 pulldown-cmark = { version = "0.13.0", default-features = false }
 age.workspace = true

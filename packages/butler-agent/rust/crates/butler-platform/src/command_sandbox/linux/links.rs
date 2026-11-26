@@ -33,12 +33,18 @@ pub(super) fn validate(policy: &super::Policy) -> Result<(), Error> {
         directories: HashSet::new(),
         visited: 0,
     };
-    for path in std::iter::once(root).chain(policy.writable.iter().map(PathBuf::as_path)) {
+    for path in std::iter::once(root).chain(
+        policy
+            .extra
+            .iter()
+            .chain(&policy.writable)
+            .map(PathBuf::as_path),
+    ) {
         // Inside the walk only the entry itself can be protected: protected
         // directories are not entered. Ancestors above the root count once;
         // a scratch root below a denied data folder is an explicit exception.
         let inherited = path.ancestors().any(|ancestor| {
-            if path == root {
+            if path == root || policy.extra.iter().any(|extra| extra == path) {
                 walk.protected.contains(ancestor)
             } else {
                 strict.contains(ancestor)

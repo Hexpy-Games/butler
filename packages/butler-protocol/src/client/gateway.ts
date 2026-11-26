@@ -8,7 +8,7 @@ export interface ResponseLike {
   readonly body: { getReader(): ByteReader } | null;
   json(): Promise<unknown>;
 }
-export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignalLike }) => Promise<ResponseLike>;
+export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string | Uint8Array; signal?: AbortSignalLike }) => Promise<ResponseLike>;
 export interface GatewayClientOptions { origin: string; fetch: FetchLike; token?: () => string | undefined }
 export interface GatewayClient {
   /** JSON request; resolves to the envelope's data. Throws GatewayError. */

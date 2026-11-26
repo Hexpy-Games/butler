@@ -49,11 +49,21 @@ pub(in crate::command_sandbox) fn invocation(
     invocation: Invocation,
     host: &HashMap<String, String>,
     root: &Path,
+    extra_roots: &[&Path],
     writable: &[&Path],
     denied: &[&Path],
     toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, SandboxError> {
-    prepare(invocation, host, root, writable, denied, toolchain_roots).map_err(|e| {
+    prepare(
+        invocation,
+        host,
+        root,
+        extra_roots,
+        writable,
+        denied,
+        toolchain_roots,
+    )
+    .map_err(|e| {
         if e.downcast_ref::<std::io::Error>()
             .is_some_and(|e| e.kind() == std::io::ErrorKind::WouldBlock)
         {
@@ -67,26 +77,30 @@ fn prepare(
     mut invocation: Invocation,
     host: &HashMap<String, String>,
     root: &Path,
+    extra_roots: &[&Path],
     writable: &[&Path],
     denied: &[&Path],
     toolchain_roots: Option<&crate::command_sandbox::ToolchainRoots>,
 ) -> Result<Invocation, Error> {
     let _phase = super::timing::Phase::start("prepare");
     super::super::cmd::inside_utf8_bootstrap(&mut invocation);
-    let mut env: BTreeMap<String, String> = host
-        .iter()
-        .map(|(k, v)| (k.to_ascii_uppercase(), v.clone()))
-        .collect();
-    let data = PathBuf::from(environment::get(&env, "BUTLER_DATA").ok_or("BUTLER_DATA required")?);
-    for dir in writable {
-        fs::create_dir_all(dir)?;
-    }
-    normalize_host_roots(&mut env)?;
+    let (mut env, data) = normalize_host_roots(host, writable)?;
     let project = physical_for(root, "project")?;
+    let extra = extra_roots
+        .iter()
+        .map(|p| physical_for(p, "allowed folder"))
+        .filter(|p| !matches!(p, Ok(path) if path == &project))
+        .collect::<Result<Vec<_>, _>>()?;
     let discovery = super::timing::Phase::start("tool_discovery");
     let mut tools = tools::discover(&env, toolchain_roots)?;
-    tools.path.retain(|path| !project.is_within(path));
-    tools.readonly.retain(|path| !project.is_within(path));
+    let outside = |path: &WinPath| {
+        !project.is_within(path)
+            && !extra
+                .iter()
+                .any(|root| root.is_within(path) || path.is_within(root))
+    };
+    tools.path.retain(outside);
+    tools.readonly.retain(outside);
     drop(discovery);
     for key in ["CARGO_HOME", "RUSTUP_HOME"] {
         if let Some(value) = tools.environment.get(key) {
@@ -100,11 +114,12 @@ fn prepare(
         .collect::<Result<Vec<_>, _>>()?;
     let secrets = denied
         .iter()
-        .filter(|p| p.starts_with(root))
+        .filter(|p| p.starts_with(root) || extra_roots.iter().any(|root| p.starts_with(root)))
         .map(|p| physical_for(p, "project secret denial"))
         .collect::<Result<Vec<_>, _>>()?;
     let plan = Plan {
         project,
+        extra,
         data: physical_for(&data, "BUTLER_DATA")?,
         host_environment: env.clone(),
         tools,
@@ -119,12 +134,9 @@ fn prepare(
     {
         return Err("unexpected_scratch_roots".into());
     }
-    let timeout = environment::get(&env, "BUTLER_COMMAND_TIMEOUT_MS")
-        .ok_or("timeout required")?
-        .parse()?;
     let helper = helper()?;
     super::drive::reconcile(&data)?;
-    let (path, lease) = save_policy(&data, root, &env, &plan, &invocation, timeout)?;
+    let (path, lease) = save_policy(&data, root, &env, &plan, &invocation)?;
     Ok(Invocation {
         shell_program: None,
         shell_script: None,
@@ -141,7 +153,18 @@ fn prepare(
         .collect(),
     })
 }
-fn normalize_host_roots(env: &mut BTreeMap<String, String>) -> Result<(), Error> {
+fn normalize_host_roots(
+    host: &HashMap<String, String>,
+    writable: &[&Path],
+) -> Result<(BTreeMap<String, String>, PathBuf), Error> {
+    let mut env: BTreeMap<String, String> = host
+        .iter()
+        .map(|(k, v)| (k.to_ascii_uppercase(), v.clone()))
+        .collect();
+    let data = PathBuf::from(environment::get(&env, "BUTLER_DATA").ok_or("BUTLER_DATA required")?);
+    for dir in writable {
+        fs::create_dir_all(dir)?;
+    }
     for key in [
         "SYSTEMROOT",
         "USERPROFILE",
@@ -158,7 +181,7 @@ fn normalize_host_roots(env: &mut BTreeMap<String, String>) -> Result<(), Error>
             );
         }
     }
-    Ok(())
+    Ok((env, data))
 }
 fn canonical_grants(request: &mut Value) -> Result<(), Error> {
     for field in ["readwritePaths", "readonlyPaths", "deniedPaths"] {
@@ -187,7 +210,6 @@ fn save_policy(
     env: &BTreeMap<String, String>,
     plan: &Plan,
     invocation: &Invocation,
-    timeout: u32,
 ) -> Result<
     (
         PathBuf,
@@ -195,6 +217,9 @@ fn save_policy(
     ),
     Error,
 > {
+    let timeout = environment::get(env, "BUTLER_COMMAND_TIMEOUT_MS")
+        .ok_or("timeout required")?
+        .parse()?;
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let id = format!(
         "{}-{}-{}",
@@ -219,6 +244,14 @@ fn save_policy(
         .map(|p| PathBuf::from(p.as_str()))
         .collect();
     super::ledger::admit(root, &link_roots, &plan.credentials, &plan.secrets)?;
+    for extra in &plan.extra {
+        super::ledger::admit(
+            Path::new(extra.as_str()),
+            &link_roots,
+            &plan.credentials,
+            &plan.secrets,
+        )?;
+    }
     // Admission synchronizes both inventories immediately before policy publication.
     canonical_grants(&mut request)?;
     let (pid, started) = super::drive::identity()?;

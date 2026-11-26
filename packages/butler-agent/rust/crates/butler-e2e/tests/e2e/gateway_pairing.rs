@@ -48,6 +48,7 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
             event["type"] == "security.device_paired"
         })
         .await?;
+    assert_eq!(notice["payload"]["name"], "Remote device · browser");
     let listed = devices(&app).await?;
     assert_eq!(listed.as_array().unwrap().len(), 1);
     let id = listed[0]["id"].as_str().unwrap().to_owned();

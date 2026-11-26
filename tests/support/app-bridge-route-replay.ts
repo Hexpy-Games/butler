@@ -132,11 +132,11 @@ export async function checkPreload(accepted: RecordedRoute[]) {
 }
 
 
-// router.rs has no method information; this checks path membership only.
+// routes.rs has no method information; this checks path membership only.
 // Include the secondary table explicitly chained by router::table().
 function matchGateway(forwards: ReturnType<typeof preloadProbe>["calls"]) {
   const directory = resolve(root, "../../../butler-agent/rust/crates/butler-gateway/src/gateway/http");
-  const patterns = ["router.rs", "canon_sidebar.rs"].flatMap(file => {
+  const patterns = ["routes.rs", "canon_sidebar.rs"].flatMap(file => {
     const source = readFileSync(resolve(directory, file), "utf8");
     const entries = [...source.matchAll(/\(\s*"([^"\n]+)"\s*,\s*Handler::\w+\s*,?\s*\)/gu)];
     expect(entries.length, `Cannot parse gateway route table ${file}`).toBeGreaterThan(0);

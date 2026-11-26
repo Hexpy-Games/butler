@@ -4,11 +4,12 @@ import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { Button, ButtonGroup, Sheet, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
 import { explainLocalNetwork, pairAnyAndOpenHome } from "@/connection/connect";
-import { pairParamsFromUrl, parsePairLink } from "@/connection/pairLink";
+import { pairParamsFromUrl, parsePairLink, type PairLink } from "@/connection/pairLink";
 import type { Problem } from "@/connection/problems";
 import { useMobileCopy } from "@/i18n";
 
-type Scan = { kind: "live" } | { kind: "connecting"; origins: string[]; code: string } | { kind: "failed"; origins: string[]; origin: string; code: string; problem: Problem };
+type PairScanLink = Extract<PairLink, { kind: "pair" }>;
+type Scan = { kind: "live" } | { kind: "connecting"; link: PairScanLink } | { kind: "failed"; link: PairScanLink; origin: string; code: string; problem: Problem };
 
 export default function PairScan() {
   const copy = useMobileCopy();
@@ -26,11 +27,11 @@ export default function PairScan() {
       void requestPermission();
     }
   }, [permission, requestPermission]);
-  const connect = async (origins: string[], code: string) => {
-    setScan({ kind: "connecting", origins, code });
-    const failure = await pairAnyAndOpenHome(origins, code);
+  const connect = async (link: PairScanLink) => {
+    setScan({ kind: "connecting", link });
+    const failure = await pairAnyAndOpenHome(link);
     if (!failure) return;
-    setScan({ kind: "failed", origins, origin: failure.origin, code, problem: failure.problem });
+    setScan({ kind: "failed", link, origin: failure.origin, code: link.code, problem: failure.problem });
     if (explainLocalNetwork(failure.problem, failure.origin)) setExplainer(true);
   };
   const onScan = ({ data }: BarcodeScanningResult) => {
@@ -43,10 +44,10 @@ export default function PairScan() {
       return;
     }
     busy.current = true;
-    void connect(link.origins, link.code);
+    void connect(link);
   };
   const rescan = () => { busy.current = false; rejected.current = null; setScan({ kind: "live" }); };
-  const manual = () => router.replace(scan.kind === "failed"
+  const manual = () => router.replace(scan.kind === "failed" && scan.link.origins.length > 0
     ? { pathname: "/pair/manual", params: { v: "1", a: scan.origin, c: scan.code } }
     : "/pair/manual");
   const blocked = unavailable || (permission !== null && !permission.granted && permission.status === "denied");
@@ -79,7 +80,7 @@ export default function PairScan() {
         description={copy.localNetwork.body} cancelLabel={copy.localNetwork.cancel}
         action={<Button label={copy.localNetwork.retry} onPress={() => {
           setExplainer(false);
-          if (scan.kind === "failed") { busy.current = true; void connect(scan.origins, scan.code); }
+          if (scan.kind === "failed") { busy.current = true; void connect(scan.link); }
         }} />} />
     </Surface>
   );

@@ -170,6 +170,48 @@ pub(crate) fn data_folder_token(data_root: &Path) -> Option<String> {
     usable_token(&fs::read(data_root.join(LOCAL_AUTH_FILE)).ok()?)
 }
 
+#[derive(Deserialize, Serialize)]
+struct TunnelNoiseKey {
+    v: u8,
+    private: String,
+}
+
+/// The tunnel's X25519 static private key, created on first call.
+pub(crate) fn tunnel_noise_key(
+    data_root: &Path,
+) -> Result<zeroize::Zeroizing<[u8; 32]>, LocalCredentialError> {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use zeroize::Zeroizing;
+
+    load_file(
+        &data_root.join(butler_platform::data_paths::TUNNEL_NOISE_KEY),
+        CredentialFiles::CreateMissing,
+        |bytes| {
+            let file: TunnelNoiseKey = serde_json::from_slice(bytes).ok()?;
+            let private = Zeroizing::new(file.private);
+            if file.v != 1 {
+                return None;
+            }
+            let mut key = Zeroizing::new([0; 32]);
+            (URL_SAFE_NO_PAD
+                .decode_slice(private.as_bytes(), key.as_mut())
+                .ok()?
+                == 32)
+                .then_some(key)
+        },
+        || {
+            let key = butler_gateway::gateway::new_tunnel_key();
+            let mut file = TunnelNoiseKey {
+                v: 1,
+                private: URL_SAFE_NO_PAD.encode(key.as_slice()),
+            };
+            let result = serde_json::to_vec(&file).map_err(LocalCredentialError::Encode);
+            zeroize::Zeroize::zeroize(&mut file.private);
+            result
+        },
+    )
+}
+
 /// The file the gateway token is loaded from: `BUTLER_APP_LOCAL_AUTH_FILE`
 /// when set (the App names the data folder's file there), else the data
 /// folder's own file.
@@ -294,12 +336,12 @@ fn new_secret_file() -> Result<Vec<u8>, LocalCredentialError> {
 
 /// The usable value at `path`; when it is missing or unusable and `files`
 /// allows, the file is created with `create`.
-pub(super) fn load_file(
+pub(super) fn load_file<T>(
     path: &Path,
     files: CredentialFiles,
-    usable: fn(&[u8]) -> Option<String>,
+    usable: fn(&[u8]) -> Option<T>,
     create: fn() -> Result<Vec<u8>, LocalCredentialError>,
-) -> Result<String, LocalCredentialError> {
+) -> Result<T, LocalCredentialError> {
     if !secure_fs::OWNER_ONLY && files == CredentialFiles::CreateMissing && path.exists() {
         secure_fs::restrict_file(path)
             .transpose()
@@ -312,19 +354,19 @@ pub(super) fn load_file(
         return Ok(value);
     }
     if files == CredentialFiles::CreateMissing {
-        publish(path, &create()?, usable)?;
+        publish(path, &zeroize::Zeroizing::new(create()?), usable)?;
     }
     read_usable(path, usable)?.ok_or_else(|| LocalCredentialError::Unusable {
         path: path.to_path_buf(),
     })
 }
 
-fn read_usable(
+fn read_usable<T>(
     path: &Path,
-    usable: fn(&[u8]) -> Option<String>,
-) -> Result<Option<String>, LocalCredentialError> {
+    usable: fn(&[u8]) -> Option<T>,
+) -> Result<Option<T>, LocalCredentialError> {
     match fs::read(path) {
-        Ok(bytes) => Ok(usable(&bytes)),
+        Ok(bytes) => Ok(usable(&zeroize::Zeroizing::new(bytes))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(source) => Err(LocalCredentialError::Read {
             path: path.to_path_buf(),
@@ -335,10 +377,10 @@ fn read_usable(
 
 /// Publishes under the sibling change lock, rechecking usability after
 /// acquisition so creators never replace a credential another one returned.
-fn publish(
+fn publish<T>(
     path: &Path,
     contents: &[u8],
-    usable: fn(&[u8]) -> Option<String>,
+    usable: fn(&[u8]) -> Option<T>,
 ) -> Result<(), LocalCredentialError> {
     let write_error = |source| LocalCredentialError::Write {
         path: path.to_path_buf(),

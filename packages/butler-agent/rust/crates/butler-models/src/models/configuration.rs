@@ -14,6 +14,7 @@ mod admission;
 mod auth;
 mod catalog_cache;
 pub mod chatgpt;
+mod computer_environment_store;
 mod computer_keys;
 mod credential_admin;
 mod credential_migration;

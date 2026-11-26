@@ -12,10 +12,13 @@ use sha2::{Digest, Sha256};
 async fn publishing_01_off_by_default_makes_no_request() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fake = FakeButlerCloud::start().await?;
-    let s = Setup::new("PUBLISH-01")?
-        .env("BUTLER_CLOUD_API_URL", &fake.url)
-        .start()
-        .await?;
+    let setup = Setup::new("PUBLISH-01")?.env("BUTLER_CLOUD_API_URL", &fake.url);
+    std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
+    std::fs::write(
+        setup.sandbox.data.join("gateways/app.json"),
+        json!({"config": {"butlerAccountEnabled": false}}).to_string(),
+    )?;
+    let s = setup.start().await?;
     let reply = s.gw.post("/library/output-x/publish", json!({})).await?;
     assert_eq!(reply.status, 404);
     assert_eq!(reply.error_code(), Some("butler_account_disabled"));

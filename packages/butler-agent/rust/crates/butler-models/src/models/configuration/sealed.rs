@@ -24,7 +24,7 @@ use butler_platform::{
     secure_fs,
 };
 use chrono::{DateTime, TimeDelta, Utc};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use super::credentials::{CREDENTIALS_FILE, CredentialsFile};
 
@@ -155,7 +155,21 @@ pub fn read_map() -> Result<BTreeMap<String, String>, SealedError> {
     }
 }
 
-pub fn write_map(map: &BTreeMap<String, String>) -> Result<(), SealedError> {
+/// Return `Some` to commit a change, or `None` to leave the file alone.
+pub(crate) fn update_map<T>(
+    update: impl FnOnce(&mut BTreeMap<String, String>) -> Option<T>,
+) -> Result<Option<T>, SealedError> {
+    static WRITES: Mutex<()> = Mutex::new(());
+    let _write = WRITES.lock();
+    let mut map = read_map()?;
+    let result = update(&mut map);
+    if result.is_some() {
+        write_map(&map)?;
+    }
+    Ok(result)
+}
+
+fn write_map(map: &BTreeMap<String, String>) -> Result<(), SealedError> {
     let root = STATE
         .get()
         .ok_or(SealedError::KeyPending)?

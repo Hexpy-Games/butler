@@ -6889,6 +6889,13 @@ Copyright 2019- Jake Goulding
 Copyright (c) 2019- Jake Goulding
 
 =====
+snow 0.9.6
+Apache-2.0 OR MIT
+License: https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-APACHE
+License: https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-MIT
+Copyright (c) 2021 Jake McGinty
+
+=====
 socket2 0.6.5
 MIT OR Apache-2.0
 License: https://github.com/rust-lang/socket2/blob/239dd83a4ced08e514d2c38942aab99791119f0d/LICENSE-APACHE

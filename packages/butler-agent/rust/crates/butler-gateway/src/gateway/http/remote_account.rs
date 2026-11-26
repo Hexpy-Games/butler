@@ -5,7 +5,11 @@ use crate::gateway::{
     AppProjectSource, AppWorkspaceMode,
 };
 use axum::response::IntoResponse;
-use butler_models::models::sealed::{self, SealedError};
+use butler_models::models::{
+    ComputerEnvironmentReplaceError, load_computer_environment, replace_computer_environment,
+    sealed::{self, SealedError},
+};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 #[derive(serde::Deserialize)]
@@ -34,13 +38,44 @@ pub(super) fn from_main(state: &HttpState, request: &Request<Body>) -> bool {
 pub(super) async fn unlock(request: Request<Body>) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let input: Unlock = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    tokio::task::spawn_blocking(move || sealed::unlock(&input.identity))
+    tokio::task::spawn_blocking(move || {
+        sealed::unlock(&input.identity)?;
+        if load_computer_environment().is_err() {
+            butler_core::diagnostic!("[remote-env] could not load the sealed environment");
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| HttpError::Internal)?
+    .map_err(|error| match error {
+        SealedError::InvalidIdentity => HttpError::invalid_json(),
+        SealedError::KeyMismatch => HttpError::public(403, error.code(), &error.to_string()),
+        _ => HttpError::Internal,
+    })?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Environment {
+    variables: BTreeMap<String, String>,
+}
+
+pub(super) async fn environment(request: Request<Body>) -> Result<Response, HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
+    let input: Environment =
+        serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    tokio::task::spawn_blocking(move || replace_computer_environment(input.variables))
         .await
         .map_err(|_| HttpError::Internal)?
         .map_err(|error| match error {
-            SealedError::InvalidIdentity => HttpError::invalid_json(),
-            SealedError::KeyMismatch => HttpError::public(403, error.code(), &error.to_string()),
-            _ => HttpError::Internal,
+            ComputerEnvironmentReplaceError::Invalid(error) => {
+                crate::gateway::remote_computers::environment::invalid(&error)
+            }
+            ComputerEnvironmentReplaceError::Sealed(error @ SealedError::KeyPending) => {
+                HttpError::public(409, error.code(), &error.to_string())
+            }
+            ComputerEnvironmentReplaceError::Sealed(_) => HttpError::Internal,
         })?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }

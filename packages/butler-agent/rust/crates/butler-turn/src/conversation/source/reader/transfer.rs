@@ -140,8 +140,36 @@ fn read_turn(db: &Connection, id: &str) -> ConversationResult<Option<TransferTur
             completed_at: turn.completed_at,
         },
         messages,
+        tool_steps: read_tool_steps(db, id)?,
         outcome: outcome.into(),
     }))
+}
+
+fn read_tool_steps(db: &Connection, id: &str) -> ConversationResult<Vec<TransferToolStep>> {
+    let exists: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_tool_steps')",
+        [], |row| row.get(0),
+    ).map_err(ConversationError::sqlite)?;
+    if !exists {
+        return Ok(Vec::new());
+    }
+    db.prepare(
+        "SELECT tool_call_id, ord, safe_tool_name, safe_label, safe_input_label, status,
+                started_at, completed_at FROM conversation_tool_steps WHERE turn_id=?1 ORDER BY ord",
+    )
+    .and_then(|mut query| query.query_map([id], |row| {
+        Ok(TransferToolStep {
+            tool_call_id: row.get(0)?,
+            ord: row.get(1)?,
+            safe_tool_name: row.get(2)?,
+            safe_label: row.get(3)?,
+            safe_input_label: row.get(4)?,
+            status: row.get(5)?,
+            started_at: row.get(6)?,
+            completed_at: row.get(7)?,
+        })
+    })?.collect())
+    .map_err(ConversationError::sqlite)
 }
 
 fn transfer_message(row: ConversationMessageWithParts) -> ConversationResult<TransferMessage> {

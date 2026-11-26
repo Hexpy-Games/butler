@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
-import { apiErrorCode } from "@/app/api.ts";
+import { apiErrorCode, apiErrorLine } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { addFailure, hostTarget, validateComputerForm, type ComputerFieldError, type ComputerForm } from "../computerAddErrors";
+import type { ComputerEnvironmentRow } from "../ComputerEnvironmentFields";
 import type { ComputerModelSource } from "../computerTypes";
 import { addComputer, checkHostKey, editComputer, startComputer, type Computer } from "../computersApi";
 
@@ -19,7 +20,7 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     setError(null);
   }
 
-  async function submit(form: ComputerForm, modelSource: ComputerModelSource, editing?: Computer) {
+  async function submit(form: ComputerForm, modelSource: ComputerModelSource, rows: ComputerEnvironmentRow[], editing?: Computer) {
     if (running.current) return;
     const validation = validateComputerForm(form);
     setError(validation);
@@ -28,7 +29,9 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     running.current = true;
     const copy = appCopy.computers;
     const target = hostTarget(form);
-    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource };
+    const environment = rows.map(({ id, name, value, saved }) =>
+      saved && id === name && value === "" ? { name } : { name, value });
+    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText };
     try {
       if (editing) {
         setStep("adding");
@@ -54,7 +57,11 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
         onAdded(editing, copy.model.syncFailed);
         return;
       }
-      const fieldError = addFailure(code);
+      if (editing && code === "remote_env_sync_failed") {
+        onAdded(editing, copy.form.environment.syncFailed);
+        return;
+      }
+      const fieldError = addFailure(code, apiErrorLine(error));
       setError(fieldError);
       if (!fieldError) notifyError(error, copy.errors.addFailed, { id: "computers" });
     } finally {

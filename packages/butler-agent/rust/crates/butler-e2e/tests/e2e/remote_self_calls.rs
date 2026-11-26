@@ -46,6 +46,7 @@ impl Remote {
             &format!("{}/v1", provider.base_url),
             &authority,
             false,
+            false,
         )
         .await?;
         Ok(Self {

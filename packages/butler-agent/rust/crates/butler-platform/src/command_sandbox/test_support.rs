@@ -17,6 +17,7 @@ pub fn windows_prepare_project_write(
             super::windows::login_shell(command, environment),
             environment,
             root,
+            &[],
             writable,
             denied,
             toolchain_roots,
