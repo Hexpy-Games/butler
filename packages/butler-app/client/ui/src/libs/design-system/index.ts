@@ -52,6 +52,7 @@ export * from "./components/ButlerThinkingMark";
 export * from "./components/FoundationHeroMotion";
 export * from "./components/Slider";
 export * from "./components/Switch";
+export * from "./components/Badge";
 export * from "./components/Tag";
 export * from "./components/Tabs";
 export * from "./components/Textarea";

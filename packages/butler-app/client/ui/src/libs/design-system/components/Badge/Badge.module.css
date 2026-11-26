@@ -1,0 +1,87 @@
+.badge {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  isolation: isolate;
+  align-items: center;
+  width: fit-content;
+  min-height: var(--badge-height);
+  margin-block: calc((var(--tag-height-sm) - var(--badge-height)) / 2);
+  padding-inline: var(--badge-padding-inline);
+  border-radius: var(--radius-pill);
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  cursor: default;
+}
+
+/* The label paints above the sheen, so the band only lightens the fill behind the glyphs. */
+.label {
+  position: relative;
+  z-index: 1;
+  margin-inline-end: calc(var(--badge-letter-spacing) * -1);
+  color: inherit;
+  font-size: var(--badge-font-size);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--badge-letter-spacing);
+  line-height: var(--badge-height);
+  text-transform: uppercase;
+}
+
+/* The sheen: one static slanted band; the lap moves it with transform only. */
+.badge::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(
+    112deg,
+    transparent 30%,
+    color-mix(
+        in srgb,
+        var(--neutral-white) var(--badge-sheen-peak),
+        transparent
+      )
+      48%,
+    color-mix(
+        in srgb,
+        var(--neutral-white) calc(var(--badge-sheen-peak) / 4),
+        transparent
+      )
+      64%,
+    transparent 100%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+/* One lap: the band leaves to the right, re-enters from the left and settles where it rests. */
+.badge[data-sheen="run"]::after {
+  animation: sheen var(--motion-sheen-lap) 1 both;
+}
+
+@keyframes sheen {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: var(--motion-ease-accelerate);
+  }
+
+  46% {
+    transform: translateX(80%);
+    animation-timing-function: steps(1, end);
+  }
+
+  46.01% {
+    transform: translateX(-100%);
+    animation-timing-function: var(--motion-ease-decelerate);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Reduced motion (the OS, or the DS data-motion scope via the reduced-motion PostCSS plugin): the static band only. */
+@media (prefers-reduced-motion: reduce) {
+  .badge[data-sheen]::after {
+    animation: none;
+  }
+}

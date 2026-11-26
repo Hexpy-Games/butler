@@ -142,6 +142,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
   plans: { free: "무료", plus: "Plus", pro: "Pro", enterprise: "Enterprise" },
   switchToPlus: "Plus로 전환",
   switchToFree: "Free로 전환",
+  planAndAbove: (plan) => `${plan} 요금제 이상에서 제공됩니다.`,
   signOut: "로그아웃",
   signOutConfirm: "이 컴퓨터에서 버틀러 계정을 로그아웃할까요?",
   signedOut: "로그아웃했습니다.",

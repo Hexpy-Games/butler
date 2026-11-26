@@ -34,7 +34,8 @@ export function useSecuritySettings() {
   const [load, setLoad] = useState<SecurityLoadState>("loading");
   const [busy, setBusy] = useState<SecurityAction | null>(null);
 
-  const [account, setAccount] = useState<ButlerAccountStatus | null>(null);
+  // undefined: not read yet. null: the account service did not answer.
+  const [account, setAccount] = useState<ButlerAccountStatus | null | undefined>(undefined);
   const [justEnabled, setJustEnabled] = useState(false);
 
   const refresh = useCallback(async () => {

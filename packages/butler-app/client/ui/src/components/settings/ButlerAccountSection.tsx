@@ -1,5 +1,6 @@
 import { appCopy, getAppLocale } from "@/app/copy";
-import { Button, ButtonContainer, Inline, SettingsField, SettingsSection, Tag, Typo } from "@/butler-ds";
+import { Badge, Button, ButtonContainer, Inline, SettingsField, SettingsSection, Tag, Typo } from "@/butler-ds";
+import { isPaidPlan } from "@/components/common/PlanBadge";
 import { butlerAccountDevicesSection } from "./ButlerAccountDevices";
 import { ButlerAccountSignInDialog } from "./ButlerAccountSignInDialog";
 import type { useButlerAccount } from "./hooks/useButlerAccount";
@@ -19,7 +20,8 @@ export function butlerAccountSections({ account, signInOpen, setSignInOpen, now 
   );
   if (status?.signed_in) {
     const plan = status.entitlements.plan;
-    const tag = <Tag>{copy.plans[plan] ?? copy.plans.free}</Tag>;
+    const planName = copy.plans[plan] ?? copy.plans.free;
+    const tag = isPaidPlan(plan) ? <Badge>{planName}</Badge> : <Tag>{planName}</Tag>;
     return <>
       <SettingsSection id="butler-account" kind="form" title={copy.name}>
         <SettingsField id="butler-account-email" label={copy.account} control={<Typo.Body>{status.account.email}</Typo.Body>} />

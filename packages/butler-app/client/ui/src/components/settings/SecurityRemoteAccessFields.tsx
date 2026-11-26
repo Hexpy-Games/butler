@@ -17,7 +17,7 @@ export function SecurityRemoteAccessFields({
 }: {
   view: SecurityView;
   disabled: boolean;
-  account: ButlerAccountStatus | null;
+  account: ButlerAccountStatus | null | undefined;
   justEnabled: boolean;
   onTunnelChange: (enabled: boolean) => void;
   onChange: (enabled: boolean) => void;
