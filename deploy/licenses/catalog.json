@@ -5,18 +5,18 @@
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "88fc18a1f44f39f0e3525ae2f019d58324a4c90cff21ac282b497d71a24493ff",
-    "packages/butler-agent/rust/Cargo.lock": "fa233f3e09f81b1bb1f07f842cc2c09ba1ad71c2616c7cb05b15f724bd8345a5",
+    "packages/butler-agent/rust/Cargo.lock": "16411c002ea287372111f06b475d183653fedaafa52150ca3358621b8e38b8db",
     "packages/butler-agent/rust/Cargo.toml": "0bdbabfc243ce24c88e5b7894542936b3bb63653ad6c8730ac50d9df98d71d95",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "e345ecddc1d4d8751356e10ec24bc252594e83e1b43da9e634b327fce0ea7b17",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "1f1c5aae63c813e651faf70ab15dae3ec2e38e3d3aeaa2d6ab9a238042ecb150",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-backup/Cargo.toml": "06555e94c15ddf44638733ae80fbc320a02531b7e165fe66567210c0c31dde2a",
     "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "6fbaad62c0bdd80654f846a11dffff9538849d496374a0486bb93f973056d92b",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "8980355c6fd1165999243382e2529b44c8e1f4a734b7dfe3b11d6840a87b0b9e",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
-    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "3120cb96a533da18e47e0d1e74a099941fcf3eb0639d746f72c9ac6d98708f79",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "7b3bf038f6c257b5187bf544584cf61b26499be6da2c1226ded87c6c431e6968",
+    "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "6bf922df4e2984a9d1f90507615a6fbaf8207da2a2644f0731c6d81f68ec9bcb",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "c30bacc6234f80cb5439e9712741a1e1c70b4505d40d90079749f6d8415a907c",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-mail-connector/Cargo.toml": "d39c21cf1e751b767f37cd97b1ec040361457f37e8f19abca449778284a794aa",
@@ -15377,6 +15377,32 @@
       ]
     },
     {
+      "id": "rust:data-encoding@2.11.1",
+      "name": "data-encoding",
+      "version": "2.11.1",
+      "license": "MIT",
+      "source": "https://github.com/ia0/data-encoding/tree/834737d9c3dc957ce1b653959e3f35061dd77ade",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "b68ad1a3367b825447089e1f8d6829b97f47a89eb78d2f4ebaef4672f5606186"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/ia0/data-encoding/blob/834737d9c3dc957ce1b653959e3f35061dd77ade/lib/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015-2020 Julien Cretin",
+        "Copyright (c) 2017-2020 Google Inc."
+      ]
+    },
+    {
       "id": "rust:data-url@0.3.2",
       "name": "data-url",
       "version": "0.3.2",
@@ -28152,6 +28178,34 @@
       ]
     },
     {
+      "id": "rust:snow@0.9.6",
+      "name": "snow",
+      "version": "0.9.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/mcginty/snow/tree/a4be73faa042c5967f39662aa66919f774831a9a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "7fe0ec5fd291b829e20056d50b1c56f947d515655f7eddfe9ce493753550bff0",
+        "dd6a6177e441f98b36c8e0e92e399a90e94fe09c3fed92d8bf21fe00a840a6ed"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-APACHE",
+        "https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2021 Jake McGinty"
+      ]
+    },
+    {
       "id": "rust:socket2@0.6.5",
       "name": "socket2",
       "version": "0.6.5",
@@ -29648,6 +29702,32 @@
       ]
     },
     {
+      "id": "rust:tokio-tungstenite@0.29.0",
+      "name": "tokio-tungstenite",
+      "version": "0.29.0",
+      "license": "MIT",
+      "source": "https://github.com/snapview/tokio-tungstenite/tree/7930ff2f825a69cad44b928b19b6fb81bffc3f7a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "fdd55e2b2da854b0fbdc1e607df7c2ba1e1ebf91ecb77c515511ebeef972bc8f"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/snapview/tokio-tungstenite/blob/7930ff2f825a69cad44b928b19b6fb81bffc3f7a/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Daniel Abramov",
+        "Copyright (c) 2017 Alexey Galakhov"
+      ]
+    },
+    {
       "id": "rust:tokio-util@0.7.19",
       "name": "tokio-util",
       "version": "0.7.19",
@@ -30081,6 +30161,35 @@
       "copyright": [
         "Copyright (c) 2018-2023 Sean McArthur",
         "Copyright (c) 2016 Alex Crichton"
+      ]
+    },
+    {
+      "id": "rust:tungstenite@0.29.0",
+      "name": "tungstenite",
+      "version": "0.29.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/snapview/tungstenite-rs/tree/c2921718b76f0ed8c69a895397ed981e4a321f6f",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "7fea0ee51a4ca5d5cea7464135fd55e8b09caf3a61da3d451ac8a22af95c033f"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/snapview/tungstenite-rs/blob/c2921718b76f0ed8c69a895397ed981e4a321f6f/LICENSE-APACHE",
+        "https://github.com/snapview/tungstenite-rs/blob/c2921718b76f0ed8c69a895397ed981e4a321f6f/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Alexey Galakhov",
+        "Copyright (c) 2016 Jason Housley"
       ]
     },
     {

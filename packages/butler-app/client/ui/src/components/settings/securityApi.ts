@@ -1,6 +1,9 @@
 import { api, apiErrorCode } from "@/app/api.ts";
 import type { SecurityView } from "@/app/types.ts";
 
+export const setTunnel = (enabled: boolean) =>
+  api<SecurityView["tunnel"]>("/security/tunnel", { method: "PUT", body: JSON.stringify({ enabled }) });
+
 export function getSecurity(): Promise<SecurityView> {
   return api<SecurityView>("/security");
 }

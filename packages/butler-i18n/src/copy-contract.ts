@@ -955,6 +955,7 @@ export interface AppCopy {
     allowPaymentSite: string;
     allowSiteDescription: string;
     paymentSkipped: (site: string, amount: string) => string;
+    devicePaired: (name: string) => string;
     allowScope: string;
     allowConversation: string;
     allowAlways: string;
@@ -2071,6 +2072,10 @@ export interface AppCopy {
     security: {
       remoteAccess: string;
       remoteAccessDescription: string;
+      tunnel: string;
+      tunnelDescription: string;
+      tunnelConnected: string;
+      tunnelQrNote: string;
       addresses: string;
       noAddresses: string;
       bindErrors: {

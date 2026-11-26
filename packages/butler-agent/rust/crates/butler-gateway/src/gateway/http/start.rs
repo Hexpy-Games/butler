@@ -39,6 +39,7 @@ pub(in crate::gateway) async fn prepare(
         preview_lifetime_started: parking_lot::Mutex::new(false),
         application,
         devices,
+        tunnel: config.tunnel.map(super::tunnel::Tunnel::new),
         security: security::GatewaySecurity::new(security::SecurityConfig {
             auth: config.local_auth,
             admin: config.admin_credential,
@@ -56,6 +57,7 @@ pub(in crate::gateway) async fn prepare(
             config.message_rate_limit_max,
             config.message_rate_limit_window,
         ),
+        pairing: Default::default(),
         shutdown: shutdown.clone(),
         favicons: Arc::new(super::favicons::Favicons::new(config.favicon_cache_root)),
         uploads: tokio::sync::Semaphore::new(2),
@@ -69,6 +71,7 @@ pub(in crate::gateway) async fn prepare(
     // Publish the saved exposure before loopback admission: a successful
     // health probe must not race initialization of Settings → Security.
     state.remote.apply(&state, exposure);
+    super::tunnel::Tunnel::start(&state).await;
     browser_ports(&state);
     Ok(state)
 }

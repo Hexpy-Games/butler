@@ -23,7 +23,7 @@ pub(super) type LiveListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
 
 const MAX_REPLAY_EVENTS: usize = 200;
 const MAX_BUFFERED_EVENTS: usize = 128;
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const HEARTBEAT: &str = "event: heartbeat\ndata: null\n\n";
 
 /// A live event stream from `cursor`. It ends when any of `closers` fires

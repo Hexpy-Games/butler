@@ -243,6 +243,7 @@ mod tool_steps;
 mod tools;
 mod tools_direct_args;
 mod tools_effects;
+mod tunnel;
 mod turn;
 mod turn_continuation;
 mod turn_faults;

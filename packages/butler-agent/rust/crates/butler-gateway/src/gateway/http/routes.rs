@@ -229,6 +229,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/provider-quota", Handler::ProviderQuota),
     ("/runtime-readiness", Handler::RuntimeReadiness),
     ("/security", Handler::Security),
+    ("/security/tunnel", Handler::Security),
     ("/security/agent-import/sources", Handler::Security),
     ("/security/agent-import/start", Handler::Security),
     ("/security/agent-import/undo", Handler::Security),

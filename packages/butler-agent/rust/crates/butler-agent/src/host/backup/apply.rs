@@ -105,11 +105,20 @@ fn complete(
             OpenFlags::SQLITE_OPEN_READ_WRITE,
         )
         .map_err(io::Error::other)?;
-        db.execute(
-            "UPDATE paired_devices SET revoked_at = ?1 WHERE revoked_at IS NULL",
-            [chrono::Utc::now().timestamp_millis()],
-        )
-        .map_err(io::Error::other)?;
+        let has_noise_static: bool = db
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('paired_devices') WHERE name = 'noise_static')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(io::Error::other)?;
+        let revoke = if has_noise_static {
+            "UPDATE paired_devices SET revoked_at = ?1, noise_static = NULL WHERE revoked_at IS NULL"
+        } else {
+            "UPDATE paired_devices SET revoked_at = ?1 WHERE revoked_at IS NULL"
+        };
+        db.execute(revoke, [chrono::Utc::now().timestamp_millis()])
+            .map_err(io::Error::other)?;
     }
     if let Some(path) = graph_path(root)?
         && path.try_exists()?

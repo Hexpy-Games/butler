@@ -47,7 +47,7 @@ butler remote disable
 
 The device list survives restarts. When you revoke a device, its cookie is rejected immediately and its live event stream closes. Revoking every device leaves local bearer authentication in place. `butler open` opens a one-time link for this computer and creates a revocable device named "This computer · browser". Devices with an existing v1 cookie must pair again. The long connection token is no longer shown and no longer works in the connect form. `remote code` stays as a hidden alias of `remote pair` for one preview release. `remote code --rotate` and `remote code --json` no longer work.
 
-The browser cookie is HttpOnly and SameSite=Strict. Plain HTTP on a LAN host name cannot use a Secure cookie, and the connection and the cookie are not encrypted. Use a network you trust, or serve HTTPS from a proxy you manage. Origin and Fetch Metadata checks stay in place. The last-seen time is updated in memory on each request and saved at most once every 15 minutes. Idle devices cause no writes.
+The browser cookie is HttpOnly and SameSite=Lax. Plain HTTP on a LAN host name cannot use a Secure cookie, and the connection and the cookie are not encrypted. Use a network you trust, or serve HTTPS from a proxy you manage. Origin and Fetch Metadata checks stay in place. The last-seen time is updated in memory on each request and saved at most once every 15 minutes. Idle devices cause no writes.
 
 Status shows whether remote access is on, the bind addresses, LAN URLs, bind errors and allowed hosts. It does not show a code. The commands need a running service and do not start it for you. If a command cannot connect, run `butler start`.
 

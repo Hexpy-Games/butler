@@ -1440,6 +1440,7 @@ const butlerApp = Object.freeze({
   listOauthCredentials: () => requestSecurity("listOauthCredentials"),
   removeOauthCredential: ({ id } = {}) => requestSecurity("removeOauthCredential", { id }),
   getSecurity: () => requestSecurity("getSecurity"),
+  setTunnel: (request) => requestSecurity("setTunnel", { payload: request ?? {} }),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
   getPairingStatus: () => requestSecurity("getPairingStatus"),
   listPairedDevices: () => requestSecurity("listPairedDevices"),

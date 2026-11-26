@@ -41,6 +41,8 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
         json!(["https://butler.example.com"])
     );
     let browser = browser();
+    let port = s.agent.launch.port;
+    let mut host_cookie = None;
     for (name, value, secure) in [
         ("x-forwarded-proto", "https", true),
         ("forwarded", "for=192.0.2.1;proto=https", true),
@@ -69,7 +71,17 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
             secure
         );
         assert!(cookie.contains("HttpOnly") && cookie.contains("SameSite=Lax"));
+        if secure {
+            assert!(cookie.starts_with(&format!("__Host-butler_session_{port}=")));
+            assert!(cookie.contains("Path=/"));
+            assert!(!cookie.to_ascii_lowercase().contains("domain="));
+            host_cookie.get_or_insert_with(|| cookie_pair(&response));
+        } else {
+            assert!(cookie.starts_with(&format!("butler_session_{port}=")));
+        }
     }
+    let host_cookie = host_cookie.unwrap();
+    assert_eq!(read(&s.gw, &browser, &host_cookie).await?, 200);
     let pin = issue(&app).await?;
     let local = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
     assert_eq!(local.status().as_u16(), 303);

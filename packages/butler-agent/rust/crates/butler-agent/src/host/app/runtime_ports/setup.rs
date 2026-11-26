@@ -2,7 +2,7 @@
 //! local model servers, API keys and the ChatGPT sign-in flow, behind the
 //! gateway's [`AppSetupPort`].
 
-mod butler_account;
+pub(in crate::host::app) mod butler_account;
 mod push_relay;
 pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;

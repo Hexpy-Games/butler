@@ -244,7 +244,7 @@ pub(in crate::gateway::http) fn view(
         .and_then(|s| s.strip_suffix("/view"))
         .ok_or_else(refused)?;
     let port = super::port(state).ok_or_else(refused)?;
-    let origin = super::view_origin(state, request.headers(), port)?;
+    let origin = super::view_origin(state, request, port)?.ok_or_else(refused)?;
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {
