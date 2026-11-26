@@ -2,7 +2,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, ComposerDecisionPanel, Globe2, Key, Square, Typo } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 
-/** A step only the user can do in a tab: open the tab (desktop) or stop. The hand-back resolves it; nothing to allow. */
+/** A step only the user can do in a tab: open the tab (desktop), mark it done, or stop. The hand-back resolves it; nothing to allow. */
 export function ComposerBrowserHandoffSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision & Required<Pick<ComposerAuthorityDecision, "handoff">> }) {
   useAppLocale();
   const copy = appCopy.interfaceTemplates.approvalRequest.signInHandoff;
