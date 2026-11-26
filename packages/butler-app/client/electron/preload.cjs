@@ -1169,6 +1169,13 @@ const butlerApp = Object.freeze({
       { method: "POST", body: JSON.stringify({ scope }) },
     );
   },
+  handBackAuthorityRequest: ({ sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(
+      `/authority-requests/${encodeURIComponent(requestRef ?? "")}/hand-back?${params.toString()}`,
+      { method: "POST" },
+    );
+  },
   revokeConversationPermission: ({ sessionId, grantRef } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-permissions/${encodeURIComponent(grantRef ?? "")}?${params.toString()}`, { method: "DELETE" });

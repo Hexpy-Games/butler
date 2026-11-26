@@ -103,6 +103,39 @@ impl SubsessionService {
         self.steer_locked(request).await
     }
 
+    /// Whether a decision raised in `source` holds up the work a direction on
+    /// `relation_id` went to: the source is that child or one of its own delegates.
+    pub async fn direction_waits_on(
+        &self,
+        relation_id: &str,
+        source: &str,
+    ) -> Result<bool, BtccError> {
+        let Some(relation) = self
+            .repository
+            .relation_by_id(relation_id.to_owned())
+            .await
+            .map_err(BtccError::from)?
+        else {
+            return Ok(false);
+        };
+        let (mut session, mut seen) = (source.to_owned(), std::collections::HashSet::new());
+        while seen.insert(session.clone()) {
+            if session == relation.child_session_id {
+                return Ok(true);
+            }
+            let Some(parent) = self
+                .repository
+                .by_child(session.clone())
+                .await
+                .map_err(BtccError::from)?
+            else {
+                return Ok(false);
+            };
+            session = parent.parent_session_id;
+        }
+        Ok(false)
+    }
+
     pub(super) async fn steer_locked(
         &self,
         request: SubsessionDirectionRequest,

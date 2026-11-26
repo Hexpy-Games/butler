@@ -103,7 +103,7 @@ export function ActivityLayoutHarness() {
       <AdaptiveShellSidebar open={false} />
       <AdaptiveShellWorkspace><Stack fill gap="md" data-stub-stream-complete={round === rounds && length === roundText.length}>
       {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision, ...handoff,
-        ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, onOpenTab: () => {}, onStop: () => {} } } : {}),
+        ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, onOpenTab: () => {}, onStop: () => {}, onDone: () => {} } } : {}),
         pending: false, pendingCount: 1, scope: undefined, composingMessage: false,
         onAllow: async () => {}, onAllowConversation: async () => {}, onDeny: async () => {},
         onShowDecision: () => {}, onOpenSource: () => {}, onComposeMessage: () => {},

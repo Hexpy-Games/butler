@@ -176,6 +176,11 @@ pub(super) async fn steer(
         })
         .await
         .map_err(ToolExecutionError::Integrity)?;
+    if result["ok"] == true
+        && let Some(relation) = result["relation_id"].as_str()
+    {
+        super::super::browser::client::hand_back_directed(owner, relation).await;
+    }
     encoded(&result)
 }
 

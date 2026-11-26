@@ -14,11 +14,13 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
     eyebrow={copy.eyebrow}
     title={decision.title}
     details={decision.details}
+    error={decision.error}
     onOpen={decision.onOpenSource}
     aside={decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : undefined}
     data-test-class="composer-browser-handoff"
     actions={<ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" iconStart={<Square size="sm" />} onClick={handoff.onStop}>{copy.stop}</Button>
+      <Button type="button" size="sm" variant={handoff.canOpenTab ? "secondary" : "default"} disabled={decision.pending} onClick={handoff.onDone}>{copy.done}</Button>
       {handoff.canOpenTab && <Button type="button" size="sm" onClick={handoff.onOpenTab}>{copy.openTab}</Button>}
     </ButtonContainer>}
   />;

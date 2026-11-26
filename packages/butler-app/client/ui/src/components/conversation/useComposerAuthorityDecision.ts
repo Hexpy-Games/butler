@@ -3,6 +3,7 @@ import type { ComposerDecisionDetail, ComposerDecisionMedia } from "@/butler-ds"
 import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useRef, useState } from "react";
+import { api } from "@/app/api.ts";
 import { approvalRequestView, browserHandoffView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
 import { canOpenHandoffTab, openHandoffTab } from "@/components/browser/browserHandoff.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
@@ -28,7 +29,7 @@ export interface ComposerAuthorityDecision {
   onShowDecision: () => void; onOpenSource: () => void;
   onComposeMessage: () => void;
   /** A step only the user can do in a tab: open the tab or stop; the hand-back resolves it. */
-  handoff?: { canOpenTab: boolean; signIn: boolean; onOpenTab: () => void; onStop: () => void };
+  handoff?: { canOpenTab: boolean; signIn: boolean; onOpenTab: () => void; onStop: () => void; onDone: () => void };
 }
 
 export function useComposerAuthorityDecision(): ComposerAuthorityDecision | undefined {
@@ -43,16 +44,19 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const inFlight = useRef(new Set<string>());
   if (!request) return undefined;
   const key = `${sessionId}:${request.requestRef}`;
-  const decide = async (action: "allow" | "deny", scope: "once" | "conversation" | "site" | "always" = "once") => {
+  const settle = async (apply: () => Promise<boolean>) => {
     if (inFlight.current.has(key)) return;
     inFlight.current.add(key); setPending(new Set(inFlight.current)); setFailed(undefined);
-    const store = useButlerStore.getState();
-    const applied = action === "allow" ? await store.allowAuthorityRequest(request.requestRef, sessionId, scope)
-      : scope === "always" ? await store.denyAuthorityRequest(request.requestRef, sessionId, { scope })
-        : await store.denyAuthorityRequest(request.requestRef, sessionId);
+    const applied = await apply().catch(() => false);
     inFlight.current.delete(key); setPending(new Set(inFlight.current));
     if (!applied) setFailed(key);
   };
+  const decide = (action: "allow" | "deny", scope: "once" | "conversation" | "site" | "always" = "once") => settle(async () => {
+    const store = useButlerStore.getState();
+    return action === "allow" ? store.allowAuthorityRequest(request.requestRef, sessionId, scope)
+      : scope === "always" ? store.denyAuthorityRequest(request.requestRef, sessionId, { scope })
+        : store.denyAuthorityRequest(request.requestRef, sessionId);
+  });
   const view = approvalRequestView(request, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   const canOpenTab = canOpenHandoffTab();
   const handoff = browserHandoffView(request, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
@@ -60,7 +64,11 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     media: imageApprovalMedia(request) ?? media,
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
-      onStop: () => void stopRequest(request) } } : {}),
+      onStop: () => void stopRequest(request),
+      onDone: () => void settle(async () => {
+        await api(`/authority-requests/${encodeURIComponent(request.requestRef)}/hand-back?session_id=${encodeURIComponent(sessionId)}`, { method: "POST" });
+        return useButlerStore.getState().refreshAuthorityApprovals(sessionId);
+      }) } } : {}),
     title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),

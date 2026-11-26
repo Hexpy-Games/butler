@@ -168,7 +168,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
 
 function PendingRequest({ decision, view, reload }: { decision: PendingDecision; view: SessionView; reload(): void }) {
   if (decision.kind === "question") return <QuestionCard key={decision.request.request_ref} request={decision.request} sessionId={view.session_id} reload={reload} />;
-  if (decision.kind === "handoff") return <BrowserHandoffCard key={decision.card.requestRef} card={decision.card} sessionId={view.session_id} turn={view.active_turn} reload={reload} />;
+  if (decision.kind === "handoff") return <BrowserHandoffCard key={decision.card.requestRef} card={decision.card} view={view} reload={reload} />;
   return <ApprovalCard key={decision.card.requestRef} card={decision.card} count={decision.count} sessionId={view.session_id} reload={reload} />;
 }
 
