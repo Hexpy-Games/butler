@@ -253,7 +253,7 @@ async fn target_scope(
 }
 
 fn command_targets(command: &str, cwd: &Path) -> Vec<String> {
-    use butler_platform::command_sandbox::{normalize_path_token, path_tokens};
+    use butler_platform::command_sandbox::{normalize_path_token, path_script, path_tokens};
 
     let mut targets = vec![cwd.to_string_lossy().into_owned()];
     targets.extend(
@@ -263,7 +263,7 @@ fn command_targets(command: &str, cwd: &Path) -> Vec<String> {
             .map(normalize_path_token),
     );
     targets.extend(
-        butler_turn::btcc::command_segments(command)
+        butler_turn::btcc::command_segments(path_script(command))
             .into_iter()
             .flatten()
             .flatten()
@@ -349,4 +349,24 @@ pub(super) async fn sandbox_report(owner: &GuidedTools) -> Result<Value, BtccErr
         "project_write":enabled && caps.project_write_available(), "disabled_reason":reason,
         "when_unavailable":"Auto project-write commands require approval."}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    // test-category: pure-logic
+    #[test]
+    fn cmd_wrapper_targets_stay_in_project() {
+        let cwd = std::env::temp_dir().join(format!("butler-command-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&cwd).unwrap();
+        let targets = super::command_targets("cmd /c build.cmd", &cwd);
+        std::fs::remove_dir(&cwd).unwrap();
+        for target in targets {
+            let resolved = butler_platform::tool_paths::resolve(&cwd, &target).unwrap();
+            assert!(
+                resolved.starts_with(&cwd),
+                "{target} resolved to {resolved:?}"
+            );
+        }
+    }
 }

@@ -104,7 +104,8 @@ pub fn folder_write_available() -> bool {
     return linux::mount_tier_available();
     #[cfg(target_os = "macos")]
     return true;
-    // Off until Windows sandbox matrix row 18 passes on an interactive desktop.
+    #[cfg(windows)]
+    return true;
     #[allow(unreachable_code)]
     false
 }
