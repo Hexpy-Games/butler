@@ -253,7 +253,7 @@ async fn target_scope(
 }
 
 fn command_targets(command: &str, cwd: &Path) -> Vec<String> {
-    use butler_platform::command_sandbox::{normalize_path_token, path_tokens};
+    use butler_platform::command_sandbox::{normalize_path_token, path_script, path_tokens};
 
     let mut targets = vec![cwd.to_string_lossy().into_owned()];
     targets.extend(
@@ -263,7 +263,7 @@ fn command_targets(command: &str, cwd: &Path) -> Vec<String> {
             .map(normalize_path_token),
     );
     targets.extend(
-        butler_turn::btcc::command_segments(command)
+        butler_turn::btcc::command_segments(path_script(command))
             .into_iter()
             .flatten()
             .flatten()

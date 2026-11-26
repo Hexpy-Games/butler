@@ -25,6 +25,13 @@ impl GuidedTurnFactoryAdapter {
         })
         .await
         .map_err(|_| error("workspace_unavailable"))?;
+        let sandbox_on = matches!(
+            butler_gateway::gateway::command_sandbox_enabled(
+                self.monitoring.app_database_path.clone()
+            )
+            .await,
+            Ok(true)
+        );
         let mut root_pins = Vec::new();
         if phase.execution_policy.access_mode != butler_turn::btcc::AccessMode::FullAccess {
             let data = self.butler_data.clone();
@@ -32,14 +39,18 @@ impl GuidedTurnFactoryAdapter {
             let inventory = inventory.clone();
             root_pins = tokio::task::spawn_blocking(move || {
                 let mut pins = vec![inventory.pin_root(&root)?, inventory.pin_root(&data)?];
-                for relative in [
-                    butler_platform::data_paths::ARTIFACTS,
-                    butler_platform::data_paths::PROJECT_WRITE_CACHE,
-                    butler_platform::data_paths::PROJECT_WRITE_TMP,
-                ] {
-                    let path = data.join(relative);
-                    butler_platform::secure_fs::create_private_dir_all(&path)?;
-                    pins.push(inventory.pin_root(&path)?);
+                let artifacts = data.join(butler_platform::data_paths::ARTIFACTS);
+                butler_platform::secure_fs::create_private_dir_all(&artifacts)?;
+                pins.push(inventory.pin_root(&artifacts)?);
+                if sandbox_on {
+                    for relative in [
+                        butler_platform::data_paths::PROJECT_WRITE_CACHE,
+                        butler_platform::data_paths::PROJECT_WRITE_TMP,
+                    ] {
+                        let path = data.join(relative);
+                        butler_platform::secure_fs::create_private_dir_all(&path)?;
+                        pins.push(inventory.pin_root(&path)?);
+                    }
                 }
                 Ok::<_, std::io::Error>(pins)
             })
@@ -47,13 +58,7 @@ impl GuidedTurnFactoryAdapter {
             .map_err(|_| error("workspace_unavailable"))?
             .map_err(|_| error("workspace_unavailable"))?;
         }
-        if matches!(
-            butler_gateway::gateway::command_sandbox_enabled(
-                self.monitoring.app_database_path.clone()
-            )
-            .await,
-            Ok(true)
-        ) {
+        if sandbox_on {
             let inventory_root = path.clone();
             tokio::task::spawn_blocking(move || {
                 if butler_platform::command_sandbox::project_write_available() {
