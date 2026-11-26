@@ -234,3 +234,35 @@ async fn blocked_frames_keep_the_page() -> Result<(), HarnessError> {
     );
     s.finish().await
 }
+
+pub(crate) const VITE: [(&str, &str); 3] = [
+    (
+        "index.html",
+        r#"<!doctype html><script type="module" src="/assets/app.js"></script><h1>Vite</h1>"#,
+    ),
+    (
+        "assets/app.js",
+        r#"import("/assets/chunk.js").then(m => m.ready());"#,
+    ),
+    (
+        "assets/chunk.js",
+        r#"export function ready() { document.querySelector("h1").textContent = "Vite ready"; }"#,
+    ),
+];
+
+#[tokio::test]
+async fn vite_output_loads_root_absolute_assets() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    let s = setup("BROWSER-HEADLESS-VITE")?.start().await?;
+    let admin = admin(&s);
+    let (_, url) = publish_as(&s, "Publish vite").await?;
+    let me = "general";
+    let opened = open(&admin, me, &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = opened["tab"].clone();
+    let page = call(&admin, me, "tab.observe", &tab, json!({"settle":true})).await?;
+    assert_eq!(page["status"], "ok", "{page}");
+    assert!(text(&page).contains("Vite ready"), "{page}");
+    s.finish().await
+}
