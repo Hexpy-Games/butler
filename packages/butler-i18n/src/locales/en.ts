@@ -547,10 +547,10 @@ export const enUsCopy: AppCopy = {
     problems: {
       invalidCode: "Wrong or expired code. Get a new one.",
       hostNotAllowed: "This address isn't allowed. Check Settings → Phone & devices on your computer.",
-      needsPairing: "Pairing ended. Connect again.",
+      needsPairing: "This phone was unpaired.",
       versionMismatch: "Versions don't match. Update Butler and the app.",
       notButler: "No Butler at this address.",
-      unreachable: "Can't reach Butler. Check the address and network.",
+      unreachable: "Can't reach Butler. Check your network.",
       failed: "Couldn't connect. Try again.",
       desktopOffline: "Your computer is off",
       relayOff: "Can't reach your computer. Check Settings → Phone & devices on your computer.",

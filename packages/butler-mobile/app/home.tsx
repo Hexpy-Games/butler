@@ -7,7 +7,6 @@ import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import type { Problem } from "@/connection/problems";
-import { lanAddresses } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
@@ -29,55 +28,50 @@ export default function Home() {
   const t = useTokens();
   const [status, setStatus] = useState<Status>({ kind: "checking" });
   const latest = useRef(0);
-  const { open } = useConversation();
+  const { open, revoked } = useConversation();
+  const revokedRef = useRef(revoked);
+  revokedRef.current = revoked;
   const check = useCallback(async () => {
     const id = ++latest.current;
     setStatus(previous => previous.kind === "ready" ? previous : { kind: "checking", origin: previous.origin });
     const pairing = await pairingStore.loadActive().catch(() => null);
     if (!pairing) {
-      if (id !== latest.current) return;
+      if (id !== latest.current || revokedRef.current) return;
       router.replace("/pair");
       return;
     }
     const result = await open(pairing);
-    if (result.kind === "problem" && result.problem === "needsPairing") {
-      if (id !== latest.current) return;
-      await pairingStore.clear(pairing.butlerId);
-      if (id !== latest.current) return;
-      showToast({ message: copy.problems.needsPairing, tone: "warning" });
-      if (id !== latest.current) return;
-      router.replace("/pair");
-      return;
-    }
     if (id !== latest.current) return;
-    const origin = pairing.computerName ?? lanAddresses(pairing)[0];
+    const origin = pairing.computerName;
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin }
       : { kind: "problem", origin, problem: result.problem });
-  }, [copy, open]);
+  }, [open]);
   useFocusEffect(useCallback(() => {
     void check();
     return () => { latest.current++; };
   }, [check]));
-  if (status.kind === "ready") return <ScrollEdgeEffectProvider><Conversations /></ScrollEdgeEffectProvider>;
+  const shown: Status = revoked ? { kind: "problem", origin: revoked.computerName, problem: "needsPairing" } : status;
+  if (shown.kind === "ready") return <ScrollEdgeEffectProvider><Conversations /></ScrollEdgeEffectProvider>;
+  const needsPairing = shown.kind === "problem" && shown.problem === "needsPairing";
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <View style={{ flex: 1, gap: t.length("--space-4") }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: t.length("--space-4") }}>
           <Text variant="h1">{copy.appName}</Text>
-          {status.origin ? <Text tone="secondary" literal selectable>{status.origin}</Text> : null}
-          {status.kind === "checking" ? (
+          {shown.origin ? <Text tone="secondary" literal selectable>{shown.origin}</Text> : null}
+          {shown.kind === "checking" ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
               <Spinner label={copy.home.checking} />
               <Text tone="secondary">{copy.home.checking}</Text>
             </View>
           ) : null}
-          {status.kind === "problem" ? <Text tone="danger">{copy.problems[status.problem]}</Text> : null}
+          {shown.kind === "problem" ? <Text tone="danger">{copy.problems[shown.problem]}</Text> : null}
         </ScrollView>
         <ButtonGroup>
-          {status.kind === "problem" ? <Button label={copy.home.retry} onPress={check} /> : null}
-          {status.kind === "problem" && status.problem === "desktopOffline" ? null
-            : <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />}
+          {shown.kind === "problem" && !needsPairing ? <Button label={copy.home.retry} onPress={check} /> : null}
+          {shown.kind === "problem" && shown.problem === "desktopOffline" ? null
+            : <Button variant={needsPairing ? "default" : "secondary"} label={copy.home.pairAgain} onPress={() => router.push("/pair")} />}
         </ButtonGroup>
       </View>
     </Surface>

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { AppState } from "react-native";
-import type { MobileCopy } from "../../../butler-i18n/src/index.ts";
 import { connectLive, createGatewayClient, type FetchLike, type GatewayClient, type LiveConnection, type LiveEvent } from "../../../butler-protocol/src/client/index.ts";
 import type { Access } from "@/connection/access";
 import { nativeFetch } from "@/connection/nativeFetch";
@@ -12,10 +11,8 @@ import { loadRelayPeer } from "@/connection/relayPeer";
 import { chooseRoute, type Route } from "@/connection/route";
 import { createRelayFetch } from "@/connection/tunnel/relayFetch";
 import type { RelayPeer } from "@/connection/tunnel/transport";
-import { showToast } from "@/ds";
 
 interface LiveRouteOptions {
-  copy: MobileCopy;
   pairing: RefObject<Pairing | null>;
   route: RefObject<Route | null>;
   relay: RefObject<{ peer: RelayPeer; fetch: FetchLike } | null>;
@@ -33,12 +30,13 @@ interface LiveRouteOptions {
   setClient: (client: GatewayClient) => void;
   setLost: (lost: boolean) => void;
   setReconcile: Dispatch<SetStateAction<number>>;
-  teardown: () => Promise<void>;
+  setRevoked: (revoked: null) => void;
+  teardown: (revoked?: Pairing) => Promise<void>;
 }
 
 export function useLiveRoute({
-  copy, pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
-  setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, teardown,
+  pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
+  setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, setRevoked, teardown,
 }: LiveRouteOptions) {
   const reroute = useRef<() => Promise<void>>(async () => {});
   const proxy = useRelayProxy(activeRoute?.kind === "relay" ? peer : null, activePairing?.deviceToken ?? null);
@@ -66,7 +64,7 @@ export function useLiveRoute({
       },
       onError(error) {
         if (error.status === 401 || error.code === "local_auth_required") {
-          void teardown().then(() => showToast({ message: copy.problems.needsPairing, tone: "warning" }));
+          void teardown(pairing.current ?? next);
           return;
         }
         const found = problemFrom(error);
@@ -74,7 +72,7 @@ export function useLiveRoute({
       },
     });
     if (AppState.currentState === "background") live.current.pause();
-  }, [copy, listeners, live, pairing, route, setClient, setLost, setPairing, setProblem, setReconcile, setRoute, teardown, timer]);
+  }, [listeners, live, pairing, route, setClient, setLost, setPairing, setProblem, setReconcile, setRoute, teardown, timer]);
   reroute.current = async () => {
     const current = pairing.current;
     if (!current || current.addresses.length < 2) return;
@@ -84,20 +82,26 @@ export function useLiveRoute({
     if (result.kind === "ready" && result.route.origin !== route.current?.origin) {
       connect(current, result.route, live.current?.cursor ?? 0);
       setReconcile(value => value + 1);
+    } else if (result.kind === "problem" && result.problem === "needsPairing") {
+      await teardown(current);
     } else if (result.kind === "problem" && result.problem === "desktopOffline") setProblem(result.problem);
   };
   const open = useCallback(async (next: Pairing): Promise<ProbeResult> => {
+    setRevoked(null);
     const nextPeer = await loadRelayPeer(next).catch(() => null);
     const relayFetch = nextPeer ? createRelayFetch(nextPeer) : null;
     const result = await chooseRoute(next, nativeFetch, relayFetch);
-    if (result.kind === "problem") return { kind: "problem", problem: result.problem };
+    if (result.kind === "problem") {
+      if (result.problem === "needsPairing") await teardown(next);
+      return { kind: "problem", problem: result.problem };
+    }
     if (pairing.current?.deviceToken !== next.deviceToken || route.current?.origin !== result.route.origin) {
       relay.current = nextPeer && relayFetch ? { peer: nextPeer, fetch: relayFetch } : null;
       setPeer(nextPeer);
       connect(next, result.route);
     }
     return { kind: "ready" };
-  }, [connect, pairing, relay, route, setPeer]);
+  }, [connect, pairing, relay, route, setPeer, setRevoked, teardown]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", state => {
       if (state === "background") live.current?.pause();

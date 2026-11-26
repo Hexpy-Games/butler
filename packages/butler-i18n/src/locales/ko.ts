@@ -545,10 +545,10 @@ export const koKrCopy: AppCopy = {
     problems: {
       invalidCode: "코드가 틀렸거나 만료되었습니다. 새 코드를 받으십시오.",
       hostNotAllowed: "허용되지 않은 주소입니다. 컴퓨터의 설정 → 휴대폰 및 기기를 확인하십시오.",
-      needsPairing: "연결이 해제되었습니다. 다시 연결하십시오.",
+      needsPairing: "이 휴대폰의 연결이 해제되었습니다.",
       versionMismatch: "버전이 맞지 않습니다. 버틀러와 앱을 업데이트하십시오.",
       notButler: "이 주소에는 버틀러가 없습니다.",
-      unreachable: "버틀러에 연결할 수 없습니다. 주소와 네트워크를 확인하십시오.",
+      unreachable: "버틀러에 연결할 수 없습니다. 네트워크를 확인하십시오.",
       failed: "연결하지 못했습니다. 다시 시도하십시오.",
       desktopOffline: "컴퓨터가 꺼져 있습니다",
       relayOff: "컴퓨터에 연결할 수 없습니다. 컴퓨터의 설정 → 휴대폰 및 기기를 확인하십시오.",

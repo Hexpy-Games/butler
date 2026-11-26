@@ -100,7 +100,7 @@ pub(super) enum Admission {
 }
 
 /// Why a request has no usable credential.
-enum Denial {
+pub(super) enum Denial {
     Unconfigured,
     Missing,
     /// A session cookie request without the Butler page's Origin.

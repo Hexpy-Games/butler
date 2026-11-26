@@ -1,21 +1,24 @@
-use axum::extract::ws::Message;
+use axum::extract::ws::{Message, WebSocket};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use butler_e2e::e2e::{
-    HarnessError, fake_butler_cloud::FakeButlerCloud, scenario::Setup, security::AdminClient,
+    HarnessError,
+    fake_butler_cloud::FakeButlerCloud,
+    gateway::Reply,
+    scenario::{Scenario, Setup},
+    security::AdminClient,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
 
-use super::phone::Phone;
+use super::phone::{Phone, Reset};
 
-#[tokio::test]
-async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let fake = FakeButlerCloud::start().await?;
+async fn pair_relay_phone(
+    fake: &FakeButlerCloud,
+    setup: Setup,
+    phone: &Phone,
+) -> Result<(Scenario, AdminClient, WebSocket, [u8; 32], String, Reply), HarnessError> {
     fake.set_plan("plus");
-    let setup = Setup::new("TUNNEL-01")?
-        .env("BUTLER_CLOUD_API_URL", &fake.url)
-        .stub_cassette(crate::browser_outputs::stub::cassette()?);
+    let setup = setup.env("BUTLER_CLOUD_API_URL", &fake.url);
     std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
     std::fs::write(
         setup.sandbox.data.join("gateways/app.json"),
@@ -42,18 +45,17 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
         .await?;
     assert_eq!(enabled.status, 200);
     assert_eq!(enabled.data()["state"], "connected");
-    let mut socket = fake.tunnel_socket().await;
+    let socket = fake.tunnel_socket().await;
     let view = app.view().await?;
     let desktop_public = URL_SAFE_NO_PAD
         .decode(view["tunnel"]["public_key"].as_str().unwrap())
         .unwrap()
         .try_into()
         .unwrap();
-    let id = view["tunnel"]["tunnel_id"].as_str().unwrap();
+    let id = view["tunnel"]["tunnel_id"].as_str().unwrap().to_owned();
     let pairing = app
         .send(Method::POST, "/security/pairing", None, &[])
         .await?;
-    let phone = Phone::new();
     let paired =
         s.gw.post(
             "/devices/pair",
@@ -64,6 +66,17 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
         )
         .await?;
     assert_eq!(paired.status, 201);
+    Ok((s, app, socket, desktop_public, id, paired))
+}
+
+#[tokio::test]
+async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let fake = FakeButlerCloud::start().await?;
+    let setup = Setup::new("TUNNEL-01")?.stub_cassette(crate::browser_outputs::stub::cassette()?);
+    let phone = Phone::new();
+    let (s, app, mut socket, desktop_public, id, paired) =
+        pair_relay_phone(&fake, setup, &phone).await?;
     let token = paired.data()["device_token"].as_str().unwrap();
     assert!(token.starts_with("bdt_"));
     let view_path = crate::content_port::publish(&s).await?;
@@ -73,7 +86,7 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
             &mut socket,
             1,
             &desktop_public,
-            id,
+            &id,
             "GET",
             "/health",
             Some(token),
@@ -87,7 +100,7 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
             &mut socket,
             2,
             &desktop_public,
-            id,
+            &id,
             "GET",
             "/sessions",
             Some(token),
@@ -104,7 +117,7 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
             &mut socket,
             3,
             &desktop_public,
-            id,
+            &id,
             "GET",
             "/security",
             Some(token),
@@ -122,7 +135,7 @@ async fn tunnel_01_relay_reaches_routes_as_remote_peer() -> Result<(), HarnessEr
             &mut socket,
             4,
             &desktop_public,
-            id,
+            &id,
             "GET",
             &view_path,
             Some(token),
@@ -250,5 +263,75 @@ async fn tunnel_02_pairing_through_relay_requires_noise_key() -> Result<(), Harn
         .await
         .unwrap();
     assert_eq!(sessions.status, 200);
+    s.finish().await
+}
+
+#[tokio::test]
+async fn tunnel_03_revoked_device_gets_401_through_relay() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let fake = FakeButlerCloud::start().await?;
+    let phone = Phone::new();
+    let (s, app, mut socket, desktop_public, id, paired) =
+        pair_relay_phone(&fake, Setup::new("TUNNEL-03")?, &phone).await?;
+    let token = paired.data()["device_token"].as_str().unwrap();
+    let device_id = paired.data()["device_id"].as_str().unwrap();
+
+    let health = phone
+        .request(
+            &mut socket,
+            1,
+            &desktop_public,
+            &id,
+            "GET",
+            "/health",
+            Some(token),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(health.status, 200);
+
+    let wrong_key = Phone::new()
+        .request(
+            &mut socket,
+            2,
+            &desktop_public,
+            &id,
+            "GET",
+            "/health",
+            Some(token),
+            None,
+        )
+        .await;
+    assert!(matches!(wrong_key, Err(Reset)));
+
+    let revoked = app
+        .send(
+            Method::DELETE,
+            &format!("/security/devices/{device_id}"),
+            None,
+            &[],
+        )
+        .await?;
+    assert_eq!(revoked.status, 200);
+
+    let health = phone
+        .request(
+            &mut socket,
+            3,
+            &desktop_public,
+            &id,
+            "GET",
+            "/health",
+            Some(token),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(health.status, 401);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&health.body).unwrap()["error"]["code"],
+        "local_auth_required"
+    );
     s.finish().await
 }
