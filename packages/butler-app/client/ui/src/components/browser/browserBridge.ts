@@ -85,10 +85,11 @@ export function connectBrowser() {
         current.setView({ kind: "browser" });
         void browserCall("activate", { id: requested.id });
       }
-      if (requested && session && current.view.kind === "session" && current.activeChatId === session) {
+      if (requested && session) {
+        // The conversation's pane opens on the tab; it shows now if that conversation is on screen, else when the user goes there.
         useBrowserShellState.getState().setOpen(session, true);
         useBrowserShellState.getState().rememberTab(session, requested.id);
-        void browserCall("activate", { id: requested.id });
+        if (current.view.kind === "session" && current.activeChatId === session) void browserCall("activate", { id: requested.id });
       }
     }
   });
@@ -136,7 +137,7 @@ export async function openConversationBrowser(session: string, requestedTab?: st
 export async function focusBrowserTab(id: string, sessionId: string, fallback: string) {
   const state = await browserCall("state") as BrowserSnapshot | undefined;
   if (state?.tabs.some((tab) => tab.id === id)) await openConversationBrowser(sessionId, id);
-  else void openLink(fallback);
+  else void openConversationLink(fallback, sessionId);
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { getButlerAccount, type ButlerAccountStatus } from "@/app/butlerAccount";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { SecurityView } from "@/app/types.ts";
@@ -9,6 +10,7 @@ import {
   setAllowedHosts,
   setContentHosts,
   setRemoteAccess,
+  setTunnel,
 } from "./securityApi";
 
 /**
@@ -23,7 +25,7 @@ function refusedState(error: unknown): SecurityLoadState | null {
   if (isAdminRequiredError(error)) return "admin-required";
   return null;
 }
-export type SecurityAction = "toggle" | "hosts";
+export type SecurityAction = "toggle" | "hosts" | "tunnel";
 
 const TOAST_ID = "settings-security";
 
@@ -32,10 +34,15 @@ export function useSecuritySettings() {
   const [load, setLoad] = useState<SecurityLoadState>("loading");
   const [busy, setBusy] = useState<SecurityAction | null>(null);
 
+  const [account, setAccount] = useState<ButlerAccountStatus | null>(null);
+  const [justEnabled, setJustEnabled] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
-      setView(await getSecurity());
+      const security = await getSecurity();
+      setView(security);
       setLoad("ready");
+      setAccount(security.tunnel ? await getButlerAccount().catch(() => null) : null);
     } catch (error) {
       setLoad(refusedState(error) ?? "error");
     }
@@ -65,9 +72,19 @@ export function useSecuritySettings() {
     view,
     load,
     busy,
+    account,
+    justEnabled,
     retry: () => {
       setLoad("loading");
       void refresh();
+    },
+    toggleTunnel: async (enabled: boolean) => {
+      const saved = await run("tunnel", async () => {
+        const tunnel = await setTunnel(enabled);
+        setView((current) => current && { ...current, tunnel });
+        setJustEnabled(enabled);
+      }, appCopy.settings.errors.updateSettings);
+      if (!saved) await refresh();
     },
     toggleRemoteAccess: (enabled: boolean) => run("toggle", async () => {
       await setRemoteAccess(enabled);

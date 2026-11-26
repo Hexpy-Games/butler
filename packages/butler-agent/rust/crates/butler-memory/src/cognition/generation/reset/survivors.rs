@@ -16,7 +16,9 @@ pub(super) fn prune(
     let mut db = sqlite::open(graph).map_err(io::Error::other)?;
     let cancellation = token.clone();
     db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
-    let tx = db.transaction().map_err(io::Error::other)?;
+    let tx = db
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(io::Error::other)?;
     tx.execute_batch("CREATE TEMP TABLE reset_chunks(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_sources(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_jobs(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_scope_sessions(id TEXT PRIMARY KEY);").map_err(io::Error::other)?;
     if reextract {
         tx.execute_batch("DELETE FROM memory_state WHERE key LIKE 'canonical_catchup_%'")
@@ -72,7 +74,7 @@ INSERT INTO reset_sources SELECT source_id FROM memory_chunk_sources WHERE episo
 INSERT INTO reset_jobs SELECT job_id FROM memory_projection_jobs WHERE episode_id IN reset_chunks;
 DELETE FROM memory_source_terms WHERE source_key IN (SELECT id FROM memory_source_text WHERE source_id IN reset_sources);
 DELETE FROM memory_source_text WHERE source_id IN reset_sources;
-DELETE FROM memory_alias_postings WHERE source_id IN reset_sources;
+DELETE FROM memory_alias_postings WHERE alias_id IN (SELECT alias_id FROM memory_aliases WHERE source_id IN reset_sources);
 DELETE FROM memory_aliases WHERE source_id IN reset_sources;
 DELETE FROM memory_mentions WHERE source_id IN reset_sources;
 DELETE FROM memory_evidence WHERE source_id IN reset_sources;
@@ -82,14 +84,14 @@ DELETE FROM edges WHERE NOT EXISTS(SELECT 1 FROM edge_evidence e WHERE e.edge_id
 CREATE TEMP TABLE reset_keep_nodes(id TEXT PRIMARY KEY);
 INSERT OR IGNORE INTO reset_keep_nodes SELECT node_id FROM memory_evidence;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT node_id FROM memory_aliases;
-INSERT OR IGNORE INTO reset_keep_nodes SELECT node_id FROM memory_alias_postings;
+INSERT OR IGNORE INTO reset_keep_nodes SELECT a.node_id FROM memory_alias_postings p JOIN memory_aliases a ON a.alias_id=p.alias_id;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT node_id FROM memory_mentions;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT source_node_id FROM edges;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT target_node_id FROM edges;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT claim_node_id FROM edges WHERE claim_node_id IS NOT NULL;
 INSERT OR IGNORE INTO reset_keep_nodes SELECT graph_ref_id FROM memory_chunk_graph_refs WHERE graph_ref_type='node';
 INSERT OR IGNORE INTO reset_keep_nodes WITH RECURSIVE parents(id) AS (SELECT id FROM reset_keep_nodes UNION SELECT n.canonical_node_id FROM memory_nodes n JOIN parents p ON p.id=n.id WHERE n.canonical_node_id IS NOT NULL) SELECT id FROM parents;
-DELETE FROM memory_alias_postings WHERE node_id NOT IN reset_keep_nodes;
+DELETE FROM memory_alias_postings WHERE alias_id IN (SELECT alias_id FROM memory_aliases WHERE node_id NOT IN reset_keep_nodes);
 DELETE FROM memory_aliases WHERE node_id NOT IN reset_keep_nodes;
 DELETE FROM memory_mentions WHERE node_id NOT IN reset_keep_nodes;
 DELETE FROM memory_claims WHERE node_id NOT IN reset_keep_nodes;

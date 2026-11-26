@@ -14,6 +14,7 @@ mod tool_arguments;
 pub use authority::questions::{
     AnsweredQuestion, OptionKind, QuestionBinding, QuestionKind, QuestionOption, UserQuestion,
     UserQuestionAnswer, UserQuestionResponse, UserQuestions, question_request_ref,
+    question_slot_request_ref,
 };
 pub use capability_handoff::{CapabilityHandoff, CapabilityHandoffCode, RequestedCapabilityAction};
 pub use thinking::set_capture as set_thinking_capture;
@@ -121,7 +122,8 @@ pub use authority::approval::{
 pub use authority::contracts::{
     AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityDecisionInput, AuthorityError,
     AuthorityExecutionInput, AuthorityOutcomeInput, AuthorityRequestProjection,
-    AuthorityScopeProjection, PrincipalAuthority, RequestDecision, RequestOutcome,
+    AuthorityScopeProjection, AuthorityStoredExecution, PrincipalAuthority, RequestDecision,
+    RequestOutcome,
 };
 pub use continuation_budget::{
     TurnContinuationAdmission, TurnContinuationBudgetEvent, TurnContinuationBudgetLimits,

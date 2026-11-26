@@ -16,6 +16,7 @@ mod hidden;
 mod identity;
 mod images;
 mod parallel;
+mod passkey;
 mod preview;
 mod progress;
 mod real_app;

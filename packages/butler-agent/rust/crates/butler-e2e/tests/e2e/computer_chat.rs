@@ -27,11 +27,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-const ALIAS: &str = "studio-ssh";
+pub(super) const ALIAS: &str = "studio-ssh";
 const ADD: &str = "Add my Studio computer.";
 const DONE: &str = "Finished.";
 
-fn bridge(id: &str, tool: &str, args: &Value) -> Value {
+pub(super) fn bridge(id: &str, tool: &str, args: &Value) -> Value {
     call(
         id,
         "tool_call",
@@ -43,18 +43,18 @@ fn add_args() -> Value {
     json!({"name":"Studio","address":ALIAS,"folder":"~","model":"none"})
 }
 
-fn add_questions() -> Value {
-    let proposed = |field, title, label| {
+pub(super) fn add_questions(address: &str) -> Value {
+    let proposed = |field, eyebrow, title, label| {
         json!({
-            "id":format!("computer_add.{field}"),"eyebrow":"컴퓨터","title":title,"kind":"single",
+            "id":format!("computer_add.{field}"),"eyebrow":eyebrow,"title":title,"kind":"single",
             "allow_custom":true,"options":[{"id":"proposed","label":label,"recommended":true}]
         })
     };
     json!({"questions":[
-        proposed("name","컴퓨터 이름","Studio"),
-        proposed("address","SSH 주소 (~/.ssh/config 별칭 사용 가능)", ALIAS),
-        proposed("folder","작업 폴더","~"),
-        {"id":"computer_add.model","eyebrow":"컴퓨터","title":"그 컴퓨터에서 쓸 모델","kind":"single",
+        proposed("name","이름","컴퓨터 이름","Studio"),
+        proposed("address","주소","SSH 주소 (~/.ssh/config 별칭 사용 가능)", address),
+        proposed("folder","폴더","작업 폴더","~"),
+        {"id":"computer_add.model","eyebrow":"모델","title":"그 컴퓨터에서 쓸 모델","kind":"single",
             "allow_custom":false,"options":[
                 {"id":"model:follow","label":"이 기기와 같게"},
                 {"id":"model:chatgpt","label":"ChatGPT"},
@@ -63,7 +63,7 @@ fn add_questions() -> Value {
     ]})
 }
 
-fn ssh_fixture(setup: &Setup) -> Result<(TestSshd, String), HarnessError> {
+pub(super) fn ssh_fixture(setup: &Setup) -> Result<(TestSshd, String), HarnessError> {
     let home = &setup.sandbox.home;
     let config = user_ssh_config(home)?;
     let key = home.join(".ssh/id_ed25519");
@@ -92,7 +92,7 @@ fn ssh_fixture(setup: &Setup) -> Result<(TestSshd, String), HarnessError> {
     Ok((sshd, config.to_string_lossy().into_owned()))
 }
 
-async fn start(
+pub(super) async fn start(
     setup: Setup,
     calls: Vec<Value>,
 ) -> Result<(FakeServer, Scenario, AdminClient), HarnessError> {
@@ -128,7 +128,7 @@ async fn start(
     Ok((server, s, api))
 }
 
-async fn result(s: &Scenario, turn: &str) -> Result<Value, HarnessError> {
+pub(super) async fn result(s: &Scenario, turn: &str) -> Result<Value, HarnessError> {
     let done =
         s.gw.wait_terminal("general", turn, Duration::from_secs(20))
             .await?;
@@ -147,7 +147,7 @@ async fn result(s: &Scenario, turn: &str) -> Result<Value, HarnessError> {
     )?)
 }
 
-async fn listed(api: &AdminClient) -> Result<Value, HarnessError> {
+pub(super) async fn listed(api: &AdminClient) -> Result<Value, HarnessError> {
     let response = api.send(Method::GET, "/computers", None, &[]).await?;
     assert_eq!(response.status, 200, "{response:?}");
     Ok(response.data()["computers"].clone())
@@ -168,7 +168,7 @@ async fn chat_add_applies_the_answered_values() -> Result<(), HarnessError> {
     )
     .await?;
     let turn = s.gw.say_turn("general", ADD).await?;
-    let card = pending(&s, &turn, add_questions()).await?;
+    let card = pending(&s, &turn, add_questions(ALIAS)).await?;
     assert_eq!(listed(&api).await?, json!([]));
     reply(
         &s,
@@ -243,7 +243,7 @@ async fn chat_add_skip_and_later_change_nothing() -> Result<(), HarnessError> {
     )
     .await?;
     let turn = s.gw.say_turn("general", ADD).await?;
-    let card = pending(&s, &turn, add_questions()).await?;
+    let card = pending(&s, &turn, add_questions(ALIAS)).await?;
     let answers: Vec<_> = ["name","address","folder","model"].map(|field|
         json!({"id":format!("computer_add.{field}"),"selected":[],"custom":null,"skipped":true})).into();
     reply(&s, &card, json!({"status":"answered","answers":answers})).await?;
@@ -251,7 +251,7 @@ async fn chat_add_skip_and_later_change_nothing() -> Result<(), HarnessError> {
     let turn =
         s.gw.say_turn("general", "Ask again about adding my Studio computer.")
             .await?;
-    let card = pending(&s, &turn, add_questions()).await?;
+    let card = pending(&s, &turn, add_questions(ALIAS)).await?;
     reply(&s, &card, json!({"status":"deferred"})).await?;
     let output = result(&s, &turn).await?;
     assert_eq!(output["deferred"], true, "{output}");
@@ -300,7 +300,7 @@ async fn chat_edit_and_remove() -> Result<(), HarnessError> {
             .await?;
     let field = format!("computer_edit:{id}.folder");
     let card = pending(&s, &turn, json!({"questions":[{
-        "id":field,"eyebrow":"컴퓨터","title":"Studio의 작업 폴더","kind":"single","allow_custom":true,
+        "id":field,"eyebrow":"폴더","title":"Studio의 작업 폴더","kind":"single","allow_custom":true,
         "options":[{"id":"proposed","label":folder,"recommended":true}]
     }]})).await?;
     reply(

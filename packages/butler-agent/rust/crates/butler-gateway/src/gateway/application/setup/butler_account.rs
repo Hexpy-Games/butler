@@ -12,6 +12,9 @@ pub enum ButlerAccountRequest {
         email: String,
         code: String,
     },
+    DevPlan {
+        plan: String,
+    },
     #[serde(skip)]
     Status,
     #[serde(skip)]

@@ -1,4 +1,8 @@
 export const additionalToolLabels = {
+  computer_list: "컴퓨터 목록",
+  computer_add: "컴퓨터 추가",
+  computer_edit: "컴퓨터 편집",
+  computer_remove: "컴퓨터 삭제",
   generate_image: "이미지 만들기",
   edit_image: "이미지 편집",
   browser_history_search: "방문 기록 검색",

@@ -75,7 +75,16 @@ export const stories: ShowcaseStory[] = [
       </NativeSelect>
     ),
   },
-  { name: "Disabled", states: ["disabled"], render: (context) => <SourceSelect context={context} disabled /> },
+  {
+    name: "Disabled (read only or saving)",
+    states: ["disabled"],
+    render: (context) => (
+      <Stack align="row" cross="center" gap="sm" wrap>
+        <SourceSelect context={context} disabled />
+        <SourceSelect context={context} size="sm" disabled />
+      </Stack>
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {

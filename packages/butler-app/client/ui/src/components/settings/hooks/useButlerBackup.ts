@@ -6,7 +6,7 @@ import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import { isMissingRoute } from "@/app/setupConnection";
 
-export function useButlerBackup(accountId: string | undefined) {
+export function useButlerBackup(accountId: string | undefined, plan: string | undefined) {
   const [status, setStatus] = useState<ButlerBackupStatus | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
@@ -28,7 +28,7 @@ export function useButlerBackup(accountId: string | undefined) {
       if (!cancelled && !isMissingRoute(error) && apiErrorCode(error) !== "butler_account_signed_out") setLoadFailed(true);
     });
     return () => { cancelled = true; };
-  }, [accountId]);
+  }, [accountId, plan]);
 
   const polling = status?.state === "running" || status?.state === "restoring";
   useEffect(() => {

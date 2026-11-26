@@ -16,7 +16,7 @@ export function computersSection({ section, savedKeys }: {
   const { computers } = section;
   return (
     <SettingsSection
-      id="computers" kind="list" title={copy.title} description={copy.description}
+      id="computers" kind="list" title={copy.listTitle} description={copy.description}
       state={computers.state === "ready" && !computers.computers.length ? "empty" : computers.state}
       emptyMessage={copy.empty} onRetry={() => void computers.refresh()}
       actions={<>

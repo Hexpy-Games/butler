@@ -155,7 +155,7 @@ async function captureCell(server: NativeAppServerHandle, secret: string, langua
       await page.getByRole("button", { name:appCopy.titlebar.showLeftPanel, exact:true }).click();
     }
     await page.getByRole("button", { name:appCopy.sidebar.settings, exact:true }).click();
-    await page.getByRole("button", { name:appCopy.settings.sections.security, exact:true }).click();
+    await page.getByRole("button", { name:appCopy.settings.sections.devices, exact:true }).click();
     try { await page.locator('[data-test-class="settings-security-advanced"]').click(); } catch (error) { await capture(page,"failed-settings"); throw error; }
     if (!baseline) await page.getByText(appCopy.settings.security.contentHosts, { exact:true }).waitFor();
     await capture(page, `settings-${language}-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`);

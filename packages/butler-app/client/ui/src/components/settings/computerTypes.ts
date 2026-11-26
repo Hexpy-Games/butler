@@ -14,6 +14,8 @@ export interface Computer {
   stops_on_logout: boolean;
   ai_connected: boolean;
   model_source: ComputerModelSource;
+  environment: string[];
+  environment_text: string;
   added_at: string;
 }
 

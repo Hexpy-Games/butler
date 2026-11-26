@@ -4,6 +4,7 @@
     "edges",
     "idx_alias_folded",
     "idx_alias_nfc",
+    "idx_alias_postings_alias_id",
     "idx_chunks_project_origin",
     "idx_edges_source_rel",
     "idx_edges_target_rel",
@@ -61,13 +62,10 @@
     ],
     "memory_alias_postings": [
       "gram",
-      "node_id",
-      "source_id",
-      "surface_original",
-      "identity_scope",
-      "project_id"
+      "alias_id"
     ],
     "memory_aliases": [
+      "alias_id",
       "node_id",
       "surface_original",
       "nfc_key",

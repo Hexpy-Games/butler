@@ -4,6 +4,7 @@ import { linkMenuItems } from "./links.mjs";
 import { configureWebSession } from "./identity.mjs";
 import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
+import { passkeyPageArgs } from "../butler-platform/passkeys.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
 import { SignInSuggest } from "./signin-suggest.mjs";
@@ -81,7 +82,11 @@ class UserBrowser {
       this.boundWindow = win;
       win.webContents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => { if (mainFrame && !inPlace) this.hide(); });
     }
-    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("butler-browser:state", this.snapshot());
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send("butler-browser:state", this.snapshot());
+      // A focus request is delivered once, so a later request for the same tab focuses it again.
+      this.focusRequest = undefined;
+    }
   }
   resetUse() { resetUse(this); }
   trip() {
@@ -111,11 +116,16 @@ class UserBrowser {
       });
     }
   }
+  /** Whether the user sees this tab now: the App window shows the browser area with this tab's page attached. */
+  shown(tab) {
+    const win = this.getWindow();
+    return Boolean(win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
+      tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed");
+  }
   sync(tab) {
     if (tab?.popupWindow) { syncPopup(this, tab); return; }
     const win = this.getWindow();
-    const visible = win && !win.isDestroyed() && win.isVisible() && this.areaVisible && tab.id === this.activeId &&
-      tab.slot?.visible && !tab.covered && !tab.dialog && this.nativeCovers === 0 && tab.status !== "crashed";
+    const visible = this.shown(tab);
     if (!visible || !tab.view) { this.detach(tab); backgroundTab(this, tab); return; }
     viewedTab(this, tab, true);
     // Occlusion can clear while a held drag goes on (its floating preview lifts in over the page).
@@ -168,7 +178,7 @@ class UserBrowser {
   }
   pagePreferences(tab) {
     return { preload: fileURLToPath(new URL("./page-controls.cjs", import.meta.url)),
-      nodeIntegrationInSubFrames: true, additionalArguments: [...(tab.agent ? ["--butler-agent-page"] : []), ...(tab.profile === "signed_in" ? ["--butler-signin-capture"] : [])],
+      nodeIntegrationInSubFrames: true, additionalArguments: [...(tab.agent ? ["--butler-agent-page"] : []), ...(tab.profile === "signed_in" ? ["--butler-signin-capture"] : []), ...passkeyPageArgs()],
       disableDialogs: !tab.agent, partition: tab.partition, webgl: true,
       contextIsolation: true, nodeIntegration: false, sandbox: true, navigateOnDragDrop: false };
   }

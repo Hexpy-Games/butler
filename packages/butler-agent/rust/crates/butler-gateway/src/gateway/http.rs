@@ -32,6 +32,10 @@ mod favicons;
 mod hooks;
 mod latency_trace;
 mod listeners;
+mod tunnel;
+pub use tunnel::new_tunnel_key;
+#[cfg(feature = "test-support")]
+pub use tunnel::{FixtureOutput, FixtureResponder};
 mod logs;
 mod mcp_servers;
 mod memory_management;
@@ -52,6 +56,7 @@ mod remote_sessions;
 mod remote_transcripts;
 mod retry;
 mod router;
+mod routes;
 #[cfg(feature = "test-support")]
 pub(crate) use router::templates as route_templates;
 mod security;
@@ -111,6 +116,7 @@ pub(super) use body::read_body_with_limit;
 use body::{MAX_REQUEST_BODY_SIZE, declared_body_too_large, payload_too_large_response};
 
 pub(super) struct HttpState {
+    tunnel: Option<tunnel::Tunnel>,
     agent_version: String,
     browser: Arc<browser_host::Hub>,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
@@ -126,6 +132,7 @@ pub(super) struct HttpState {
     security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,
+    pairing: security::PairingLimits,
     shutdown: CancellationToken,
     favicons: Arc<favicons::Favicons>,
     uploads: tokio::sync::Semaphore,
@@ -203,19 +210,28 @@ async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Respon
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
     let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
-    let origin = match state.security.admit(
-        request.method(),
-        request.uri().path(),
-        request.headers(),
-        request
-            .extensions()
-            .get::<listeners::LocalSocketPeer>()
-            .is_some()
-            || request
+    let origin = if request
+        .extensions()
+        .get::<listeners::TunnelPeer>()
+        .is_some()
+    {
+        Ok(security::RequestOrigin::Absent)
+    } else {
+        state.security.admit(
+            request.method(),
+            request.uri().path(),
+            request.headers(),
+            request
                 .extensions()
-                .get::<listeners::InProcessPeer>()
-                .is_some(),
-    ) {
+                .get::<listeners::LocalSocketPeer>()
+                .is_some()
+                || request
+                    .extensions()
+                    .get::<listeners::InProcessPeer>()
+                    .is_some(),
+        )
+    };
+    let origin = match origin {
         Ok(origin) => origin,
         Err(error) => {
             return if html_connect_form {
@@ -296,9 +312,14 @@ async fn authorized_route(
         .get::<ConnectInfo<SocketAddr>>()
         .map(|info| info.0);
     let device_token = grant.access == security::Access::DeviceToken;
+    let tunnel_peer = request
+        .extensions()
+        .get::<listeners::TunnelPeer>()
+        .is_some();
     let client = Client {
         access: grant.access,
-        local: !device_token
+        local: !tunnel_peer
+            && !device_token
             && (request
                 .extensions()
                 .get::<listeners::LocalSocketPeer>()
@@ -308,7 +329,7 @@ async fn authorized_route(
                     .get::<listeners::InProcessPeer>()
                     .is_some()
                 || security::is_local_client(peer, request.headers(), origin)),
-        admin: !device_token && state.security.is_admin(request.headers()),
+        admin: !tunnel_peer && !device_token && state.security.is_admin(request.headers()),
         keys: grant.keys,
     };
     request.extensions_mut().insert(client.clone());

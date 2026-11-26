@@ -17,7 +17,7 @@ pub(in crate::gateway::http) fn view(
         return Err(refused());
     }
     let port = super::port(state).ok_or_else(refused)?;
-    let origin = view_origin(state, request.headers(), port)?;
+    let origin = view_origin(state, request, port)?.unwrap_or_default();
     let token = state.security.token().ok_or_else(refused)?;
     let issued = now();
     let cap = capability::sign(&token, port, &format!("message-file-{id}"), 0, issued);

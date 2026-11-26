@@ -228,7 +228,7 @@ fn non_negative_integer(value: Option<&Value>) -> Option<u64> {
     .map(|number| butler_core::json::saturating_u64(number.round()))
 }
 
-pub(super) struct ProgressAppend<'a> {
+pub(in crate::gateway::application) struct ProgressAppend<'a> {
     pub db: &'a Connection,
     pub subscribers: &'a EventSubscribers,
     pub chat: &'a str,
@@ -239,7 +239,9 @@ pub(super) struct ProgressAppend<'a> {
     pub now: &'a str,
 }
 
-pub(super) fn append_progress(input: &ProgressAppend<'_>) -> Result<(), AppStorageError> {
+pub(in crate::gateway::application) fn append_progress(
+    input: &ProgressAppend<'_>,
+) -> Result<(), AppStorageError> {
     let encoded = serde_json::to_string(&input.row).map_err(|e| {
         AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, e.to_string()).with_source(e)
     })?;

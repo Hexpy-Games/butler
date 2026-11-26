@@ -180,6 +180,7 @@ fn clean_headers(headers: &mut axum::http::HeaderMap, websocket: bool) {
     for name in [
         "authorization",
         "cookie",
+        "referer",
         "proxy-authorization",
         "proxy-authenticate",
         "keep-alive",
@@ -199,14 +200,20 @@ fn clean_headers(headers: &mut axum::http::HeaderMap, websocket: bool) {
         headers.remove(name);
     }
 }
-fn cookie(request: &Request<Body>) -> Option<String> {
-    let mut cookies = request
+fn cookies(request: &Request<Body>) -> impl Iterator<Item = &str> {
+    request
         .headers()
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(';'))
-        .filter_map(|v| v.trim().strip_prefix("butler_preview="));
+        .filter_map(|v| v.trim().strip_prefix("butler_preview="))
+}
+pub(super) fn has_cookie(request: &Request<Body>) -> bool {
+    cookies(request).next().is_some()
+}
+fn cookie(request: &Request<Body>) -> Option<String> {
+    let mut cookies = cookies(request);
     let first = cookies.next()?.to_owned();
     cookies.next().is_none().then_some(first)
 }
@@ -237,7 +244,7 @@ pub(in crate::gateway::http) fn view(
         .and_then(|s| s.strip_suffix("/view"))
         .ok_or_else(refused)?;
     let port = super::port(state).ok_or_else(refused)?;
-    let origin = super::view_origin(state, request.headers(), port)?;
+    let origin = super::view_origin(state, request, port)?.ok_or_else(refused)?;
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {

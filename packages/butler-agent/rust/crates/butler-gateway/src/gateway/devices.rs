@@ -41,12 +41,22 @@ pub struct PairedDevice {
     pub last_seen_at: u64,
     pub revoked_at: Option<u64>,
     pub kind: DeviceKind,
+    #[serde(skip_serializing)]
+    pub noise_static: Option<[u8; 32]>,
 }
 
 /// Push event kinds a phone can choose, in canonical order.
 pub(crate) const PUSH_KINDS: [&str; 4] = ["needs_input", "done", "failed", "schedule_blocked"];
 
 pub trait GatewayDevices: Send + Sync {
+    fn load_tunnel(&self) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
+
+    fn save_tunnel(&self, _value: serde_json::Value) -> ApplicationFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn load_devices(&self) -> ApplicationFuture<Vec<PairedDevice>>;
     fn save_device(&self, device: PairedDevice) -> ApplicationFuture<()>;
     /// Stores (Some) or clears (None) a live device's push token, language and event kinds

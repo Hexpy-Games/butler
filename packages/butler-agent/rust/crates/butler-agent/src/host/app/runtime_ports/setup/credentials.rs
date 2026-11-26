@@ -4,6 +4,7 @@
 //! credential store; the credentials file holds only their metadata.
 
 use butler_platform::secrets::SecretText;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use butler_gateway::gateway::{
@@ -115,7 +116,30 @@ pub(super) async fn computer_key(
     root: &Path,
 ) -> Result<SecretText, GatewayApplicationError> {
     configuration
-        .computer_identity(id, root)
+        .computer_identity(id, root, false)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn computer_environment(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+) -> Result<BTreeMap<String, SecretText>, GatewayApplicationError> {
+    configuration
+        .computer_environment(id, root)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn save_computer_environment(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+    values: BTreeMap<String, SecretText>,
+) -> Result<(), GatewayApplicationError> {
+    configuration
+        .save_computer_environment(id, root, values)
         .await
         .map_err(credential_error)
 }
@@ -167,6 +191,7 @@ fn credential_error(error: CredentialError) -> GatewayApplicationError {
         CredentialError::Ambiguous
         | CredentialError::InUse { .. }
         | CredentialError::InUseByDefault { .. }
+        | CredentialError::ComputerEnvStoreUnavailable
         | CredentialError::SecretMissing
         | CredentialError::File(ModelCatalogError::Rejected(_)) => 409,
         CredentialError::Store(_) => 503,

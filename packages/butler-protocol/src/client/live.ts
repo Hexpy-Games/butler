@@ -7,7 +7,7 @@ declare const AbortController: new () => { readonly signal: { readonly aborted: 
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 export const LIVE_OPEN_DEADLINE_MS = 30_000;
-export const LIVE_SIGNAL_DEADLINE_MS = 45_000; // server heartbeat every 15 s
+export const LIVE_SIGNAL_DEADLINE_MS = 45_000; // server heartbeat every 30 s
 export const LIVE_STABLE_CONNECTION_MS = 30_000;
 
 /** 1 s doubling to 30 s by consecutive failures (the web client's rule, moved here). */

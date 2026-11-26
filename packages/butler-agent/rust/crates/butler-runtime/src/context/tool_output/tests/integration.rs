@@ -82,6 +82,7 @@ async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts(
     }
     let guided = commands
         .submit_guided(GuidedCommandInput {
+            computer_environment: Default::default(),
             allowed_folders: Vec::new(),
             extra_write_roots: Vec::new(),
             protected_roots: Vec::new(),

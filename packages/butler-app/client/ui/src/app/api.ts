@@ -313,6 +313,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
+        ...(Number.isSafeInteger(body.error?.line) ? { line: body.error.line } : {}),
         ...(body.error?.code === "tag_exists" && body.error?.existing ? { existing: body.error.existing } : {}),
         ...(Number.isSafeInteger(body.error?.current?.revision) ? { current: { revision: body.error.current.revision } } : {}),
       });
@@ -412,7 +413,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerAccount"));
   }
   if (method === "POST" && url.pathname === "/setup/butler-account") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postButlerAccount", parseBody(options.body)));
+    const request = parseBody(options.body);
+    const action = request.action === "dev_plan" ? "setButlerAccountDevPlan" : "postButlerAccount";
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action, request));
   }
   if (method === "DELETE" && url.pathname === "/setup/butler-account") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutButlerAccount"));
@@ -588,6 +591,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "GET" && url.pathname === "/security") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getSecurity"));
+  }
+  if (method === "PUT" && url.pathname === "/security/tunnel") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "setTunnel", parseBody(options.body)));
   }
   if (url.pathname === "/security/pairing" && (method === "GET" || method === "POST")) {
     const action = method === "POST" ? "issuePairingCode" : "getPairingStatus";
@@ -1153,6 +1159,12 @@ export function apiErrorCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
+/** The 1-based input line attached to a gateway validation error. */
+export function apiErrorLine(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("line" in error)) return undefined;
+  return typeof error.line === "number" && Number.isSafeInteger(error.line) && error.line > 0 ? error.line : undefined;
+}
+
 type BridgeResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: SessionViewBridgeError };
@@ -1176,6 +1188,7 @@ function unwrapBridgeResult<T>(value: BridgeResult<T> | T): T {
     code,
     ...(code === "tag_exists" && result.error?.existing ? { existing: result.error.existing } : {}),
     ...(Number.isSafeInteger(result.error?.current?.revision) ? { current: result.error.current } : {}),
+    ...(Number.isSafeInteger(result.error?.line) ? { line: result.error.line } : {}),
     ...(typeof result.error?.status === "number" ? { status: result.error.status } : {}),
   });
   throw error;

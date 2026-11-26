@@ -338,6 +338,7 @@ async fn project_lease_shutdown_cleans_active_and_waiting_commands() -> Result<(
     std::fs::write(root.join(".gitignore"), "target\n")?;
     let ready = setup.sandbox.data.join("tmp/project-write/ready");
     let input = |command: String| GuidedCommandInput {
+        computer_environment: Default::default(),
         allowed_folders: Vec::new(),
         extra_write_roots: Vec::new(),
         protected_roots: Vec::new(),

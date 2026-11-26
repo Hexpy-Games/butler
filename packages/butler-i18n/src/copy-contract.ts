@@ -849,11 +849,14 @@ export interface AppCopy {
     plan: string;
     renews: (date: string) => string;
     plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
+    switchToPlus: string;
+    switchToFree: string;
     signOut: string;
     signOutConfirm: string;
     signedOut: string;
     devices: string;
     thisDevice: string;
+    justNow: string;
     platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
     revoke: string;
     revokeDevice: (name: string) => string;
@@ -952,6 +955,7 @@ export interface AppCopy {
     allowPaymentSite: string;
     allowSiteDescription: string;
     paymentSkipped: (site: string, amount: string) => string;
+    devicePaired: (name: string) => string;
     allowScope: string;
     allowConversation: string;
     allowAlways: string;
@@ -1574,9 +1578,13 @@ export interface AppCopy {
     searchPlaceholder: string;
     searchEmpty: (query: string) => string;
     groups: {
+      personal: string;
+      butler: string;
+      devicesAndSecurity: string;
+      extensions: string;
+      app: string;
       preferences: string;
       appAndSystem: string;
-      advanced: string;
     };
     sections: {
       general: string;
@@ -1595,9 +1603,12 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
+      archive: string;
       about: string;
     };
     sectionDescriptions: {
@@ -1617,6 +1628,8 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
@@ -1639,6 +1652,8 @@ export interface AppCopy {
       privacy: string[];
       connections: string[];
       browser: string[];
+      devices: string[];
+      computers: string[];
       security: string[];
       system: string[];
       archives: string[];
@@ -1854,6 +1869,7 @@ export interface AppCopy {
       appName: string;
       appVersion: string;
       appRepository: string;
+      appPrivacyPolicy: string;
       appProtocol: string;
       developerMode: string;
       butlerNickname: string;
@@ -2067,6 +2083,10 @@ export interface AppCopy {
     security: {
       remoteAccess: string;
       remoteAccessDescription: string;
+      tunnel: string;
+      tunnelDescription: string;
+      tunnelConnected: string;
+      tunnelQrNote: string;
       addresses: string;
       noAddresses: string;
       bindErrors: {
@@ -2079,6 +2099,7 @@ export interface AppCopy {
       copied: string;
       code: string;
       pairDevice: string;
+      createCode: string;
       pairingQr: string;
       scanWithPhone: string;
       expiresIn: (seconds: number) => string;

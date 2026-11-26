@@ -14,6 +14,8 @@ use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
 use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig, RemoteSocket, SocketActivity};
 
+use crate::host::build_info::dev_build;
+
 use super::local_credentials::{CredentialFiles, LocalCredentialError, LocalCredentials};
 
 const MAX_SIGNED_URL_TTL_SECONDS: u64 = 600;
@@ -44,7 +46,7 @@ struct TypedGatewaySettings {
     content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
-    /// `butlerAccountEnabled`: the Butler account (sign-in, plan, devices); off until the online service opens.
+    /// `butlerAccountEnabled`: the Butler account (sign-in, plan, devices); enabled by default on dev builds.
     butler_account_enabled: bool,
     /// `headlessBrowser`: Chrome fallback on or off; absent
     /// means on, including when the App launched the Agent.
@@ -54,7 +56,10 @@ struct TypedGatewaySettings {
 impl TypedGatewaySettings {
     fn read(config: Option<&Value>) -> Self {
         let Some(config) = config else {
-            return Self::default();
+            return Self {
+                butler_account_enabled: dev_build(),
+                ..Self::default()
+            };
         };
         Self {
             allowed_hosts: config
@@ -72,7 +77,7 @@ impl TypedGatewaySettings {
             butler_account_enabled: config
                 .get("butlerAccountEnabled")
                 .and_then(Value::as_bool)
-                .unwrap_or(false),
+                .unwrap_or_else(dev_build),
             headless_browser: config.get("headlessBrowser").and_then(Value::as_bool),
         }
     }
@@ -252,6 +257,7 @@ impl AppServiceConfiguration {
             remote_access_enabled: self.gateway.remote_access_enabled,
             admin_credential: self.gateway.admin_credential.clone(),
             security_store: self.gateway.security_store.clone(),
+            tunnel: self.gateway.tunnel.clone(),
             signed_url_ttl: self.gateway.signed_url_ttl,
             message_rate_limit_max: self.gateway.message_rate_limit_max,
             message_rate_limit_window: self.gateway.message_rate_limit_window,
@@ -368,6 +374,7 @@ fn gateway_config(
         remote_access_enabled: settings.remote_access_enabled,
         admin_credential,
         security_store: None,
+        tunnel: None,
         signed_url_ttl: signed_url_ttl(),
         message_rate_limit_max: if max.is_finite() && max > 0.0 {
             butler_core::json::saturating_u64(max.ceil())

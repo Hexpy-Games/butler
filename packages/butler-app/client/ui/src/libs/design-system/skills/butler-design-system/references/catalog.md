@@ -956,7 +956,7 @@ A styled native <select>: the platform picker, with the Butler trigger look.
 - Not for: Options need icons, descriptions or custom rendering → `Select`
 - Not for: Searching a long list → `FilteredSelectPopover`
 - Not for: Two to four visible choices → `SegmentedControl`
-- Tokens: `--control-height-md`, `--radius-control`, `--line`, `--focus-ring`, `--radius-control-touch`
+- Tokens: `--control-height-md`, `--radius-control`, `--line`, `--focus-ring`, `--radius-control-touch`, `--color-disabled-bg`, `--interactive-disabled-fg`, `--interactive-disabled-cursor`
 
 ### SegmentedControl
 

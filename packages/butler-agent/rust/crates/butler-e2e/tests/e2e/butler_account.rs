@@ -11,10 +11,13 @@ use serde_json::json;
 async fn butler_account_01_off_by_default_makes_no_request() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fake = FakeButlerCloud::start().await?;
-    let s = Setup::new("ACCT-01")?
-        .env("BUTLER_CLOUD_API_URL", &fake.url)
-        .start()
-        .await?;
+    let setup = Setup::new("ACCT-01")?.env("BUTLER_CLOUD_API_URL", &fake.url);
+    std::fs::create_dir_all(setup.sandbox.data.join("gateways"))?;
+    std::fs::write(
+        setup.sandbox.data.join("gateways/app.json"),
+        json!({"config": {"butlerAccountEnabled": false}}).to_string(),
+    )?;
+    let s = setup.start().await?;
     let app = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let reply = app
         .send(Method::GET, "/setup/butler-account", None, &[])

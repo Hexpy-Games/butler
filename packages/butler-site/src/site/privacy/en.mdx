@@ -1,0 +1,56 @@
+---
+title: Butler Privacy Policy
+---
+
+import { PRIVACY_POLICY, SUPPORT_MAILBOX } from "../meta";
+
+{PRIVACY_POLICY.effectiveDate && <p>Effective: {PRIVACY_POLICY.effectiveDate}</p>}
+
+## Summary
+
+- Butler is an app that runs on your computer. We run no server that receives your data.
+- Butler has no analytics, advertising or crash-reporting tools.
+- Your conversations, memory, files and API keys are stored on your computer.
+- To answer, Butler sends what is needed only to the AI model service you connect.
+
+## 1. Scope
+
+This policy covers the Butler app made by HexpyGames ("we").
+
+## 2. Stored on your computer
+
+Conversations and attachments, memory, settings, schedules and logs are stored in the Butler data folder. API keys and sign-in tokens are stored in that folder, readable only by your user account, and encrypted if you use Butler Vault. Website passwords and payment cards are kept in your operating system's password store.
+
+## 3. What leaves your computer
+
+- **The AI model service you connect**: the conversation and the file contents and memory needed to answer, under that service's policy ([OpenAI](https://openai.com/policies/privacy-policy/), [Anthropic](https://www.anthropic.com/legal/privacy), [Google](https://policies.google.com/privacy) and others).
+- **Web search**: search terms (DuckDuckGo by default).
+- **Update checks**: the Microsoft Store for the Store version, GitHub otherwise.
+- **Component downloads**: the background browser, and the memory model if you turn it on.
+- **Mail servers, MCP servers and plugins you connect**: what that feature needs.
+
+As with any internet request, the receiver sees your IP address.
+
+## 4. What Butler does on your behalf
+
+At your request, Butler runs commands, edits files and opens web pages with your user account's permissions. By default it asks before it acts. What those websites or commands exchange with other services is governed by those services.
+
+## 5. Your rights
+
+We hold no Butler user data. To access, correct or delete what you sent us by email, contact us below. Delete app data in the app, or delete the data folder.
+
+## 6. AI responses
+
+AI responses are produced by the model you choose. Report problems with what a model generated to that AI service. If Butler itself misbehaves, tell us at <a href={`mailto:${SUPPORT_MAILBOX}`}>{SUPPORT_MAILBOX}</a>.
+
+## 7. Children
+
+We do not knowingly receive personal information from children under 14.
+
+## 8. Changes
+
+We post changes on this page with a new effective date.
+
+## 9. Contact
+
+HexpyGames · {PRIVACY_POLICY.officer.en && <>Privacy officer {PRIVACY_POLICY.officer.en} · </>}<a href={`mailto:${SUPPORT_MAILBOX}`}>{SUPPORT_MAILBOX}</a>

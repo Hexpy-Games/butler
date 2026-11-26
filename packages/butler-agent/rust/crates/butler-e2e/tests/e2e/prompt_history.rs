@@ -129,6 +129,7 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
     let mut moves = Vec::new();
     let mut measurements = Vec::new();
     let mut captured = Vec::new();
+    let mut previous_call_ids = std::collections::HashSet::<String>::new();
     for index in 0..16 {
         let ask = format!(
             "History request {index}: {}한글 é 😀 \"quote\" \\ end",
@@ -150,6 +151,23 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
         let request = turn_requests[0].clone();
         let current = prefix(&request);
         if verify {
+            for request in &turn_requests {
+                let text = source(request);
+                assert!(!text.lines().any(|line| line.starts_with("tool: [")));
+                for call_id in &previous_call_ids {
+                    assert!(
+                        !text.contains(call_id.as_str()),
+                        "prior tool call {call_id} at turn {index}"
+                    );
+                }
+            }
+            let steps = super::tool_steps::stored_steps(&s.sandbox.data, &turn_id)?;
+            if heavy {
+                let live = super::tool_steps::live_call_ids(&s.sandbox.data, &turn_id)?;
+                assert!(!live.is_empty(), "missing live calls at turn {index}");
+                assert_eq!(steps.len(), live.len(), "turn {index}");
+            }
+            previous_call_ids.extend(steps.into_iter().map(|step| step.call_id));
             let text = source(&request);
             for heading in [
                 "## Recent conversation and feedback",

@@ -139,17 +139,19 @@ async function runLocale(locale: "ko" | "en") {
         await screenshot(page, key, "conversation-input");
         if (!before) await screenshot(page, key, "default-permission");
         await open(page, server.url, appCopy.settings.sections.models, width);
-        if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "image-models", "advanced-models"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "image-models", "connected-accounts", "saved-keys", "advanced-models"]);
         await screenshot(page, key, "butler-model");
-        if (before) { await screenshot(page, key, "saved-keys"); await screenshot(page, key, "permissions"); }
+        await screenshot(page, key, "saved-keys");
+        if (before) await screenshot(page, key, "permissions");
         await open(page, server.url, appCopy.settings.sections.security, width);
         if (!before) {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           await section(page, "grants").getByText(appCopy.settings.grants.targetUnknown, { exact: true }).waitFor();
           assert.equal(await rows(page).count(), 12, "dedupe across same-title conversations");
-          assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "computers", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
+          await section(page, "butler-vault").waitFor();
+          assert.deepEqual(await sectionIds(page), ["butler-vault", "command-isolation", "allowed-folders", "grants"]);
           assert.equal(await section(page, "grants").getByText(appCopy.settings.grants.conversations(2), { exact: false }).count(), 1);
-          await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
+          await screenshot(page, key, "grants");
           const overflow = await section(page, "grants").evaluate(node => node.scrollWidth > node.clientWidth + 1);
           assert.equal(overflow, false, key);
           const target = page.getByRole("button", { name: /^src\/one.ts\s+src\/two.ts$/u });
@@ -171,8 +173,11 @@ async function runLocale(locale: "ko" | "en") {
           await open(page, server.url, appCopy.settings.sections.privacy, width);
           await screenshot(page, key, "diagnostics");
         }
-        await open(page, server.url, appCopy.settings.sections.security, width);
-        const remote = section(page, "remote-access").getByRole("switch", { name: appCopy.settings.security.remoteAccess, exact: true });
+        await open(page, server.url, before ? appCopy.settings.sections.security : appCopy.settings.sections.devices, width);
+        const remoteLabel = before
+          ? (locale === "ko" ? "다른 컴퓨터에서 접속 허용" : "Allow access from other computers")
+          : appCopy.settings.security.remoteAccess;
+        const remote = section(page, "remote-access").getByRole("switch", { name: remoteLabel, exact: true });
         await remote.click();
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
@@ -208,7 +213,7 @@ async function runLocale(locale: "ko" | "en") {
             await advanced.getByText(host, { exact: true }).waitFor({ state: "hidden" });
           }
         }
-        if (!before) assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "device-pairing", "paired-devices", "computers", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();
@@ -225,13 +230,14 @@ async function runLocale(locale: "ko" | "en") {
             else await route.fulfill({ status: code === "loopback_required" ? 403 : 500, json: { error: { code, message: "INTERNAL TEST MESSAGE" } } });
           });
           const denied = page.waitForResponse(response => new URL(response.url()).pathname === "/security");
-          await open(page, server.url, appCopy.settings.sections.security, 375);
+          await open(page, server.url, appCopy.settings.sections.devices, 375);
           assert.equal((await denied).status(), code === "test_error" ? 500 : 403);
-          await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
           await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
-          assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "grants", "saved-keys", "connected-accounts"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
+          await open(page, server.url, appCopy.settings.sections.security, 375);
+          await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
         }
         responses.refusal = "";
         for (const state of ["loading", "error", "empty"]) {
@@ -272,8 +278,9 @@ async function runLocale(locale: "ko" | "en") {
         await navigationSearch.fill(locale === "ko" ? "개인정보" : "privacy");
         await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).waitFor();
         await navigationSearch.fill(locale === "ko" ? "API 키" : "API keys");
-        assert.equal(await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).count(), 1);
+        assert.equal(await page.getByRole("button", { name: appCopy.settings.sections.models, exact: true }).count(), 1);
         await navigationSearch.fill("");
+        await open(page, server.url, appCopy.settings.sections.security, 1280);
         const grouped = rows(page).filter({ has: page.getByRole("button", { name: fixture.command, exact: true }) });
         responses.rejectRevoke = true;
         await grouped.getByRole("button", { name: appCopy.settings.grants.revoke, exact: true }).click();

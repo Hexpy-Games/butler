@@ -125,10 +125,9 @@ async function paletteChecks(page: Page, prefix: string) {
     await page.getByRole("button", { name: copy.settings.back, exact: true }).click();
   }
   let dialog = await search(page, "");
-  // #537: merged main declares seventeen sections, including Hooks and Server. Assert every entry.
-  const expectedSections = ["general", "appearance", "personalization", "memory", "models", "connections", "updates", "usage", "browser", "security", "system", "archives", "about", "mcp", "hooks", "skills", "server"] as const;
+  const expectedSections = ["general", "personalization", "appearance", "models", "memory", "archives", "usage", "devices", "computers", "browser", "security", "mcp", "hooks", "skills", "connections", "server", "updates", "system", "about"] as const;
   assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), expectedSections.length);
-  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) }).count(), 1);
+  for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id === "archives" ? "archive" : id], { exact: true }) }).count(), 1);
   await capture(page, prefix, "palette-all-sections");
   await dialog.getByRole("combobox").fill("logs");
   await page.getByText(copy.commandPalette.empty, { exact: true }).waitFor();
@@ -315,6 +314,8 @@ async function runCase(width: number, theme: "light" | "dark", language: "ko" | 
   const prefix = `${width}-${language}-${theme}`;
   try {
     await commandSandboxSettings(page, server, copy);
+    // The sign-in pairing toast must clear before palette results under it are clicked.
+    await page.waitForFunction(() => document.querySelectorAll("[data-sonner-toast]").length === 0);
     await paletteChecks(page, prefix);
     await skillChecks(page, prefix);
     await mcpChecks(page, prefix);

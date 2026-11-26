@@ -10,6 +10,7 @@ mod availability;
 pub(crate) mod host;
 mod model;
 mod resume;
+mod visibility;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
 use serde_json::{Value, json};

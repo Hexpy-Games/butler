@@ -6,6 +6,12 @@ import type { AuthorityDecisionTransportView, UserQuestionResponse } from "@/app
 import type { QuestionAnswer, ComposerQuestionPanelProps } from "@/butler-ds";
 import { answerWire, questionProps } from "./userQuestions";
 
+export function useWaitingForQuestionAnswer(turnId?: string) {
+  return useButlerStore((state) => Boolean(turnId && [...Object.values(state.sessionViews), state.sessionView]
+    .some((view) => view?.pending_questions?.some((question) =>
+      question.source_turn_id === turnId && question.question_state === "pending"))));
+}
+
 export function useComposerQuestion(): { key: string; waiting: boolean; panel: ComposerQuestionPanelProps } | undefined {
   useAppLocale();
   const sessionId = useButlerStore(s => s.activeChatId);

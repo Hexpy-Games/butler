@@ -41,10 +41,12 @@ async fn execute_mode(
     executor: bool,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut arguments = Value::Object(call.arguments.clone());
-    let live = match read_page(owner, &invocation, call, call_id, &mut arguments, executor).await? {
-        Ok(live) => live,
-        Err(result) => return super::encoded(&result),
-    };
+    let (live, seen) =
+        match read_page(owner, &invocation, call, call_id, &mut arguments, executor).await? {
+            Ok(Some((page, seen))) => (Some(page), seen),
+            Ok(None) => (None, Value::Null),
+            Err(result) => return super::encoded(&result),
+        };
     let reader = ModelRoundToolCall {
         name: if call.name == ToolName::BrowserRead {
             ToolName::WebRead.as_str().into()
@@ -68,6 +70,9 @@ async fn execute_mode(
     let mut result = fetch(owner, invocation, call, &arguments, live, executor).await;
     if let Some(tab) = tab {
         result["tab"] = json!(tab);
+        if !seen.is_null() {
+            result["seen_by_user"] = seen;
+        }
     }
     if call.name == ToolName::WebSearch
         && result["results"]
@@ -99,7 +104,8 @@ async fn read_page(
     occurrence: &str,
     arguments: &mut Value,
     executor: bool,
-) -> Result<Result<Option<butler_runtime::web_access::LivePage>, Value>, ToolExecutionError> {
+) -> Result<Result<Option<(butler_runtime::web_access::LivePage, Value)>, Value>, ToolExecutionError>
+{
     if call.name != ToolName::WebRead && call.name != ToolName::BrowserRead {
         return Ok(Ok(None));
     }

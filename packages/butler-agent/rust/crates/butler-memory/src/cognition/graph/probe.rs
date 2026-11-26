@@ -15,7 +15,8 @@ pub(super) fn has_recoverable_windows(connection: &Connection) -> CognitionResul
              WHERE state IN ('running','planned') AND owner_nonce IS NOT NULL) \
              OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='projection_contention_recovery') \
              OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='provider_pause_recovery') \
-             OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='standalone_hash_repair_complete')",
+             OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='standalone_hash_repair_complete') \
+             OR NOT EXISTS(SELECT 1 FROM memory_state WHERE key='alias_postings_compact_v1')",
             [],
             |row| row.get(0),
         )

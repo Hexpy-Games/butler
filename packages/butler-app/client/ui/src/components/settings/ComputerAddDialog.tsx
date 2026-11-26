@@ -1,15 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { SavedCredentialView } from "@/app/types";
-import { Button, ButtonContainer, Dialog, DialogContent, DialogForm, Input, ProgressMeter, SettingsField, Tooltip } from "@/butler-ds";
+import {
+  Button, ButtonContainer, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Input, ProgressMeter, ScrollArea, SettingsField, SettingsFieldGroup, SettingsFieldScopeProvider, Textarea, Tooltip, Typo,
+} from "@/butler-ds";
 import { COMPUTER_FIELD_IDS, type ComputerField, type ComputerForm } from "./computerAddErrors";
+import { ComputerEnvironmentFields, type ComputerEnvironmentRow } from "./ComputerEnvironmentFields";
 import { ComputerModelFields } from "./ComputerModelFields";
 import type { MainModelKind } from "./computerTypes";
 import type { Computer } from "./computersApi";
 import { useComputerAdd } from "./hooks/useComputerAdd";
 import { defaultSource, useComputerModelChoice } from "./hooks/useComputerModelChoice";
 
-const EMPTY_FORM: ComputerForm = { name: "", address: "", port: "", keyFile: "", folder: "" };
+const EMPTY_FORM: ComputerForm = { name: "", address: "", port: "", keyFile: "", folder: "", environmentText: "" };
 
 export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys, editing }: {
   open: boolean;
@@ -19,10 +23,12 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   onOpenChange(open: boolean): void;
   onAdded(computer: Computer, failure?: string): void;
 }) {
+  const formId = useId();
   const copy = appCopy.computers.form;
   const add = useComputerAdd(onAdded);
   const model = useComputerModelChoice(defaultSource(mainModel));
   const [form, setForm] = useState(EMPTY_FORM);
+  const [environment, setEnvironment] = useState<ComputerEnvironmentRow[]>([]);
   const [lastEditing, setLastEditing] = useState<Computer | null>(null);
   useEffect(() => {
     if (open) {
@@ -33,7 +39,9 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
         port: editing.port?.toString() ?? "",
         keyFile: editing.key_file ?? "",
         folder: editing.folder,
+        environmentText: editing.environment_text ?? "",
       } : EMPTY_FORM);
+      setEnvironment((editing?.environment ?? []).map((name) => ({ id: name, name, value: "", saved: true })));
       add.reset();
       model.reset(editing?.model_source ?? defaultSource(mainModel));
     }
@@ -55,32 +63,52 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   }>;
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!add.busy) onOpenChange(next); }}>
-      <DialogContent closeLabel={appCopy.common.close} showCloseButton={!add.busy} data-test-class="computer-add-dialog">
-        <DialogForm dialog title={isEditing ? copy.editTitle : copy.title}
-          onSubmit={() => void add.submit(form, model.source, editing ?? undefined)} footer={
+      <DialogContent layout="scroll-body" closeLabel={appCopy.common.close} showCloseButton={!add.busy} data-test-class="computer-add-dialog">
+        <DialogHeader>
+          <DialogTitle asChild><Typo.PanelTitle>{isEditing ? copy.editTitle : copy.title}</Typo.PanelTitle></DialogTitle>
+        </DialogHeader>
+        <ScrollArea fill>
+          <form id={formId} onSubmit={(event) => {
+            event.preventDefault();
+            void add.submit(form, model.source, environment, editing ?? undefined);
+          }}>
+            <SettingsFieldScopeProvider>
+              <SettingsFieldGroup>
+                {fields.map(({ field, ...input }) => {
+                  const { description, ...props } = input as typeof input & { description?: string };
+                  const id = COMPUTER_FIELD_IDS[field];
+                  return (
+                    <SettingsField key={field} id={id} label={copy[field]} description={description} controlWidth="full"
+                      error={add.error?.field === field ? add.error.message : undefined}
+                      control={<Input {...props} id={id} value={form[field]} disabled={add.busy}
+                        onChange={(event) => setForm({ ...form, [field]: event.target.value })} />}
+                    />
+                  );
+                })}
+                <SettingsField id={COMPUTER_FIELD_IDS.environmentText} label={copy.environmentText} controlWidth="full"
+                  error={add.error?.field === "environmentText" ? add.error.message : undefined}
+                  control={<Textarea id={COMPUTER_FIELD_IDS.environmentText} placeholder="KEY=VALUE" rows={3}
+                    value={form.environmentText} disabled={add.busy}
+                    onChange={(event) => setForm({ ...form, environmentText: event.target.value })} />}
+                />
+                <ComputerEnvironmentFields rows={environment} onChange={setEnvironment} disabled={add.busy}
+                  error={add.error?.field === "environment" ? add.error.message : undefined} />
+                <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={add.busy ? busyLabel : undefined} />
+                {add.busy && <ProgressMeter indeterminate label={busyLabel} />}
+              </SettingsFieldGroup>
+            </SettingsFieldScopeProvider>
+          </form>
+        </ScrollArea>
+        <DialogFooter>
           <ButtonContainer size="default" justify="end">
             <Tooltip label={add.busy ? busyLabel : undefined}>
               <Button type="button" variant="outline" disabled={add.busy} onClick={() => onOpenChange(false)}>{appCopy.common.cancel}</Button>
             </Tooltip>
             <Tooltip label={add.busy ? busyLabel : required ? copy.required : !model.ready ? appCopy.computers.model.chooseKeyFirst : undefined}>
-              <Button type="submit" aria-busy={add.busy} disabled={add.busy || required || !model.ready}>{isEditing ? copy.save : copy.submit}</Button>
+              <Button type="submit" form={formId} aria-busy={add.busy} disabled={add.busy || required || !model.ready}>{isEditing ? copy.save : copy.submit}</Button>
             </Tooltip>
           </ButtonContainer>
-        }>
-          {fields.map(({ field, ...input }) => {
-            const { description, ...props } = input as typeof input & { description?: string };
-            const id = COMPUTER_FIELD_IDS[field];
-            return (
-              <SettingsField key={field} id={id} label={copy[field]} description={description} controlWidth="full"
-                error={add.error?.field === field ? add.error.message : undefined}
-                control={<Input {...props} id={id} value={form[field]} disabled={add.busy}
-                  onChange={(event) => setForm({ ...form, [field]: event.target.value })} />}
-              />
-            );
-          })}
-          <ComputerModelFields model={model} savedKeys={savedKeys} busyReason={add.busy ? busyLabel : undefined} />
-          {add.busy && <ProgressMeter indeterminate label={busyLabel} />}
-        </DialogForm>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

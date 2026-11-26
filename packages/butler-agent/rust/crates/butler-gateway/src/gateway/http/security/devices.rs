@@ -49,6 +49,7 @@ pub(in crate::gateway::http) struct DeviceRegistry {
     changes: tokio::sync::Mutex<()>,
     shutdown: CancellationToken,
     cookie_name: String,
+    host_cookie_name: String,
     butler_id: String,
     #[cfg(feature = "e2e-fixtures")]
     clock_offset: AtomicU64,
@@ -82,15 +83,14 @@ impl DeviceRegistry {
                 (entry.device.id.clone(), entry)
             })
             .collect();
+        let suffix = port.map_or_else(String::new, |port| format!("_{port}"));
         Ok(Self {
             application,
             entries: RwLock::new(Arc::new(entries)),
             changes: tokio::sync::Mutex::new(()),
             shutdown,
-            cookie_name: port.map_or_else(
-                || "butler_session".to_owned(),
-                |port| format!("butler_session_{port}"),
-            ),
+            cookie_name: format!("butler_session{suffix}"),
+            host_cookie_name: format!("__Host-butler_session{suffix}"),
             butler_id,
             #[cfg(feature = "e2e-fixtures")]
             clock_offset: AtomicU64::new(0),
@@ -118,6 +118,7 @@ impl DeviceRegistry {
         name: &str,
         ip: &str,
         kind: DeviceKind,
+        noise_static: Option<[u8; 32]>,
     ) -> Result<(String, String), HttpError> {
         let _change = self.changes.lock().await;
         let now = self.now();
@@ -132,6 +133,7 @@ impl DeviceRegistry {
             last_seen_at: now,
             revoked_at: None,
             kind,
+            noise_static,
         };
         self.application.save_device(device.clone()).await?;
         let entry = Arc::new(Entry {
@@ -152,11 +154,15 @@ impl DeviceRegistry {
         ip: &str,
         secure: bool,
     ) -> Result<(HeaderValue, String), HttpError> {
-        let (id, secret) = self.insert(name, ip, DeviceKind::Browser).await?;
+        let (id, secret) = self.insert(name, ip, DeviceKind::Browser, None).await?;
+        let name = if secure {
+            &self.host_cookie_name
+        } else {
+            &self.cookie_name
+        };
         let transport = if secure { "; Secure" } else { "" };
         let cookie = HeaderValue::from_str(&format!(
-            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}",
-            self.cookie_name
+            "{name}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}"
         ))
         .map_err(|_| HttpError::public(500, "session_unavailable", "Session unavailable."))?;
         Ok((cookie, id))
@@ -167,8 +173,9 @@ impl DeviceRegistry {
         name: &str,
         ip: &str,
         kind: DeviceKind,
+        noise_static: Option<[u8; 32]>,
     ) -> Result<(String, String), HttpError> {
-        let (id, secret) = self.insert(name, ip, kind).await?;
+        let (id, secret) = self.insert(name, ip, kind, noise_static).await?;
         let token = format!("{DEVICE_TOKEN_PREFIX}{id}.{secret}");
         Ok((id, token))
     }
@@ -191,6 +198,32 @@ impl DeviceRegistry {
             closed: entry.closed.clone(),
             token: false,
         })
+    }
+
+    pub(in crate::gateway::http) fn token_noise_static(
+        &self,
+        headers: &HeaderMap,
+    ) -> Option<[u8; 32]> {
+        self.token_entry(headers)?.device.noise_static
+    }
+
+    pub(in crate::gateway::http) fn knows_noise_static(&self, key: &[u8; 32]) -> bool {
+        let snapshot = self.entries.read().clone();
+        snapshot.values().any(|entry| {
+            entry
+                .device
+                .noise_static
+                .is_some_and(|stored| constant_time_eq(&stored, key))
+                && !entry.closed.is_cancelled()
+        })
+    }
+
+    pub(in crate::gateway::http) fn noise_device_count(&self) -> usize {
+        self.entries
+            .read()
+            .values()
+            .filter(|entry| entry.device.noise_static.is_some())
+            .count()
     }
 
     fn token_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {
@@ -230,7 +263,7 @@ impl DeviceRegistry {
                 let Some((name, value)) = pair.trim().split_once('=') else {
                     continue;
                 };
-                if name != self.cookie_name {
+                if name != self.cookie_name && name != self.host_cookie_name {
                     continue;
                 }
                 let mut parts = value.split('.');

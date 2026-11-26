@@ -70,6 +70,21 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Disabled (read only, or while an action runs): the disabled surface, tone
+   and cursor of Input and Select, never an editable look. */
+.wrapper:has(.select:disabled) .trigger {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+}
+
+.wrapper:has(.select:disabled) .icon {
+  color: var(--interactive-disabled-fg);
+}
+
+.select:disabled {
+  cursor: var(--interactive-disabled-cursor);
+}
+
 @media (width <= 640px) {
   .trigger:not([data-viewport="desktop"], [data-viewport="desktop"] *),
   .trigger[data-size="sm"]:not(

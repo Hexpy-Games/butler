@@ -37,6 +37,14 @@ pub(crate) enum HttpError {
         code: String,
         message: String,
     },
+    RateLimited {
+        retry_after: u64,
+    },
+    InvalidLine {
+        code: &'static str,
+        message: String,
+        line: usize,
+    },
     PayloadTooLarge,
     Internal,
 }
@@ -60,7 +68,9 @@ impl HttpError {
             Self::Public { status, .. } => {
                 StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
             }
+            Self::InvalidLine { .. } => StatusCode::BAD_REQUEST,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -139,18 +149,39 @@ pub(super) fn error_response(error: &HttpError) -> Response {
             code,
             message,
         } => (*status, code.as_str(), message.as_str()),
+        HttpError::RateLimited { .. } => {
+            (429, "rate_limited", "Too many attempts. Try again later.")
+        }
         HttpError::PayloadTooLarge => (413, "payload_too_large", "Request body is too large."),
         HttpError::Conflict { .. } => (409, "conflict", "Revision changed."),
         HttpError::TagExists { .. } => (409, "tag_exists", "Tag already exists."),
+        HttpError::InvalidLine {
+            code,
+            message,
+            line,
+        } => {
+            return json(
+                StatusCode::BAD_REQUEST,
+                serde_json::json!({"protocol_version": APP_PROTOCOL_VERSION,
+                    "error": {"code": code, "message": message, "line": line}}),
+            )
+            .unwrap_or_else(|_| Response::new(Body::empty()));
+        }
         HttpError::Internal => (500, "internal_error", "Request failed."),
     };
     let envelope = ApiErrorEnvelope {
         protocol_version: APP_PROTOCOL_VERSION,
         error: ApiError { code, message },
     };
-    json(
+    let mut response = json(
         StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
         envelope,
     )
-    .unwrap_or_else(|_| Response::new(Body::empty()))
+    .unwrap_or_else(|_| Response::new(Body::empty()));
+    if let HttpError::RateLimited { retry_after } = error {
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, HeaderValue::from(*retry_after));
+    }
+    response
 }

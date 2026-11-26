@@ -11,6 +11,7 @@ use butler_backup::ButlerBackupRequest;
 use publishing::PublishingRequest;
 
 use butler_platform::secrets::SecretText;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -281,6 +282,12 @@ pub trait AppSetupPort: Send + Sync + 'static {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
     fn computer_key(&self, id: String) -> ApplicationFuture<SecretText>;
+    fn computer_environment(&self, id: String) -> ApplicationFuture<BTreeMap<String, SecretText>>;
+    fn save_computer_environment(
+        &self,
+        id: String,
+        values: BTreeMap<String, SecretText>,
+    ) -> ApplicationFuture<()>;
     fn delete_computer_key(&self, id: String) -> ApplicationFuture<()>;
     /// Import a finished turn from a registered computer.
     fn computer_import_turn(

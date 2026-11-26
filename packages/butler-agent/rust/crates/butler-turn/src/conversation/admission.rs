@@ -1,6 +1,6 @@
 mod classifier;
 mod origin;
-mod sanitizer;
+pub(super) mod sanitizer;
 mod state;
 
 pub use classifier::AdmissionSource;

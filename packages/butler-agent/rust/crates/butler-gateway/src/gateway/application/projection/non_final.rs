@@ -21,6 +21,7 @@ pub(in crate::gateway::application) use operations::{
     FailedProjection, project_failed, settle_confirmed_stop,
 };
 use progress::*;
+pub(in crate::gateway::application) use progress::{ProgressAppend, append_progress};
 pub(in crate::gateway::application) use runtime_progress::row_from_runtime_event;
 use runtime_values::*;
 use values::*;

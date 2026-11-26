@@ -13,11 +13,13 @@ mod final_result;
 mod final_turn_events;
 mod handoffs;
 mod non_final;
-pub(in crate::gateway::application) use non_final::row_from_runtime_event;
 #[cfg(test)]
 pub(in crate::gateway::application) use non_final::terminal_tests::assert_terminal_projection_contracts;
 pub(super) use non_final::{
     FailedProjection, ProjectionIds, project_failed, settle_confirmed_stop,
+};
+pub(in crate::gateway::application) use non_final::{
+    ProgressAppend, append_progress, row_from_runtime_event,
 };
 mod observers;
 mod owner;

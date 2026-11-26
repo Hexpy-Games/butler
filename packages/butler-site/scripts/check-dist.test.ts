@@ -30,6 +30,8 @@ function completeSite(): void {
   put("help/models/cloud/index.html", page("ko"));
   put("en/help/index.html", page("en"));
   put("en/help/models/cloud/index.html", page("en"));
+  put("privacy/index.html", page("ko"));
+  put("en/privacy/index.html", page("en"));
   put("docs/index.html", redirect("/help/"));
   put("docs/models/cloud/index.html", redirect("/help/models/cloud/"));
   put("pagefind/pagefind.js", "");

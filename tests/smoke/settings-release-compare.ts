@@ -6,6 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
+import { getAppCopy } from "../../packages/butler-i18n/src";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { timeBasedFiniteAnimationsSettled } from "../support/animation-settle.ts";
 import { smokeBrowserArgs } from "../support/smoke-browser.ts";
@@ -58,14 +59,15 @@ async function matrix(uiRoot: string, stage: string) {
             const settings = page.getByRole("button", { name: "Settings", exact: true });
             if (!await settings.isVisible()) await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
             await settings.click();
-            const button = page.getByRole("button", { name: section, exact: true });
+            const label = stage === "after" && section === "Archives" ? getAppCopy("en-US").settings.sections.archive : section;
+            const button = page.getByRole("button", { name: label, exact: true });
             if (!await button.count()) {
               assert(absentSections[stage]?.includes(section), `${stage}: missing ${section}`);
               report.push({ stage, name, section, present: false });
               continue;
             }
             await button.click();
-            await page.locator('[data-test-class~="settings-detail-title"]').filter({ hasText: section }).waitFor();
+            await page.locator('[data-test-class~="settings-detail-title"]').filter({ hasText: label }).waitFor();
             await capture(page, directory, `settings-${section.replaceAll(" ", "-")}-${name}`);
             report.push({ stage, name, section, present: true, text: await page.locator('[data-test-class~="settings-detail"]').allTextContents() });
           }

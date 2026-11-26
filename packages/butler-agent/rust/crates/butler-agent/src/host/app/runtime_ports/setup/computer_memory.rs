@@ -9,6 +9,7 @@ use butler_gateway::gateway::{
 use butler_memory::cognition::RememberedRuleOwner;
 use butler_memory::profile::ProfileService;
 use butler_turn::context_ports::{ProfilePromptPort, PromptProjectionInput};
+use butler_turn::conversation::TransferToolStep;
 use butler_turn::conversation::{AgentConversationStore, CanonicalMemoryReadBinding, TransferTurn};
 use butler_turn::remote_memory::{CopiedRule, MemoryCopy};
 use serde::Deserialize;
@@ -122,6 +123,14 @@ fn read_session_turns(
          GROUP BY m.id
          ORDER BY m.seq",
     )?;
+    let has_tools: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversation_tool_steps')",
+        [], |row| row.get(0),
+    )?;
+    let mut tools = has_tools.then(|| tx.prepare(
+        "SELECT tool_call_id, ord, safe_tool_name, safe_label, safe_input_label, status,
+                started_at, completed_at FROM conversation_tool_steps WHERE turn_id=?1 ORDER BY ord",
+    )).transpose()?;
     turns
         .query_map([gateway, runtime_session_id], |row| {
             let id: String = row.get(0)?;
@@ -136,11 +145,35 @@ fn read_session_turns(
                 })?
                 .collect::<rusqlite::Result<_>>()?;
             Ok(RemovedComputerTurn {
+                tools: read_turn_tools(tools.as_mut(), &id)?,
                 id,
                 status: row.get(1)?,
                 started_at: row.get(2)?,
                 completed_at: row.get(3)?,
                 messages,
+            })
+        })?
+        .collect()
+}
+
+fn read_turn_tools(
+    query: Option<&mut rusqlite::Statement<'_>>,
+    id: &str,
+) -> rusqlite::Result<Vec<TransferToolStep>> {
+    let Some(query) = query else {
+        return Ok(Vec::new());
+    };
+    query
+        .query_map([id], |row| {
+            Ok(TransferToolStep {
+                tool_call_id: row.get(0)?,
+                ord: row.get(1)?,
+                safe_tool_name: row.get(2)?,
+                safe_label: row.get(3)?,
+                safe_input_label: row.get(4)?,
+                status: row.get(5)?,
+                started_at: row.get(6)?,
+                completed_at: row.get(7)?,
             })
         })?
         .collect()

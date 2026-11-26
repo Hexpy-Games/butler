@@ -5,6 +5,10 @@ use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
+
+/// Why a non-public address does not open in a tab, and where such pages go.
+const NON_PUBLIC: &str = "Browser tabs open only public web addresses. Open a local server with preview_start, and hand a local file to the user with deliver_files (a page or site with output_publish). Never open either with run_command.";
+
 #[derive(Clone)]
 pub(in crate::host::guided::tools) struct Client {
     admin: AdminClient,
@@ -70,7 +74,19 @@ impl Client {
                 Ok(response) if response.status().is_server_error() => {
                     json!({"status":"unknown","reason":"browser_result_unknown"})
                 }
-                Ok(_) => json!({"status":"not_dispatched","reason":"browser_refused"}),
+                Ok(response) => {
+                    let body: Value = response
+                        .bytes()
+                        .await
+                        .ok()
+                        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                        .unwrap_or(Value::Null);
+                    if body["error"]["code"] == "navigation_denied" {
+                        json!({"status":"not_dispatched","reason":"navigation_denied","recovery":NON_PUBLIC})
+                    } else {
+                        json!({"status":"not_dispatched","reason":"browser_refused"})
+                    }
+                }
                 Err(_) => json!({"status":"unknown","reason":"browser_host_lost"}),
             }
         };

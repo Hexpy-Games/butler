@@ -27,3 +27,11 @@ pub(super) fn current() -> BuildInfo {
         profile: "unknown",
     })
 }
+
+pub(crate) fn is_dev_version(version: &str) -> bool {
+    version.ends_with("-dev")
+}
+
+pub(crate) fn dev_build() -> bool {
+    is_dev_version(current().version)
+}
