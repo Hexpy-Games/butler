@@ -25,7 +25,8 @@ export type MotionDurationName =
   | "intro-draw"
   | "intro-print"
   | "intro-bloom"
-  | "intro-total";
+  | "intro-total"
+  | "sheen-pause";
 
 export type MotionEasingName =
   | "standard"
@@ -60,6 +61,7 @@ const DURATION_FALLBACK: Record<MotionDurationName, number> = {
   "intro-print": 400,
   "intro-bloom": 1450,
   "intro-total": 2900,
+  "sheen-pause": 8000,
 };
 
 const EASING_FALLBACK: Record<MotionEasingName, string> = {

@@ -44,6 +44,7 @@ export const guidance: ShowcaseGuidance = {
   purpose: "A small pill for a status, category or removable filter value.",
   whenToUse: ["Show a status or category next to a title", "A removable filter chip", "A user's own category label in a color they chose (label tones)"],
   whenNotToUse: [
+    { when: "A plan name (Plus, Pro, Enterprise)", use: "Badge" },
     { when: "A clickable action", use: "PillButton" },
     { when: "An inline error or result message", use: "Notice" },
     { when: "Picking a label tone", use: "TagColorSwatches" },

@@ -197,6 +197,9 @@
      both to 0 (a static edge, a pointer that jumps). */
   --motion-agent-edge: 14s;
   --motion-pointer-glide: 400ms;
+  /* Badge sheen: one lap of the band, then a pause before the next (JS reads the pause via motionDuration). */
+  --motion-sheen-lap: 1280ms;
+  --motion-sheen-pause: 8s;
   /* Sequences. Rows of a setup card arrive 30ms apart once the morphing card
      is 94% there (150ms on the emphasized curve); intro text lines 70ms
      apart. The intro segments are the first-run ink scene's timeline: the
@@ -458,6 +461,10 @@
   --blue-09: #003d8c;
   --blue-10: #002966;
   --blue-11: #16283f;
+  /* Plan badge fills (Badge). Light: white text 4.65:1. Dark: navy text 5.55:1. */
+  --blue-badge: #0d64d8;
+  --blue-badge-dark: #5a99e6;
+  --blue-badge-ink-dark: #06203f;
 
   --green-01: #e6f7e9;
   --green-02: #b3e6bf;
@@ -617,6 +624,15 @@
   --tag-label-purple-bg: var(--purple-02);
   --tag-label-purple-fg: var(--purple-09);
   --tag-label-purple-border: var(--purple-03);
+  /* Badge: a filled plan pill, 18px inside the Tag sm slot so rows keep their height. */
+  --badge-height: 18px;
+  --badge-padding-inline: var(--space-sm);
+  --badge-font-size: calc(var(--typo-caption-size) - 1px);
+  --badge-letter-spacing: calc(var(--badge-font-size) * 0.06);
+  --badge-bg: var(--blue-badge);
+  --badge-fg: var(--neutral-white);
+  /* Peak of the sheen band over the fill; the label paints above it. */
+  --badge-sheen-peak: 9%;
 
   --color-border-default: var(--grayscale-03);
   --color-border-strong: var(--grayscale-04);
@@ -1247,6 +1263,10 @@
   --tag-label-purple-bg: var(--purple-11);
   --tag-label-purple-fg: var(--purple-04);
   --tag-label-purple-border: var(--purple-10);
+  --badge-bg: var(--blue-badge-dark);
+  --badge-fg: var(--blue-badge-ink-dark);
+  /* Navy text gains contrast as the fill lightens, so the dark band can be stronger. */
+  --badge-sheen-peak: 26%;
 
   --color-border-default: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.16);
@@ -1467,6 +1487,11 @@
   --tag-label-purple-bg: var(--purple-02);
   --tag-label-purple-fg: var(--purple-09);
   --tag-label-purple-border: var(--purple-03);
+  /* Badge: a filled plan pill, 18px inside the Tag sm slot so rows keep their height. */
+  --badge-bg: var(--blue-badge);
+  --badge-fg: var(--neutral-white);
+  /* Peak of the sheen band over the fill; the label paints above it. */
+  --badge-sheen-peak: 9%;
   --color-surface-raised: rgba(255, 255, 255, 0.96);
   --color-surface-raised-opaque: rgb(
     from var(--color-surface-raised) r g b / 1

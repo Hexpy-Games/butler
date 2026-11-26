@@ -2,18 +2,19 @@ import type { ButlerAccountStatus } from "@/app/butlerAccount";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SecurityView } from "@/app/types.ts";
-import { Button, SettingsField, Stack, Tag, Typo } from "@/butler-ds";
+import { Button, SettingsField, Stack, Typo } from "@/butler-ds";
+import { PlanBadge } from "@/components/common/PlanBadge";
 import { SettingsSwitch } from "./SettingsSwitch";
 
 export function SecurityTunnelField({ tunnel, account, justEnabled, disabled, onChange }: {
   tunnel: NonNullable<SecurityView["tunnel"]>;
-  account: ButlerAccountStatus | null;
+  account: ButlerAccountStatus | null | undefined;
   justEnabled: boolean;
   disabled: boolean;
   onChange: (enabled: boolean) => void;
 }) {
   const copy = appCopy.settings.security;
-  const label = <>{copy.tunnel}<Tag tone="accent">{appCopy.butlerAccount.plans.plus}</Tag></>;
+  const label = <>{copy.tunnel}<PlanBadge required="plus" status={account} /></>;
   if (tunnel.enabled || !account || (account.signed_in && account.entitlements.features.tunnel === true)) {
     return (
       <SettingsSwitch

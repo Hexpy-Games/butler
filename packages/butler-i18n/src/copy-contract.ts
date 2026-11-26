@@ -851,6 +851,7 @@ export interface AppCopy {
     plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
     switchToPlus: string;
     switchToFree: string;
+    planAndAbove: (plan: string) => string;
     signOut: string;
     signOutConfirm: string;
     signedOut: string;

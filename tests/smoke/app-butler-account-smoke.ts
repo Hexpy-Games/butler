@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { type Page } from "playwright";
+import { type Locator, type Page } from "playwright";
 import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
@@ -32,7 +32,7 @@ async function startFakeCloud() {
     } else if (request.headers.authorization !== "Bearer bct_fake") {
       response.writeHead(401).end(JSON.stringify({ error: { code: "unauthorized", message: "Unauthorized." } }));
     } else if (request.method === "GET" && path === "/v1/me") {
-      response.end(JSON.stringify({ account, device, entitlements: { plan: state.plan, status: "active", renews_at: null, features: {} } }));
+      response.end(JSON.stringify({ account, device, entitlements: { plan: state.plan, status: "active", renews_at: null, features: { tunnel: state.plan !== "free" } } }));
     } else if (request.method === "GET" && path === "/v1/devices") {
       response.end(JSON.stringify({ devices: state.devices }));
     } else if (request.method === "DELETE" && path?.startsWith("/v1/devices/")) {
@@ -57,6 +57,14 @@ setAppCopyLanguage(language);
 const copy = appCopy.butlerAccount;
 const widths = [320, 375, 390, 430, 768, 1440];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
+const tunnelRow = (page: Page) => page.locator('[data-setting-id="tunnel"]');
+const badgeIn = (scope: Locator) => scope.locator('[data-slot="badge"]');
+async function openDevices(page: Page) {
+  const loaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/setup/butler-account");
+  await page.locator('[data-test-class="settings-sidebar"]').getByRole("button", { name: appCopy.settings.sections.devices, exact: true }).click();
+  await loaded;
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+}
 
 async function openAccount(page: Page) {
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
@@ -141,10 +149,35 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   assert.equal(await devices.locator('[data-slot="form-section-card"] > *').count(), 2);
   await verifyLayouts(page);
   await screenshot(page, "signed-in");
+  await openDevices(page);
+  const freeBadge = badgeIn(tunnelRow(page));
+  await freeBadge.waitFor();
+  assert.equal(await freeBadge.textContent(), copy.plans.plus);
+  await freeBadge.hover();
+  await page.getByRole("tooltip").getByText(copy.planAndAbove(copy.plans.plus), { exact: true }).waitFor();
+  await screenshot(page, "plan-badge-free");
   fake.state.plan = "plus";
   await page.reload();
   await openAccount(page);
   await account.getByText(copy.plans.plus, { exact: true }).waitFor();
+  assert.equal(await badgeIn(account).textContent(), copy.plans.plus);
+  await screenshot(page, "plan-badge-current");
+  await openDevices(page);
+  await tunnelRow(page).getByRole("switch").waitFor();
+  assert.equal(await badgeIn(tunnelRow(page)).count(), 0);
+  // The account service does not answer: the switch stays, with the badge in its label; clicking the badge never toggles it.
+  await page.route("**/setup/butler-account", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await page.reload();
+  await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
+  await openDevices(page);
+  const toggle = tunnelRow(page).getByRole("switch");
+  await toggle.waitFor();
+  const toggled = page.waitForRequest((r) => new URL(r.url()).pathname === "/security/tunnel", { timeout: 1000 }).then(() => true, () => false);
+  await badgeIn(tunnelRow(page)).click();
+  assert.equal(await toggled, false);
+  await page.unroute("**/setup/butler-account");
+  await page.reload();
+  await openAccount(page);
   await devices.getByRole("button", { name: copy.revokeDevice("Other"), exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: copy.revoke, exact: true }).click();
   await devices.getByText("Other", { exact: true }).waitFor({ state: "hidden" });
@@ -209,7 +242,7 @@ const fake = await startFakeCloud();
 try {
   await run(false, fake);
   await run(true, fake);
-  console.log(JSON.stringify({ ok: true, checks: ["hidden", "sign-in", "invalid-code", "plan-refresh", "revoke", "sign-out", "responsive"], widths }));
+  console.log(JSON.stringify({ ok: true, checks: ["hidden", "sign-in", "invalid-code", "plan-refresh", "plan-badge", "revoke", "sign-out", "responsive"], widths }));
 } catch (error) {
   console.error(String(error));
   process.exitCode = 1;
