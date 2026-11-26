@@ -59,9 +59,9 @@ const widths = [320, 375, 390, 430, 768, 1440];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 const tunnelRow = (page: Page) => page.locator('[data-setting-id="tunnel"]');
 const badgeIn = (scope: Locator) => scope.locator('[data-slot="badge"]');
-async function openSecurity(page: Page) {
+async function openDevices(page: Page) {
   const loaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/setup/butler-account");
-  await page.locator('[data-test-class="settings-sidebar"]').getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
+  await page.locator('[data-test-class="settings-sidebar"]').getByRole("button", { name: appCopy.settings.sections.devices, exact: true }).click();
   await loaded;
   await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
 }
@@ -149,7 +149,7 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   assert.equal(await devices.locator('[data-slot="form-section-card"] > *').count(), 2);
   await verifyLayouts(page);
   await screenshot(page, "signed-in");
-  await openSecurity(page);
+  await openDevices(page);
   const freeBadge = badgeIn(tunnelRow(page));
   await freeBadge.waitFor();
   assert.equal(await freeBadge.textContent(), copy.plans.plus);
@@ -162,14 +162,14 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   await account.getByText(copy.plans.plus, { exact: true }).waitFor();
   assert.equal(await badgeIn(account).textContent(), copy.plans.plus);
   await screenshot(page, "plan-badge-current");
-  await openSecurity(page);
+  await openDevices(page);
   await tunnelRow(page).getByRole("switch").waitFor();
   assert.equal(await badgeIn(tunnelRow(page)).count(), 0);
   // The account service does not answer: the switch stays, with the badge in its label; clicking the badge never toggles it.
   await page.route("**/setup/butler-account", (route) => route.fulfill({ status: 503, body: "{}" }));
   await page.reload();
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
-  await openSecurity(page);
+  await openDevices(page);
   const toggle = tunnelRow(page).getByRole("switch");
   await toggle.waitFor();
   const toggled = page.waitForRequest((r) => new URL(r.url()).pathname === "/security/tunnel", { timeout: 1000 }).then(() => true, () => false);
