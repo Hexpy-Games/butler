@@ -90,9 +90,9 @@ async function installGatewayRoutes(page: Page, server: NativeAppServerHandle, p
   return { fake, linked, members, requests };
 }
 
-async function capture(page: Page, name: string, regions: Locator[], aboveComposer = false) {
+async function capture(page: Page, name: string, regions: Locator[], aboveComposer = false, pad = 16) {
   if (!shots) return;
-  await Promise.all(regions.map(region => region.evaluate(async node => {
+  const parentBoxes = await Promise.all(regions.map(region => region.evaluate(async node => {
     const animations = node.getAnimations({ subtree: true });
     const dialog = node.closest('[role="dialog"], [role="alertdialog"]');
     for (let ancestor = node.parentElement; ancestor; ancestor = ancestor.parentElement) {
@@ -101,16 +101,23 @@ async function capture(page: Page, name: string, regions: Locator[], aboveCompos
     await Promise.all(animations
       .filter(animation => animation.playState === "running" && animation.effect?.getComputedTiming().iterations !== Infinity)
       .map(animation => animation.finished));
+    if (dialog?.getAttribute("role") !== "alertdialog") return null;
+    const openDialog = '[role="dialog"][data-state="open"]';
+    const parent = dialog.parentElement?.closest(openDialog) ?? Array.from(document.querySelectorAll(openDialog)).at(-1);
+    if (!parent) return null;
+    const { x, y, width, height } = parent.getBoundingClientRect();
+    return { x, y, width, height };
   })));
   const boxes = await Promise.all(regions.map(region => region.boundingBox()));
   assert(boxes.every(box => box !== null), name);
-  const pad = 16;
-  const x = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.x))) - pad);
-  const y = Math.max(0, Math.floor(Math.min(...boxes.map(box => box!.y))) - pad);
-  const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...boxes.map(box => box!.x + box!.width))) + pad);
+  const parentBox = parentBoxes.find(box => box !== null);
+  const framing = parentBox ? [parentBox] : boxes;
+  const x = Math.max(0, Math.floor(Math.min(...framing.map(box => box!.x))) - pad);
+  const y = Math.max(0, Math.floor(Math.min(...framing.map(box => box!.y))) - pad);
+  const right = Math.min(page.viewportSize()!.width, Math.ceil(Math.max(...framing.map(box => box!.x + box!.width))) + pad);
   const composerTop = aboveComposer ? await page.locator('[data-test-class="project-dashboard-view"] [data-test-class="composer-card"]')
     .evaluate(composer => Math.floor(composer.getBoundingClientRect().top)) : page.viewportSize()!.height;
-  const bottom = Math.min(composerTop, page.viewportSize()!.height, Math.ceil(Math.max(...boxes.map(box => box!.y + box!.height))) + pad);
+  const bottom = Math.min(composerTop, page.viewportSize()!.height, Math.ceil(Math.max(...framing.map(box => box!.y + box!.height))) + pad);
   await page.screenshot({ path: join(shots, `${name}.png`), animations: "disabled", clip: { x, y, width: right - x, height: bottom - y } });
 }
 
@@ -227,7 +234,7 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   const reason = page.getByRole("tooltip", { name: viewerLock, exact: true });
   await reason.waitFor();
   assert.equal(await title.locator("svg").count(), 0, "No edit pencil on a locked epic");
-  await capture(page, `${cell}-viewer-epic-tooltip`, [title, reason], mobile);
+  await capture(page, `${cell}-viewer-epic-tooltip`, [title, reason], mobile, 4);
   await page.mouse.move(0, 0);
   await reason.waitFor({ state: "hidden" });
   await capture(page, `${cell}-viewer-epic`, [detail], mobile);
