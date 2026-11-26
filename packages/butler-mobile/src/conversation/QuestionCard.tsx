@@ -63,6 +63,7 @@ function QuestionFields({ question, answer, disabled, update }: {
   return <>
     {options.map((option, index) => <ListRow key={option.id} title={option.label} description={option.description} titleLines={2} descriptionLines={3}
       meta={option.recommended ? labels.recommended : undefined} selected={answer.selected.includes(index)} disabled={disabled}
+      selection={question.kind === "multi" ? "multi" : "single"}
       onPress={() => update({ selected: question.kind === "multi"
         ? answer.selected.includes(index) ? answer.selected.filter(i => i !== index) : [...answer.selected, index].sort((a, b) => a - b)
         : [index], skipped: false, ...(question.kind === "single" ? { other: "" } : {}) }, question.kind === "single")} />)}

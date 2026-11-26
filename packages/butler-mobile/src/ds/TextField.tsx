@@ -45,7 +45,7 @@ export function TextField({
   ];
   return (
     <View style={{ gap: t.length("--space-2") }}>
-      <Text variant="label">{label}</Text>
+      <Text variant="label" tone="secondary">{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
