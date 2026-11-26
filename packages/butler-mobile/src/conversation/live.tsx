@@ -8,7 +8,6 @@ import type { Problem } from "@/connection/problems";
 import type { Route } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import type { RelayPeer } from "@/connection/tunnel/transport";
-import { useMobileCopy } from "@/i18n";
 import { clearSessionViews } from "./sessionViewCache";
 import { useLiveRoute } from "./useLiveRoute";
 
@@ -17,6 +16,7 @@ interface ConversationContext {
   disconnect(): Promise<void>;
   client: GatewayClient | null;
   pairing: Pairing | null;
+  revoked: { computerName?: string } | null;
   route: Route | null;
   access: Access | null;
   lost: boolean;
@@ -27,7 +27,6 @@ interface ConversationContext {
 const Context = createContext<ConversationContext | null>(null);
 
 export function ConversationProvider({ children }: { children: React.ReactNode }) {
-  const copy = useMobileCopy();
   const pairing = useRef<Pairing | null>(null);
   const route = useRef<Route | null>(null);
   const relay = useRef<{ peer: RelayPeer; fetch: FetchLike } | null>(null);
@@ -36,6 +35,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listeners = useRef(new Set<(event: LiveEvent) => void>());
   const [activePairing, setPairing] = useState<Pairing | null>(null);
+  const [revoked, setRevoked] = useState<ConversationContext["revoked"]>(null);
   const [activeRoute, setRoute] = useState<Route | null>(null);
   const [peer, setPeer] = useState<RelayPeer | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -46,8 +46,8 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     listeners.current.add(listener);
     return () => { listeners.current.delete(listener); };
   }, []);
-  const teardown = useCallback(async () => {
-    const current = pairing.current;
+  const teardown = useCallback(async (revoked?: Pairing) => {
+    const current = revoked ?? pairing.current;
     live.current?.close();
     clearTimeout(timer.current);
     setLost(false);
@@ -66,14 +66,15 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         clearSessionViews();
       }
     } finally {
+      if (revoked) setRevoked({ computerName: revoked.computerName });
       if (router.canDismiss()) router.dismissAll();
-      router.replace("/pair");
+      router.replace(revoked ? "/home" : "/pair");
     }
   }, []);
   const disconnect = useCallback(async () => {
     const current = pairing.current;
     const currentRoute = route.current;
-    live.current?.close(); // before the revoke, so the closed stream cannot fire the 401 toast
+    live.current?.close(); // before the revoke, so the closed stream cannot handle the 401
     if (current && currentRoute) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
@@ -89,10 +90,10 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     await teardown();
   }, [teardown]);
   const { access, open } = useLiveRoute({
-    copy, pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
-    setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, teardown,
+    pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
+    setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, setRevoked, teardown,
   });
-  return <Context.Provider value={{ open, disconnect, client, pairing: activePairing, route: activeRoute, access, lost, problem, reconcile, subscribe }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ open, disconnect, client, pairing: activePairing, revoked, route: activeRoute, access, lost, problem, reconcile, subscribe }}>{children}</Context.Provider>;
 }
 
 export function useConversation(): ConversationContext {

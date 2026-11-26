@@ -22,9 +22,10 @@ use super::{
 use crate::gateway::{
     crypto::constant_time_eq,
     http::{
-        content,
+        HttpError, content,
+        error::error_response,
         listeners::{self, TunnelPeer},
-        security::DEVICE_PAIR_PATH,
+        security::{DEVICE_PAIR_PATH, Denial},
     },
 };
 
@@ -223,6 +224,13 @@ impl Context {
         let opened = noise::open(handshake, &first, &tunnel.replay, noise::now_ms())
             .map_err(|_| frames::PROTOCOL)?;
         if !self.admits(&opened) {
+            if opened.headers.contains_key(header::AUTHORIZATION)
+                && !self.state.devices.knows_token(&opened.headers)
+            {
+                let response = error_response(&HttpError::from(Denial::Missing));
+                respond(response, opened.handshake, out).await?;
+                return out.send(frames::END, &[]).await;
+            }
             return Err(frames::PROTOCOL);
         }
         let Opened {

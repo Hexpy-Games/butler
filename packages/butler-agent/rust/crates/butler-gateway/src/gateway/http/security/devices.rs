@@ -200,6 +200,10 @@ impl DeviceRegistry {
         })
     }
 
+    pub(in crate::gateway::http) fn knows_token(&self, headers: &HeaderMap) -> bool {
+        self.token_entry(headers).is_some()
+    }
+
     pub(in crate::gateway::http) fn token_noise_static(
         &self,
         headers: &HeaderMap,
