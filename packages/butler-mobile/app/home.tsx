@@ -7,7 +7,6 @@ import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import type { Problem } from "@/connection/problems";
-import { lanAddresses } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
@@ -43,7 +42,7 @@ export default function Home() {
     }
     const result = await open(pairing);
     if (id !== latest.current) return;
-    const origin = pairing.computerName ?? lanAddresses(pairing)[0];
+    const origin = pairing.computerName;
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin }
       : { kind: "problem", origin, problem: result.problem });
