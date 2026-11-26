@@ -66,7 +66,8 @@ async function capture(page: Page, number: string) {
 async function captureFixtures(page: Page, includeAddModel: boolean) {
   const eyebrow = ko ? "컴퓨터" : "Computer";
   const id = "10000000-0000-4000-8000-000000000001";
-  const cards = [
+  const cards: ({ shot: string; id: string; title: string; options: { id: string; label: string; recommended?: boolean }[] }
+    | { shot: string; id: string; questions: UserQuestion[] })[] = [
     {
       shot: "4", id: `computer_edit:${id}.model`, title: ko ? `${name}에서 쓸 모델` : `Model for ${name}`,
       options: options.map(({ description, ...option }) => option),
@@ -84,6 +85,24 @@ async function captureFixtures(page: Page, includeAddModel: boolean) {
   if (includeAddModel) {
     cards.unshift({ shot: "6", id: "computer_add.model", title: titles[3]!, options });
   }
+  const fields = [["port", ko ? "포트" : "Port"], ["key_file", ko ? "키 파일" : "Key file"]] as const;
+  for (const [shot, code, reason] of [
+    ["8", "ssh_auth_failed", ko ? "키로 로그인할 수 없습니다" : "Can't sign in with a key"],
+    ["9", "ssh_unreachable", ko ? "연결할 수 없습니다" : "Can't connect"],
+  ] as const) {
+    const id = `computer_add:${code}`;
+    cards.push({ shot, id, questions: fields.map(([field, label]) => ({
+      id: `${id}.${field}`,
+      eyebrow: label,
+      title: ko ? `${reason}. ${name}의 ${label}` : `${reason}. ${label} for ${name}`,
+      kind: "single",
+      allow_custom: true,
+      options: [
+        ...(shot === "9" && field === "port" ? [{ id: "proposed", label: "2222", recommended: true, kind: "answer" as const }] : []),
+        { id: "none", label: none, kind: "answer" },
+      ],
+    })) });
+  }
   for (const card of cards) {
     const pattern = "**/session-view?*";
     await page.route(pattern, async route => {
@@ -91,12 +110,17 @@ async function captureFixtures(page: Page, includeAddModel: boolean) {
       const body = await response.json();
       const view = body.data ?? body;
       const [request] = view.pending_questions;
-      const options = card.options.map(option => ({ ...option, kind: "answer" as const }));
-      const questions = card.id === "computer_add.model"
-        ? request.questions.questions.map((question: UserQuestion) =>
-          question.id === card.id ? { ...question, options } : question)
-        : [{ id: card.id, eyebrow: card.id.endsWith(".model") ? (ko ? "모델" : "Model") : eyebrow,
-          title: card.title, kind: "single", allow_custom: false, options }];
+      let questions: UserQuestion[];
+      if ("questions" in card) {
+        questions = card.questions;
+      } else {
+        const options = card.options.map(option => ({ ...option, kind: "answer" as const }));
+        questions = card.id === "computer_add.model"
+          ? request.questions.questions.map((question: UserQuestion) =>
+            question.id === card.id ? { ...question, options } : question)
+          : [{ id: card.id, eyebrow: card.id.endsWith(".model") ? (ko ? "모델" : "Model") : eyebrow,
+            title: card.title, kind: "single", allow_custom: false, options }];
+      }
       view.pending_questions = [{
         ...request, request_ref: card.id, question_state: "pending", questions: { questions },
       }];
@@ -104,14 +128,22 @@ async function captureFixtures(page: Page, includeAddModel: boolean) {
     });
     await page.reload();
     const panel = questionPanel(page);
-    if (card.id === "computer_add.model") {
-      for (const title of titles.slice(0, 3)) {
-        await panel.getByText(title, { exact: true }).waitFor();
-        await button(panel, buttons.skip).click();
+    if ("questions" in card) {
+      for (const [index, question] of card.questions.entries()) {
+        if (index > 0) await panel.getByRole("tab", { name: question.eyebrow, exact: true }).click();
+        await panel.getByText(question.title, { exact: true }).waitFor();
+        await capture(page, `${card.shot}${index === 0 ? "a" : "b"}`);
       }
+    } else {
+      if (card.id === "computer_add.model") {
+        for (const title of titles.slice(0, 3)) {
+          await panel.getByText(title, { exact: true }).waitFor();
+          await button(panel, buttons.skip).click();
+        }
+      }
+      await panel.getByText(card.title, { exact: true }).waitFor();
+      await capture(page, card.shot);
     }
-    await panel.getByText(card.title, { exact: true }).waitFor();
-    await capture(page, card.shot);
     await page.unroute(pattern);
   }
 }

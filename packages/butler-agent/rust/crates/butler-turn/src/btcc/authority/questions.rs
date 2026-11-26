@@ -194,14 +194,25 @@ pub struct QuestionBinding {
     pub source_session_id: String,
     pub turn_id: String,
     pub call_id: String,
+    pub slot: Option<String>,
     pub model_ref: String,
     pub reasoning_effort: String,
 }
 pub fn question_request_ref(turn_id: &str, call_id: &str) -> String {
-    format!("question-ref-{}", question_digest(turn_id, call_id))
+    format!("question-ref-{}", question_digest(turn_id, call_id, None))
 }
-fn question_digest(turn_id: &str, call_id: &str) -> String {
-    identity::digest(&format!("ask_user\0{turn_id}\0{call_id}"))
+pub fn question_slot_request_ref(turn_id: &str, call_id: &str, slot: &str) -> String {
+    format!(
+        "question-ref-{}",
+        question_digest(turn_id, call_id, Some(slot))
+    )
+}
+fn question_digest(turn_id: &str, call_id: &str, slot: Option<&str>) -> String {
+    let input = match slot {
+        None => format!("ask_user\0{turn_id}\0{call_id}"),
+        Some(slot) => format!("ask_user\0{turn_id}\0{call_id}\0{slot}"),
+    };
+    identity::digest(&input)
 }
 
 impl PrincipalAuthority {
@@ -224,7 +235,7 @@ impl PrincipalAuthority {
         let collation = self.collation.clone();
         let now = (self.clock)();
         self.in_lane(move |repo| {
-            let sha = question_digest(&binding.turn_id, &binding.call_id);
+            let sha = question_digest(&binding.turn_id, &binding.call_id, binding.slot.as_deref());
             if let Some(record) = repo.find_identity(&sha)? {
                 if record.owner_session_id != binding.owner_session_id
                     || record.source_session_id != binding.source_session_id
@@ -280,7 +291,10 @@ fn question_record(
         source_work_id: String::new(),
         workspace_path: String::new(),
         plan_revision_id: String::new(),
-        action_key: b.call_id.clone(),
+        action_key: match b.slot {
+            None => b.call_id,
+            Some(slot) => format!("{}:{slot}", b.call_id),
+        },
         authority_generation: 1,
         capability: "ask_user".into(),
         normalized_target: "user".into(),

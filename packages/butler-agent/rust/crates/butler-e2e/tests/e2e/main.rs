@@ -76,6 +76,7 @@ mod composer_fold;
 mod computer_account;
 mod computer_ai_connection;
 mod computer_chat;
+mod computer_chat_retry;
 mod computer_environment;
 mod computer_model_sync;
 mod computers;

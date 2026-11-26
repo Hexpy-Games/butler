@@ -6,9 +6,13 @@ use http::Method;
 use serde_json::{Map, Value, json};
 
 const FIELDS: [&str; 4] = ["name", "address", "folder", "model"];
+pub(super) const CONNECTION_FIELDS: [&str; 2] = ["port", "key_file"];
 const KO: Copy = Copy {
     eyebrow: "컴퓨터",
     labels: ["이름", "주소", "폴더", "모델"],
+    connection_labels: ["포트", "키 파일"],
+    unreachable: "연결할 수 없습니다",
+    key_login: "키로 로그인할 수 없습니다",
     name: "컴퓨터 이름",
     address: "SSH 주소 (~/.ssh/config 별칭 사용 가능)",
     folder: "작업 폴더",
@@ -23,6 +27,9 @@ const KO: Copy = Copy {
 const EN: Copy = Copy {
     eyebrow: "Computer",
     labels: ["Name", "Address", "Folder", "Model"],
+    connection_labels: ["Port", "Key file"],
+    unreachable: "Can't connect",
+    key_login: "Can't sign in with a key",
     name: "Computer name",
     address: "SSH address (~/.ssh/config aliases work)",
     folder: "Work folder",
@@ -38,6 +45,9 @@ const EN: Copy = Copy {
 struct Copy {
     eyebrow: &'static str,
     labels: [&'static str; 4],
+    connection_labels: [&'static str; 2],
+    unreachable: &'static str,
+    key_login: &'static str,
     name: &'static str,
     address: &'static str,
     folder: &'static str,
@@ -84,12 +94,7 @@ pub(super) async fn build(
     args: &Map<String, Value>,
 ) -> Result<UserQuestions, Value> {
     validate(tool, args)?;
-    let language = owner.binding.response_language.trim().to_ascii_lowercase();
-    let copy = if matches!(language.as_str(), "" | "ko" | "korean" | "한국어") {
-        &KO
-    } else {
-        &EN
-    };
+    let copy = copy(owner);
     let model = tool == ToolName::ComputerAdd || args.contains_key("model");
     let client = admin(owner).await?;
     let data = client.data(Method::GET, "/computers", None).await?;
@@ -159,6 +164,79 @@ pub(super) async fn build(
     Ok(UserQuestions { questions }.normalized())
 }
 
+fn copy(owner: &GuidedTools) -> &'static Copy {
+    let language = owner.binding.response_language.trim().to_ascii_lowercase();
+    if matches!(language.as_str(), "" | "ko" | "korean" | "한국어") {
+        &KO
+    } else {
+        &EN
+    }
+}
+
+pub(super) fn connection(
+    owner: &GuidedTools,
+    code: &str,
+    name: &str,
+    args: &Map<String, Value>,
+) -> UserQuestions {
+    let copy = copy(owner);
+    let reason = if code == "ssh_unreachable" {
+        copy.unreachable
+    } else {
+        copy.key_login
+    };
+    let proposals = [
+        args.get("port")
+            .and_then(proposed_port)
+            .map(|port| port.to_string()),
+        args.get("key_file")
+            .and_then(Value::as_str)
+            .filter(|key| !key.trim().is_empty() && key.chars().count() <= 512)
+            .map(str::to_owned),
+    ];
+    let questions = CONNECTION_FIELDS
+        .into_iter()
+        .zip(copy.connection_labels)
+        .zip(proposals)
+        .map(|((field, label), proposal)| {
+            let mut options = Vec::new();
+            if let Some(proposal) = proposal {
+                options.push(option("proposed", &proposal, None, true));
+            }
+            options.push(option("none", copy.none, None, false));
+            UserQuestion {
+                id: format!("computer_add:{code}.{field}"),
+                eyebrow: label.into(),
+                title: if copy.eyebrow == KO.eyebrow {
+                    format!("{reason}. {name}의 {label}")
+                } else {
+                    format!("{reason}. {label} for {name}")
+                },
+                kind: QuestionKind::Single,
+                options,
+                allow_custom: true,
+            }
+        })
+        .collect();
+    UserQuestions { questions }.normalized()
+}
+
+pub(super) fn parse_port(value: &str) -> Option<u16> {
+    if !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse::<u16>().ok().filter(|port| *port != 0)
+}
+
+fn proposed_port(value: &Value) -> Option<u16> {
+    match value {
+        Value::String(value) => parse_port(value),
+        _ => u16::try_from(value.as_u64()?)
+            .ok()
+            .filter(|port| *port != 0),
+    }
+}
+
 fn find_target<'a>(computers: &'a [Value], target: &str) -> Result<&'a Value, Value> {
     let name = target.to_lowercase();
     computers
@@ -176,10 +254,13 @@ fn find_target<'a>(computers: &'a [Value], target: &str) -> Result<&'a Value, Va
 
 fn validate(tool: ToolName, args: &Map<String, Value>) -> Result<(), Value> {
     let valid = args.iter().all(|(field, value)| {
+        if tool == ToolName::ComputerAdd && field == "port" {
+            return proposed_port(value).is_some();
+        }
         let allowed = match tool {
             ToolName::ComputerRemove => field == "computer",
             ToolName::ComputerEdit => field == "computer" || FIELDS.contains(&field.as_str()),
-            _ => FIELDS.contains(&field.as_str()),
+            _ => field == "key_file" || FIELDS.contains(&field.as_str()),
         };
         allowed && value.as_str().is_some_and(|value| !value.trim().is_empty())
     }) && (tool == ToolName::ComputerAdd || args.contains_key("computer"))
