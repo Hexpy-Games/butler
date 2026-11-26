@@ -148,14 +148,13 @@ impl AppServer {
         let listener_ready = Arc::new(AtomicBool::new(false));
         let settings =
             Arc::new(open_settings(runtime, data_root, listener.as_ref(), installation).await?);
+        let account = app_config
+            .butler_account_enabled()
+            .then(|| ButlerAccount::new(data_root).map(Arc::new))
+            .transpose()?;
+        let tunnel_account = account.clone();
         let setup = owners
-            .start_setup(
-                runtime,
-                settings.clone(),
-                installation,
-                data_root,
-                app_config,
-            )
+            .start_setup(runtime, settings.clone(), installation, data_root, account)
             .await?;
         let dependencies = composition::dependencies(
             composition::Context {
@@ -199,8 +198,13 @@ impl AppServer {
                 application.publish_thinking(payload);
             }
         }));
-        let gateway_config =
-            gateway_config(app_config, data_root, installation, owners.local_auth)?;
+        let gateway_config = gateway_config(
+            app_config,
+            data_root,
+            installation,
+            owners.local_auth,
+            tunnel_account,
+        );
         Self::activate_listener(
             listener,
             application,
@@ -330,7 +334,8 @@ fn gateway_config(
     data_root: &std::path::Path,
     installation: &ResolvedInstallation,
     local_auth: LocalAuthConfig,
-) -> Result<GatewayConfig, BtccError> {
+    butler_account: Option<Arc<ButlerAccount>>,
+) -> GatewayConfig {
     let mut config = app_config.gateway_config();
     config.local_auth = local_auth;
     config.output_data = Some(data_root.to_path_buf());
@@ -340,13 +345,13 @@ fn gateway_config(
         data_root.to_path_buf(),
         installation.clone(),
     )));
-    if app_config.butler_account_enabled() {
+    if let Some(account) = butler_account {
         config.tunnel = Some(Arc::new(tunnel_port::AppTunnelPort {
-            account: Arc::new(ButlerAccount::new(data_root)?),
+            account,
             data_root: data_root.to_path_buf(),
         }));
     }
-    Ok(config)
+    config
 }
 
 async fn open_settings(
@@ -418,12 +423,8 @@ impl AppServerOwners {
         settings: Arc<AppSettingsFactsAdapter>,
         installation: &ResolvedInstallation,
         data_root: &std::path::Path,
-        app_config: &AppServiceConfiguration,
+        butler_account: Option<Arc<ButlerAccount>>,
     ) -> Result<AppSetup, BtccError> {
-        let butler_account = app_config
-            .butler_account_enabled()
-            .then(|| ButlerAccount::new(data_root).map(Arc::new))
-            .transpose()?;
         let butler_backup = if let Some(account) = &butler_account {
             Some(
                 crate::host::backup::BackupService::start(data_root, installation, account.clone())
