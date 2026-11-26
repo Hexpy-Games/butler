@@ -6,7 +6,10 @@ use butler_e2e::e2e::{
     cassette::Cassette,
     scenario::{Access, Setup},
 };
+use butler_platform::command_sandbox::WINDOWS_SHELL;
 use serde_json::json;
+
+const NEW_FILE_COMMAND: &str = if WINDOWS_SHELL { "New-Item" } else { "touch" };
 
 #[tokio::test]
 async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessError> {
@@ -237,13 +240,21 @@ async fn read_only_pipeline_without_read_sandbox() -> Result<(), HarnessError> {
         (
             "grep",
             "Count matching lines.",
-            "grep -n marker src/a.txt | wc -l",
+            if WINDOWS_SHELL {
+                "sls marker src/a.txt | Measure-Object"
+            } else {
+                "grep -n marker src/a.txt | wc -l"
+            },
             "1",
         ),
         (
             "cat",
             "Read the first line.",
-            "cat a.txt | head -1",
+            if WINDOWS_SHELL {
+                "gc a.txt | Select-Object -First 1"
+            } else {
+                "cat a.txt | head -1"
+            },
             "marker",
         ),
     ] {
@@ -337,6 +348,7 @@ async fn proposed_rule_needs_one_click() -> Result<(), HarnessError> {
     std::fs::create_dir(&parent)?;
     let mut s = setup.start().await?;
     let chat = crate::project_workspace::bind_project(&mut s, &parent).await?;
+    let prefix = NEW_FILE_COMMAND.to_ascii_lowercase();
     for (prompt, action) in [
         ("Propose the rule.", "deny"),
         ("Propose it again.", "allow"),
@@ -346,7 +358,7 @@ async fn proposed_rule_needs_one_click() -> Result<(), HarnessError> {
             vec![call(
                 action,
                 "propose_permission_rule",
-                &json!({"effect":"allow","kind":"command_prefix","pattern":"touch",
+                &json!({"effect":"allow","kind":"command_prefix","pattern":prefix,
                 "scope":"always","reason":"Create files without asking"}),
             )],
         );
@@ -359,7 +371,7 @@ async fn proposed_rule_needs_one_click() -> Result<(), HarnessError> {
         if action == "deny" {
             assert_eq!(rows.data()["permissions"], json!([]));
         } else {
-            assert_eq!(rows.data()["permissions"][0]["target"], "touch");
+            assert_eq!(rows.data()["permissions"][0]["target"], prefix);
             assert_eq!(rows.data()["permissions"][0]["scope"], "always");
         }
     }
@@ -369,7 +381,7 @@ async fn proposed_rule_needs_one_click() -> Result<(), HarnessError> {
         vec![call(
             "touch",
             "run_command",
-            &json!({"command":"touch n.txt","summary":prompt,"state_effect":"mutation"}),
+            &json!({"command":format!("{NEW_FILE_COMMAND} n.txt"),"summary":prompt,"state_effect":"mutation"}),
         )],
     );
     let turn = s.gw.say_turn(&chat, prompt).await?;
@@ -399,7 +411,7 @@ async fn global_rule_runs_in_schedule() -> Result<(), HarnessError> {
         ("Create the scheduled file.", "s.txt"),
     ] {
         script.rounds.lock().unwrap().insert(prompt.into(), vec![call(file, "run_command",
-            &json!({"command":format!("touch {file}"),"summary":prompt,"state_effect":"mutation"}))]);
+            &json!({"command":format!("{NEW_FILE_COMMAND} {file}"),"summary":prompt,"state_effect":"mutation"}))]);
     }
     let turn = paused(&s, &chat, "Create an initial file.").await?;
     approve(&s, &chat, "allow", Some("always")).await?;
