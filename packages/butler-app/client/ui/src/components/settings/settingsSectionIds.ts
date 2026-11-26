@@ -1,24 +1,26 @@
 import type { SettingsSectionId } from "../../app/types.ts";
 
-// Everyday pages first; agent-level pages (the Advanced group) last.
+// Follows the settings navigation order.
 const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
   "general",
-  "appearance",
   "personalization",
-  "memory",
+  "appearance",
   "models",
-  "connections",
-  "updates",
+  "memory",
+  "archives",
   "usage",
+  "devices",
+  "computers",
   "browser",
   "security",
-  "system",
-  "archives",
-  "about",
   "mcp",
   "hooks",
   "skills",
+  "connections",
   "server",
+  "updates",
+  "system",
+  "about",
 ];
 
 export function visibleSettingsSectionIds(
@@ -26,12 +28,12 @@ export function visibleSettingsSectionIds(
   accountEnabled = false,
 ): SettingsSectionId[] {
   const sectionIds = [...BASE_SETTINGS_SECTION_IDS];
-  if (accountEnabled) sectionIds.splice(sectionIds.indexOf("personalization") + 1, 0, "account");
+  if (accountEnabled) sectionIds.splice(sectionIds.indexOf("general") + 1, 0, "account");
   if (!developerModeEnabled) return sectionIds;
-  const afterUsage = sectionIds.indexOf("usage") + 1;
+  const afterSystem = sectionIds.indexOf("system") + 1;
   return [
-    ...sectionIds.slice(0, afterUsage),
+    ...sectionIds.slice(0, afterSystem),
     "logs",
-    ...sectionIds.slice(afterUsage),
+    ...sectionIds.slice(afterSystem),
   ];
 }

@@ -35,9 +35,9 @@ export function securityPairingSection({ disabled, addresses, pairing, tunnel }:
           {pairing.invalidated && <Typo.Caption tone="secondary">{copy.invalidated}</Typo.Caption>}
           {pairing.paired && <Typo.Caption tone="success" role="status">{copy.paired}</Typo.Caption>}
           {!digits && (
-            <Tooltip label={unavailable ? copy.working : copy.pairDevice}>
+            <Tooltip label={unavailable ? copy.working : copy.createCode}>
               <Button size="sm" variant="outline" disabled={unavailable} onClick={() => void pairing.issue()}>
-                {copy.pairDevice}
+                {copy.createCode}
               </Button>
             </Tooltip>
           )}

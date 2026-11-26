@@ -26,7 +26,7 @@ const lastCall = (method: string, path: string) => fake.calls.findLast((call) =>
 
 async function openSettings(page: Page) {
   await button(page, appCopy.sidebar.settings).click();
-  await button(page, appCopy.settings.sections.security).click();
+  await button(page, appCopy.settings.sections.computers).click();
 }
 
 async function assertVisible(scope: Page | Locator, text: string) {
@@ -216,9 +216,12 @@ try {
   await page.goto(server.url);
   await openSettings(page);
 
+  await button(page, appCopy.settings.sections.devices).click();
+  assert.equal(await page.getByRole("switch", { name: appCopy.settings.security.remoteAccess, exact: true }).getAttribute("aria-checked"), "false");
+  await button(page, appCopy.settings.sections.computers).click();
+
   // A1 and required fields.
   await assertVisible(section(page), copy.empty);
-  assert.equal(await page.getByRole("switch", { name: appCopy.settings.security.remoteAccess, exact: true }).getAttribute("aria-checked"), "false");
   assert(await button(section(page), copy.add).isVisible());
   await button(section(page), copy.add).click();
   const dialog = addDialog(page);

@@ -63,7 +63,7 @@ async function verify(language: "ko" | "en", ip: string) {
     await page.goto(server.url);
     const copy = getAppCopy(language === "ko" ? "ko-KR" : "en-US");
     await page.getByRole("button", { name: copy.sidebar.settings, exact: true }).click();
-    await page.getByRole("button", { name: copy.settings.sections.security, exact: true }).click();
+    await page.getByRole("button", { name: copy.settings.sections.devices, exact: true }).click();
     const toggle = page.getByRole("switch", { name: copy.settings.security.remoteAccess, exact: true });
     await toggle.click();
     const field = page.locator('[data-setting-id="lan-urls"]');

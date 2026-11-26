@@ -26,6 +26,8 @@ export type SettingsSectionId =
   | "account"
   | "memory"
   | "browser"
+  | "devices"
+  | "computers"
   | "security"
   | "system"
   | "archives"

@@ -45,9 +45,11 @@ export interface SettingsSectionDescriptor {
 }
 
 export type SettingsSectionGroupId =
-  | "general"
-  | "app-and-system"
-  | "advanced";
+  | "personal"
+  | "butler"
+  | "devices-security"
+  | "extensions"
+  | "app";
 
 export interface SettingsSectionGroupDescriptor {
   id: SettingsSectionGroupId;

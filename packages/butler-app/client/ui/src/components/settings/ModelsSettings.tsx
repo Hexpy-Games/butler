@@ -16,6 +16,9 @@ import { deleteRegisteredModel } from "./modelManagementApi";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerMaxSimultaneousField, WorkerProfileAddButton } from "./WorkerProfileControls";
 import { WorkerProfileEditor } from "./WorkerProfileEditor";
+import { modelCredentialSections } from "./ModelCredentialSections";
+import { useSavedKeys } from "./hooks/useSavedKeys";
+import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useWorkerProfiles } from "./hooks/useWorkerProfiles";
 
 /**
@@ -53,6 +56,8 @@ function ChatModelManagementPage() {
 /** Main model controls and the existing Advanced disclosure. */
 function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: boolean; onToggleAdvanced: () => void }) {
   const workers = useWorkerProfiles();
+  const savedKeys = useSavedKeys();
+  const accounts = useConnectedAccounts();
   const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
   return (
@@ -66,6 +71,7 @@ function ModelsRootPage({ advancedOpen, onToggleAdvanced }: { advancedOpen: bool
       <SettingsSection id="image-models" kind="form" title={sections.imageModels}>
         <ImageModelsSettings />
       </SettingsSection>
+      {modelCredentialSections({ savedKeys, accounts })}
       <SettingsSection id="advanced-models" kind="form" title={settingsCopy.modelsAdvanced.title}>
         <DisclosureRow
           data-test-class="settings-models-advanced"

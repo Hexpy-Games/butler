@@ -69,7 +69,8 @@ try {
   });
   await page.goto(server.url);
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
-  await page.getByRole("button", { name: appCopy.settings.sections.connections, exact: true }).click();
+  await page.getByRole("navigation", { name: appCopy.settings.groups.extensions, exact: true })
+    .getByRole("button", { name: appCopy.settings.sections.connections, exact: true }).click();
   await section(page, "mail").getByText(copy.empty, { exact: true }).waitFor();
   await section(page, "connector-rules").getByText(copy.noRules, { exact: true }).waitFor();
   await verifyLayouts(page);

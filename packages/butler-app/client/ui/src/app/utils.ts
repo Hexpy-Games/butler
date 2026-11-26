@@ -1860,11 +1860,15 @@ export function appThemeClasses(
 export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {
   const section = String(value ?? "general").toLocaleLowerCase("en-US");
   if (section === "account") return "account";
+  if (section === "devices") return "devices";
+  if (section === "computers") return "computers";
   if (section === "memory") return "memory";
   if (section === "updates") return "updates";
   if (section === "connections") return "connections";
   if (section.includes("default-permission") || section.includes("access-mode") || section.includes("기본 권한")) return "general";
   if (["browser", "브라우저", "sign-in", "signin", "signins", "로그인", "browser-import"].some(value => section.includes(value))) return "browser";
+  if (["remote", "원격", "pairing", "pair-device", "기기 연결", "휴대폰", "phone"].some(value => section.includes(value))) return "devices";
+  if (["ssh", "computer", "컴퓨터", "environment", "실행 환경"].some(value => section.includes(value))) return "computers";
   if (section.includes("security") || section.includes("보안") || section.includes("개인정보") || section.includes("진단") || section.includes("권한") || section.includes("access")) return "security";
   if (
     section === "logs" ||

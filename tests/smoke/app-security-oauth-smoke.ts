@@ -31,7 +31,7 @@ async function run(revokeStatus: number) {
     }));
     await page.goto(server.url);
     await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
-    await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
+    await page.getByRole("button", { name: appCopy.settings.sections.models, exact: true }).click();
     await section(page).getByText(oauthAccountName, { exact: true }).waitFor();
     await section(page).getByText(copy.kind.sign_in, { exact: true }).waitFor();
     const obtained = await page.evaluate(locale => new Intl.DateTimeFormat(locale, { dateStyle: "short" })

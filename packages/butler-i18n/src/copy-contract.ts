@@ -1578,9 +1578,13 @@ export interface AppCopy {
     searchPlaceholder: string;
     searchEmpty: (query: string) => string;
     groups: {
+      personal: string;
+      butler: string;
+      devicesAndSecurity: string;
+      extensions: string;
+      app: string;
       preferences: string;
       appAndSystem: string;
-      advanced: string;
     };
     sections: {
       general: string;
@@ -1599,9 +1603,12 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
+      archive: string;
       about: string;
     };
     sectionDescriptions: {
@@ -1621,6 +1628,8 @@ export interface AppCopy {
       privacy: string;
       connections: string;
       browser: string;
+      devices: string;
+      computers: string;
       security: string;
       system: string;
       archives: string;
@@ -1643,6 +1652,8 @@ export interface AppCopy {
       privacy: string[];
       connections: string[];
       browser: string[];
+      devices: string[];
+      computers: string[];
       security: string[];
       system: string[];
       archives: string[];
@@ -2088,6 +2099,7 @@ export interface AppCopy {
       copied: string;
       code: string;
       pairDevice: string;
+      createCode: string;
       pairingQr: string;
       scanWithPhone: string;
       expiresIn: (seconds: number) => string;
