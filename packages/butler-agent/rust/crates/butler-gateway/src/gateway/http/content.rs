@@ -10,7 +10,7 @@ use axum::{
     Router,
     body::Body,
     extract::State,
-    http::{HeaderMap, Method, Request, StatusCode, header},
+    http::{Method, Request, StatusCode, header},
     response::Response,
     routing::any,
 };
@@ -25,10 +25,12 @@ use tokio_util::sync::CancellationToken;
 
 pub(super) const OUTPUT_CHUNK: u64 = 3 * 1024 * 1024;
 
+pub(super) fn router(state: Arc<HttpState>) -> Router {
+    Router::new().fallback(any(dispatch)).with_state(state)
+}
+
 pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: CancellationToken) {
-    let router = Router::new()
-        .fallback(any(dispatch))
-        .with_state(state.clone());
+    let router = router(state.clone());
     drop(tokio::spawn(async move {
         let _ = axum::serve(
             listener,
@@ -86,7 +88,12 @@ fn content_host(state: &HttpState, value: &str) -> bool {
                 })))
 }
 async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -> Response {
-    let result = if !content_host(&state, host(request.headers()).unwrap_or("")) {
+    let result = if request
+        .extensions()
+        .get::<super::listeners::TunnelPeer>()
+        .is_none()
+        && !content_host(&state, host(request.headers()).unwrap_or(""))
+    {
         Err(refused())
     } else if request.uri().path().starts_with("/__o/") {
         serve(&state, request).await
@@ -108,7 +115,12 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
 }
 async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, HttpError> {
     let (parts, _) = request.into_parts();
-    if !content_host(state, host(&parts.headers)?) {
+    if parts
+        .extensions
+        .get::<super::listeners::TunnelPeer>()
+        .is_none()
+        && !content_host(state, host(&parts.headers)?)
+    {
         return Err(refused());
     }
     if parts.method != Method::GET {
@@ -303,7 +315,7 @@ pub(super) async fn view(
         .ok_or_else(refused)?;
     signed_view(
         &state,
-        request.headers(),
+        &request,
         &output.output_id,
         rev.revision,
         &rev.entry,
@@ -313,26 +325,32 @@ pub(super) async fn view(
 
 pub(super) fn signed_view(
     state: &HttpState,
-    headers: &HeaderMap,
+    request: &Request<Body>,
     id: &str,
     revision: u64,
     entry: &str,
     revisions: Vec<u64>,
 ) -> Result<Response, HttpError> {
     let port = port(state).ok_or_else(refused)?;
-    let origin = view_origin(state, headers, port)?;
+    let origin = view_origin(state, request, port)?;
     let token = state.security.token().ok_or_else(refused)?;
     let cap = capability::sign(&token, port, id, revision, now());
-    let mut url = url::Url::parse(&format!("{origin}/__o/{cap}/")).map_err(|_| refused())?;
+    let base = origin.as_deref().unwrap_or("http://tunnel.invalid");
+    let mut url = url::Url::parse(&format!("{base}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
         .map_err(|()| refused())?
         .pop_if_empty()
         .extend(entry.split('/'));
+    let url = if origin.is_some() {
+        url.as_str()
+    } else {
+        &url[url::Position::BeforePath..]
+    };
     super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {
             protocol_version: crate::gateway::protocol::APP_PROTOCOL_VERSION,
-            data: serde_json::json!({"url":url.to_string(),"revision":revision,"revisions":serde_json::Value::from(revisions)}),
+            data: serde_json::json!({"url":url,"revision":revision,"revisions":serde_json::Value::from(revisions)}),
         },
     )
 }
@@ -356,7 +374,19 @@ pub(super) fn admit_ui_frames(state: &HttpState, response: &mut Response) {
     }
 }
 
-fn view_origin(state: &HttpState, headers: &HeaderMap, port: u16) -> Result<String, HttpError> {
+fn view_origin(
+    state: &HttpState,
+    request: &Request<Body>,
+    port: u16,
+) -> Result<Option<String>, HttpError> {
+    if request
+        .extensions()
+        .get::<super::listeners::TunnelPeer>()
+        .is_some()
+    {
+        return Ok(None);
+    }
+    let headers = request.headers();
     let authority = host(headers)?
         .parse::<axum::http::uri::Authority>()
         .map_err(|_| refused())?;
@@ -386,7 +416,7 @@ fn view_origin(state: &HttpState, headers: &HeaderMap, port: u16) -> Result<Stri
         }
         format!("https://{content}")
     };
-    Ok(origin)
+    Ok(Some(origin))
 }
 
 /// Host checks always use the loopback content origin, never a caller URL.

@@ -257,6 +257,7 @@ impl AppServiceConfiguration {
             remote_access_enabled: self.gateway.remote_access_enabled,
             admin_credential: self.gateway.admin_credential.clone(),
             security_store: self.gateway.security_store.clone(),
+            tunnel: self.gateway.tunnel.clone(),
             signed_url_ttl: self.gateway.signed_url_ttl,
             message_rate_limit_max: self.gateway.message_rate_limit_max,
             message_rate_limit_window: self.gateway.message_rate_limit_window,
@@ -373,6 +374,7 @@ fn gateway_config(
         remote_access_enabled: settings.remote_access_enabled,
         admin_credential,
         security_store: None,
+        tunnel: None,
         signed_url_ttl: signed_url_ttl(),
         message_rate_limit_max: if max.is_finite() && max > 0.0 {
             butler_core::json::saturating_u64(max.ceil())

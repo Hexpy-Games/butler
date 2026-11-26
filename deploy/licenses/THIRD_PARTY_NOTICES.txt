@@ -3618,6 +3618,13 @@ License: https://github.com/xacrimon/dashmap/blob/749ed1f965115e9e1920d2fc7ae65f
 Copyright (c) 2019 Acrimon
 
 =====
+data-encoding 2.11.1
+MIT
+License: https://github.com/ia0/data-encoding/blob/834737d9c3dc957ce1b653959e3f35061dd77ade/lib/LICENSE
+Copyright (c) 2015-2020 Julien Cretin
+Copyright (c) 2017-2020 Google Inc.
+
+=====
 data-url 0.3.2
 MIT OR Apache-2.0
 License: https://github.com/servo/rust-url/blob/91377f48bf35011d042aa5abef9e7f2a0a625aaa/data-url/LICENSE-APACHE
@@ -6882,6 +6889,13 @@ Copyright 2019- Jake Goulding
 Copyright (c) 2019- Jake Goulding
 
 =====
+snow 0.9.6
+Apache-2.0 OR MIT
+License: https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-APACHE
+License: https://github.com/mcginty/snow/blob/a4be73faa042c5967f39662aa66919f774831a9a/LICENSE-MIT
+Copyright (c) 2021 Jake McGinty
+
+=====
 socket2 0.6.5
 MIT OR Apache-2.0
 License: https://github.com/rust-lang/socket2/blob/239dd83a4ced08e514d2c38942aab99791119f0d/LICENSE-APACHE
@@ -7251,6 +7265,13 @@ License: https://github.com/tokio-rs/tokio/blob/bc0933ccffb62e010d3ccb497abc22ce
 Copyright (c) Tokio Contributors
 
 =====
+tokio-tungstenite 0.29.0
+MIT
+License: https://github.com/snapview/tokio-tungstenite/blob/7930ff2f825a69cad44b928b19b6fb81bffc3f7a/LICENSE
+Copyright (c) 2017 Daniel Abramov
+Copyright (c) 2017 Alexey Galakhov
+
+=====
 tokio-util 0.7.19
 MIT
 License: https://github.com/tokio-rs/tokio/blob/f2189d3bd69d22638158a0ca8163b2e8daf18c5f/tokio-util/LICENSE
@@ -7358,6 +7379,14 @@ MIT
 License: https://github.com/seanmonstar/try-lock/blob/fd160ecd9105e8afcc43dbea450a0ef6e5128cce/LICENSE
 Copyright (c) 2018-2023 Sean McArthur
 Copyright (c) 2016 Alex Crichton
+
+=====
+tungstenite 0.29.0
+MIT OR Apache-2.0
+License: https://github.com/snapview/tungstenite-rs/blob/c2921718b76f0ed8c69a895397ed981e4a321f6f/LICENSE-APACHE
+License: https://github.com/snapview/tungstenite-rs/blob/c2921718b76f0ed8c69a895397ed981e4a321f6f/LICENSE-MIT
+Copyright (c) 2017 Alexey Galakhov
+Copyright (c) 2016 Jason Housley
 
 =====
 twox-hash 2.1.4

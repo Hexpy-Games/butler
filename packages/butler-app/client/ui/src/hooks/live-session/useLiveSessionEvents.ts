@@ -96,6 +96,10 @@ export function useLiveSessionEvents(): void {
       if (event.type === "browser.payment_confirmation_skipped" && isRecentEvent(event)) {
         notifyStatus(appCopy.interfaceDetails.paymentSkipped(String(event.payload?.site ?? ""), String(event.payload?.amount ?? "")), { id: `payment-skipped-${event.id}`, tone: "ok" });
       }
+      if (event.type === "security.device_paired" && isRecentEvent(event)) {
+        const payload = event.payload as Record<string, unknown> | undefined;
+        notifyStatus(appCopy.interfaceDetails.devicePaired(String(payload?.name ?? "")), { id: `device-paired-${event.id}` });
+      }
       if (["hook.blocked", "hook.failed"].includes(event.type) && isRecentEvent(event)) notifyHookBlocked(event);
       receiveUpdateProgress(event);
       publishMemoryEvent(event);

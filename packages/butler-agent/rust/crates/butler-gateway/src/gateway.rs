@@ -20,6 +20,11 @@ mod crypto;
 mod devices;
 mod event_kinds;
 mod http;
+mod tunnel;
+pub use http::new_tunnel_key;
+#[cfg(feature = "test-support")]
+pub use http::{FixtureOutput, FixtureResponder};
+pub use tunnel::{GatewayTunnelPort, TunnelAccount};
 mod idle_probe;
 mod image_files;
 mod live;

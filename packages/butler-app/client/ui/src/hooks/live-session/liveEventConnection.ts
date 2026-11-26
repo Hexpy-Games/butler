@@ -3,7 +3,7 @@ import type { TimelineEvent } from "@/app/types.ts";
 import { LIVE_EVENT_STABLE_CONNECTION_MS, liveEventReconnectDelayMs } from "./liveEventReconnect.ts";
 
 const OPEN_DEADLINE_MS = 30_000;
-const HEARTBEAT_DEADLINE_MS = 45_000; // Server sends a heartbeat every 15s.
+const HEARTBEAT_DEADLINE_MS = 45_000; // Server sends a heartbeat every 30s.
 
 /** One owner for transport lifetime; replaced subscriptions have no authority. */
 export function createLiveEventConnection(options: {

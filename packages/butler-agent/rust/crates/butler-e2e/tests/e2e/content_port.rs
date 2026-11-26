@@ -78,7 +78,7 @@ async fn occupy(s: &mut Scenario) -> Result<Foreign, HarnessError> {
     s.gw = s.agent.start_again().await?;
     Ok(foreign)
 }
-async fn publish(s: &Scenario) -> Result<String, HarnessError> {
+pub(super) async fn publish(s: &Scenario) -> Result<String, HarnessError> {
     s.turn("general", "Publish").await?;
     use sha2::{Digest, Sha256};
     Ok(format!(

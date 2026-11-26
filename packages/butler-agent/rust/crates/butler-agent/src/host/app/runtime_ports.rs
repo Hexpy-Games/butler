@@ -19,7 +19,7 @@ mod session_topic;
 mod session_workspaces;
 mod settings;
 mod settings_mutation;
-mod setup;
+pub(super) mod setup;
 mod topic_branch;
 pub(crate) use session_title::AppSessionTitleGeneratorAdapter;
 pub(crate) use session_topic::AppSessionTopicClassifierAdapter;

@@ -31,6 +31,7 @@ const SECURITY_ROUTES = Object.freeze({
   listOauthCredentials: { method: "GET", path: "/security/oauth" },
   removeOauthCredential: { method: "DELETE", path: "/security/oauth", credential: true },
   getSecurity: { method: "GET", path: "/security" },
+  setTunnel: { method: "PUT", path: "/security/tunnel", payload: true },
   issuePairingCode: { method: "POST", path: "/security/pairing" },
   getPairingStatus: { method: "GET", path: "/security/pairing" },
   listPairedDevices: { method: "GET", path: "/security/devices" },

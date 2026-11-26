@@ -26,6 +26,7 @@ pub(in crate::gateway::http) async fn connect_request(
     let secure = super::client_place::is_proxied_https(peer, request.headers(), origin);
     let ip = peer.map(|peer| peer.ip().to_string()).unwrap_or_default();
     let replaced = state.devices.presented(request.headers());
+    let key = super::pairing_limit::client_key(&request);
     let encoded = if form {
         read_body_with_limit(request.into_body(), MAX_FORM_BYTES)
             .await?
@@ -47,9 +48,18 @@ pub(in crate::gateway::http) async fn connect_request(
         None => return Ok(ConnectPage::Ask.response()),
     };
     let _change = state.remote.changes.lock().await;
-    let keyed = state.security.sessions().ok_or_else(invalid_code)?;
-    let sessions = keyed.sessions.as_ref().ok_or_else(invalid_code)?;
-    let paired = sessions.redeem(&code, form, &ip).ok_or_else(invalid_code)?;
+    state.pairing.check(&key)?;
+    let keyed = state
+        .security
+        .sessions()
+        .ok_or_else(|| rejected(state, &key))?;
+    let sessions = keyed
+        .sessions
+        .as_ref()
+        .ok_or_else(|| rejected(state, &key))?;
+    let paired = sessions
+        .redeem(&code, form, &ip)
+        .ok_or_else(|| rejected(state, &key))?;
     let name = if paired.is_some() {
         "Remote device · browser"
     } else {
@@ -84,4 +94,9 @@ pub(in crate::gateway::http) async fn connect_request(
 
 pub(super) fn invalid_code() -> HttpError {
     HttpError::public(401, "invalid_connection_code", "That code is not valid.")
+}
+
+pub(super) fn rejected(state: &HttpState, key: &str) -> HttpError {
+    state.pairing.reject(key);
+    invalid_code()
 }

@@ -50,4 +50,12 @@ impl FixedWindowRateLimiter {
             }
         }
     }
+
+    /// Time until `key`'s window resets, when that window is full.
+    pub(super) fn retry_after(&self, key: &str) -> Option<Duration> {
+        let buckets = self.buckets.lock();
+        let now = Instant::now();
+        let bucket = buckets.get(key)?;
+        (bucket.reset_at > now && bucket.count >= self.max).then(|| bucket.reset_at - now)
+    }
 }

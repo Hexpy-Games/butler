@@ -1,7 +1,9 @@
+import type { ButlerAccountStatus } from "@/app/butlerAccount";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import type { SecurityView } from "@/app/types.ts";
 import { CopyButton, SettingsField, Stack, Typo } from "@/butler-ds";
+import { SecurityTunnelField } from "./SecurityTunnelField";
 import { SettingsSwitch } from "./SettingsSwitch";
 
 /** The LAN toggle and addresses other devices open, including tunnel hosts. */
@@ -9,9 +11,15 @@ export function SecurityRemoteAccessFields({
   view,
   disabled,
   onChange,
+  account,
+  justEnabled,
+  onTunnelChange,
 }: {
   view: SecurityView;
   disabled: boolean;
+  account: ButlerAccountStatus | null;
+  justEnabled: boolean;
+  onTunnelChange: (enabled: boolean) => void;
   onChange: (enabled: boolean) => void;
 }) {
   const copy = appCopy.settings.security;
@@ -52,6 +60,15 @@ export function SecurityRemoteAccessFields({
           ) : bindError ? null : (
             <Typo.Caption tone="secondary">{copy.noAddresses}</Typo.Caption>
           )}
+        />
+      )}
+      {view.tunnel && (
+        <SecurityTunnelField
+          tunnel={view.tunnel}
+          account={account}
+          justEnabled={justEnabled}
+          disabled={disabled}
+          onChange={onTunnelChange}
         />
       )}
     </>

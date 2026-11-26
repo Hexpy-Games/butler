@@ -977,6 +977,7 @@ export const koKrCopy: AppCopy = {
     allowPaymentSite: "이 사이트 결제는 항상 허용",
     allowSiteDescription: "모든 대화에서 사용을 켭니다. · 설정 › 브라우저에서 끌 수 있습니다.",
     paymentSkipped: (site, amount) => ["결제 확인 생략", site, amount].filter(Boolean).join(" · "),
+    devicePaired: (name) => ["새 기기 연결됨", name].filter(Boolean).join(" · "),
     allowScope: "허용 범위 선택",
     allowAlways: "항상 허용",
     allowAlwaysDescription: "모든 대화와 예약 작업에 적용합니다. 설정 → 보안에서 취소할 수 있습니다.",
@@ -2446,6 +2447,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     security: {
       remoteAccess: "다른 컴퓨터에서 접속 허용",
       remoteAccessDescription: "같은 네트워크의 기기에서 연결 코드를 입력해 접속합니다.",
+      tunnel: "어디서나 연결",
+      tunnelDescription: "버틀러 계정으로 어디서나 휴대폰과 연결합니다.",
+      tunnelConnected: "연결됨",
+      tunnelQrNote: "휴대폰은 QR로 다시 연결해야 합니다.",
       addresses: "접속 주소",
       noAddresses: "네트워크 주소 없음",
       bindErrors: {
