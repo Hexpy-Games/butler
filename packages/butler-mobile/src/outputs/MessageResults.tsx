@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import type { ConversationMessage } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import type { Pairing } from "@/connection/pairings";
+import { fileSource, type Access } from "@/connection/access";
 import { useConversation } from "@/conversation/live";
 import { frameFit, imageAspect } from "@/conversation/imageOutputs";
 import { WorkResultRow } from "@/conversation/WorkResultRow";
@@ -11,14 +11,13 @@ import { TILE_RADIUS } from "@/ds/AttachmentTiles";
 import { AnimatedPressable, usePress } from "@/ds/internal/press";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { artifactTarget, messageResults, type ResultTarget } from "./results";
-import { fileSource } from "./fileAccess";
 import { openResult } from "./openResult";
 import { ResultRow } from "./ResultRow";
 
 export function MessageResults({ message }: { message: ConversationMessage }) {
-  const { pairing } = useConversation();
+  const { access } = useConversation();
   const t = useTokens();
-  if (!pairing) return null;
+  if (!access) return null;
   const results = messageResults(message);
   const work = (message.initiated?.kind === "work_result" || message.initiated?.kind === "work_failed") && message.initiated.work_session_id ? message.initiated : undefined;
   if (!results.length && !work) return null;
@@ -29,7 +28,7 @@ export function MessageResults({ message }: { message: ConversationMessage }) {
       {images.map(a => {
         const file = message.attachments?.find(f => f.file_id === a.file_id);
         return <ImageTile key={a.id} target={artifactTarget(a) as Extract<ResultTarget, { kind: "image" }>}
-          pairing={pairing} width={file?.width ?? 0} height={file?.height ?? 0} />;
+          access={access} width={file?.width ?? 0} height={file?.height ?? 0} />;
       })}
     </View> : null}
     {files.length || work ? <ListGroup>
@@ -39,10 +38,10 @@ export function MessageResults({ message }: { message: ConversationMessage }) {
   </>;
 }
 
-function ImageTile({ target, pairing, width, height }: { target: Extract<ResultTarget, { kind: "image" }>; pairing: Pairing; width: number; height: number }) {
+function ImageTile({ target, access, width, height }: { target: Extract<ResultTarget, { kind: "image" }>; access: Access; width: number; height: number }) {
   const app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const t = useTokens(), press = usePress({ scale: true });
-  const source = fileSource(pairing, target.path);
+  const source = fileSource(access, target.path);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {
     let closed = false;
@@ -54,7 +53,7 @@ function ImageTile({ target, pairing, width, height }: { target: Extract<ResultT
   }, [source.uri]);
   const dimensions = width && height ? { width, height } : size ?? { width, height };
   return <AnimatedPressable accessibilityRole="button" accessibilityLabel={app.conversation.imageViewer.viewImage(target.title)} {...press.handlers}
-    onPress={() => openResult(target, pairing, M.outputs.loadFailed, app)} style={[press.scaleStyle, { opacity: press.opacity, borderRadius: TILE_RADIUS,
+    onPress={() => openResult(target, access, M.outputs.loadFailed, app)} style={[press.scaleStyle, { opacity: press.opacity, borderRadius: TILE_RADIUS,
       boxShadow: press.focused ? t.shadow("--focus-ring") : undefined }]}>
     <ImageFrame source={source} aspect={imageAspect(dimensions.width, dimensions.height)} fit={frameFit(dimensions.width, dimensions.height)} />
   </AnimatedPressable>;

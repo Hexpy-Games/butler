@@ -6,7 +6,7 @@ import { Badge, ButlerMark, icons, ListGroup, ListRow, Spinner, Text, UnreadDot,
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { sessionMark } from "@/conversation/sessions";
 
-export function HomeShortcuts({ lost, general }: { lost: boolean; general?: SessionSummary }) {
+export function HomeShortcuts({ status, general }: { status?: string; general?: SessionSummary }) {
   const t = useTokens(), app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const mark = general ? sessionMark(general) : null;
   const title = app.space.general;
@@ -22,6 +22,6 @@ export function HomeShortcuts({ lost, general }: { lost: boolean; general?: Sess
           : mark === "unread" ? <UnreadDot label={M.conversations.unread} /> : undefined}
         navigates onPress={() => router.push({ pathname: "/chat/[id]", params: { id: general.id, title } })} />
     </ListGroup> : null}
-    {lost ? <Text variant="caption" tone="tertiary">{M.conversations.reconnecting}</Text> : null}
+    {status ? <Text variant="caption" tone="tertiary">{status}</Text> : null}
   </View>;
 }

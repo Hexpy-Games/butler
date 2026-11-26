@@ -463,7 +463,7 @@ export interface MobileCopy {
     rescan: string; connecting: string;
     addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
-    notButler: string; unreachable: string; failed: string };
+    notButler: string; unreachable: string; failed: string; desktopOffline: string; relayOff: string };
   localNetwork: { title: string; body: string; retry: string; cancel: string };
   conversations: {
     title: string;

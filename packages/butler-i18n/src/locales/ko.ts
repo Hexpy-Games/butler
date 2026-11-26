@@ -549,6 +549,8 @@ export const koKrCopy: AppCopy = {
       notButler: "이 주소에는 버틀러가 없습니다.",
       unreachable: "버틀러에 연결할 수 없습니다. 주소와 네트워크를 확인하십시오.",
       failed: "연결하지 못했습니다. 다시 시도하십시오.",
+      desktopOffline: "컴퓨터가 꺼져 있습니다",
+      relayOff: "컴퓨터에 연결할 수 없습니다. 컴퓨터의 설정 → 휴대폰 및 기기를 확인하십시오.",
     },
     localNetwork: {
       title: "로컬 네트워크 허용",
@@ -566,7 +568,7 @@ export const koKrCopy: AppCopy = {
       needsAttention: "확인 필요",
       working: "작업 중",
       unread: "읽지 않음",
-      reconnecting: "다시 연결하는 중…",
+      reconnecting: "연결 중…",
       untitled: "새 대화",
       loadFailed: "대화 목록을 불러오지 못했습니다.",
     },

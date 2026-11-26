@@ -1,0 +1,1 @@
+{ "platforms": ["apple", "android"], "apple": { "modules": ["ButlerProxyModule"] }, "android": { "modules": ["games.hexpy.butler.proxy.ButlerProxyModule"] } }

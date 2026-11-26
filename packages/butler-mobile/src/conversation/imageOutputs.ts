@@ -1,3 +1,4 @@
+import { fileSource, type Access } from "@/connection/access";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { readOutputPage } from "./operationOutput.ts";
 
@@ -46,10 +47,9 @@ export async function readImageAssets(
     client.request<ImageAsset>(`/message-assets/${encodeURIComponent(image.image)}/meta`, { signal })));
 }
 
-export function assetImage(asset: ImageAsset, pairing: { origin: string; deviceToken: string }, width?: number): { uri: string; headers: Record<string, string> } {
-  const url = new URL(asset.image_url, pairing.origin);
-  if (width !== undefined) url.searchParams.set("w", String(Math.max(1, Math.min(1280, Math.ceil(width)))));
-  return { uri: url.href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } };
+export function assetImage(asset: ImageAsset, access: Access, width?: number): { uri: string; headers: Record<string, string> } {
+  const w = width === undefined ? "" : `${asset.image_url.includes("?") ? "&" : "?"}w=${Math.max(1, Math.min(1280, Math.ceil(width)))}`;
+  return fileSource(access, asset.image_url + w);
 }
 
 export const MIN_ZOOM = 1;

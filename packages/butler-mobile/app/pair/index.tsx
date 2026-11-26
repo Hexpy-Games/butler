@@ -7,9 +7,9 @@ import { useMobileCopy } from "@/i18n";
 export default function PairChoice() {
   const copy = useMobileCopy();
   const t = useTokens();
-  const { v, a, c } = useLocalSearchParams<PairLinkParams>();
-  if (parsePairLink({ v, a, c })) {
-    const params = Object.fromEntries(Object.entries({ v, a, c }).filter(([, value]) => value !== undefined));
+  const { v, a, c, k, t: tunnelId, u } = useLocalSearchParams<PairLinkParams>();
+  if (parsePairLink({ v, a, c, k, t: tunnelId, u })) {
+    const params = Object.fromEntries(Object.entries({ v, a, c, k, t: tunnelId, u }).filter(([, value]) => value !== undefined));
     return <Redirect href={{ pathname: "/pair/manual", params }} />;
   }
   return (

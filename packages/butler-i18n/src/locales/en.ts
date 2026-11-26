@@ -551,6 +551,8 @@ export const enUsCopy: AppCopy = {
       notButler: "No Butler at this address.",
       unreachable: "Can't reach Butler. Check the address and network.",
       failed: "Couldn't connect. Try again.",
+      desktopOffline: "Your computer is off",
+      relayOff: "Can't reach your computer. Check Settings → Phone & devices on your computer.",
     },
     localNetwork: {
       title: "Allow local network",
@@ -568,7 +570,7 @@ export const enUsCopy: AppCopy = {
       needsAttention: "Needs you",
       working: "Working",
       unread: "Unread",
-      reconnecting: "Reconnecting…",
+      reconnecting: "Connecting…",
       untitled: "New conversation",
       loadFailed: "Could not load conversations.",
     },

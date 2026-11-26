@@ -6,9 +6,8 @@ import { router, useFocusEffect } from "expo-router";
 import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
-import { nativeFetch } from "@/connection/nativeFetch";
-import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
+import { lanAddresses } from "@/connection/route";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
@@ -23,14 +22,14 @@ import { useCanonSidebars } from "@/conversation/useCanonSidebars";
 import { spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
 import { sessionMark, sessionSubtitle, timeLabel } from "@/conversation/sessions";
 
-type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
+type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin?: string } | { kind: "problem"; origin?: string; problem: Problem };
 
 export default function Home() {
   const copy = useMobileCopy();
   const t = useTokens();
   const [status, setStatus] = useState<Status>({ kind: "checking" });
   const latest = useRef(0);
-  const { connect } = useConversation();
+  const { open } = useConversation();
   const check = useCallback(async () => {
     const id = ++latest.current;
     setStatus(previous => previous.kind === "ready" ? previous : { kind: "checking", origin: previous.origin });
@@ -40,7 +39,7 @@ export default function Home() {
       router.replace("/pair");
       return;
     }
-    const result = await probe(pairing.origin, pairing.deviceToken, nativeFetch);
+    const result = await open(pairing);
     if (result.kind === "problem" && result.problem === "needsPairing") {
       if (id !== latest.current) return;
       await pairingStore.clear(pairing.butlerId);
@@ -51,11 +50,11 @@ export default function Home() {
       return;
     }
     if (id !== latest.current) return;
-    if (result.kind === "ready") connect(pairing);
+    const origin = pairing.computerName ?? lanAddresses(pairing)[0];
     setStatus(result.kind === "ready"
-      ? { kind: "ready", origin: pairing.origin }
-      : { kind: "problem", origin: pairing.origin, problem: result.problem });
-  }, [copy, connect]);
+      ? { kind: "ready", origin }
+      : { kind: "problem", origin, problem: result.problem });
+  }, [copy, open]);
   useFocusEffect(useCallback(() => {
     void check();
     return () => { latest.current++; };
@@ -77,7 +76,8 @@ export default function Home() {
         </ScrollView>
         <ButtonGroup>
           {status.kind === "problem" ? <Button label={copy.home.retry} onPress={check} /> : null}
-          <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />
+          {status.kind === "problem" && status.problem === "desktopOffline" ? null
+            : <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />}
         </ButtonGroup>
       </View>
     </Surface>
@@ -93,7 +93,8 @@ function Conversations() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const edgeRef = useScrollEdgeEffectRef();
   const { view, error, retry, refresh } = useNavigationView();
-  const { lost } = useConversation();
+  const { lost, problem } = useConversation();
+  const status = lost ? (problem ? copy.problems[problem] : copy.conversations.reconnecting) : undefined;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -161,7 +162,7 @@ function Conversations() {
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={<HomeShortcuts lost={lost} general={tree.general} />}
+      ListHeaderComponent={<HomeShortcuts status={status} general={tree.general} />}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />

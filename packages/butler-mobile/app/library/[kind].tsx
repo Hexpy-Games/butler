@@ -18,7 +18,7 @@ const kindIcons = { scrap: icons.Scrap, document: icons.FileText, bookmark: icon
 export default function LibraryItems() {
   const { kind } = useLocalSearchParams<{ kind: LibraryKind }>();
   const locale = useAppLocale(), app = getAppCopy(locale), M = useMobileCopy(), t = useTokens();
-  const { pairing } = useConversation();
+  const { access } = useConversation();
   const insets = useSafeAreaInsets(), gutter = t.length("--adaptive-page-gutter");
   const [query, setQuery] = useState(""), [q, setQ] = useState("");
   const [selected, select] = useState<LibraryItem | null>(null);
@@ -34,7 +34,7 @@ export default function LibraryItems() {
           {items.map(item => {
             const target = libraryTarget(item);
             return <ListRow key={item.id} icon={kindIcons[kind]} title={item.title} description={libraryMeta(item, locale)} descriptionLines={1}
-              navigates={!!target} onPress={target ? () => openResult(target, pairing!, M.outputs.loadFailed, app) : undefined}
+              navigates={!!target} onPress={target ? () => openResult(target, access!, M.outputs.loadFailed, app) : undefined}
               onLongPress={() => select(item)} />;
           })}
           {!items.length ? <ListGroupItem><Text variant="caption">{q ? app.library.noMatches : app.library.noItems}</Text></ListGroupItem> : null}

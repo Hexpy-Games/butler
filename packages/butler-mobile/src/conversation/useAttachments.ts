@@ -16,18 +16,18 @@ type Attachment = {
 };
 
 export function useAttachments(sessionId: string | undefined) {
-  const { pairing, client } = useConversation();
+  const { pairing, client, route } = useConversation();
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const [items, setItems] = useState<Attachment[]>([]);
   const remove = (key: string) => setItems(previous => previous.filter(item => item.key !== key));
   const removeMany = (keys: string[]) => setItems(previous => previous.filter(item => !keys.includes(item.key)));
   const upload = async (file: { uri: string; name: string; mimeType: string; kind: "image" | "file"; size?: number }) => {
-    if (!pairing) return;
+    if (!pairing || !route) return;
     const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setItems(previous => [...previous, { key, ...file, status: "uploading" }]);
     try {
-      const uploaded = await uploadMessageFile({ origin: pairing.origin, token: pairing.deviceToken, sessionId, file });
+      const uploaded = await uploadMessageFile({ route, token: pairing.deviceToken, sessionId, file });
       setItems(previous => previous.map(item => item.key === key ? { ...item, status: "ready", file: uploaded } : item));
     } catch {
       setItems(previous => previous.map(item => item.key === key ? { ...item, status: "failed" } : item));
@@ -52,7 +52,7 @@ export function useAttachments(sessionId: string | undefined) {
     } catch { showToast({ message: copy.chat.uploadFailed, tone: "error" }); }
   };
   const addProjectDocument = async (document: ProjectDashboardDocument) => {
-    if (!client || !pairing) return;
+    if (!client || !pairing || !route) return;
     const sources = new Set(items.flatMap(item => item.reference ? [`${item.reference.source.kind}:${item.reference.source.id}`] : []));
     if (document.project_id && document.revision && sources.size >= 8 && !sources.has(`${document.document_type ?? document.kind}:${document.id}`)) {
       showToast({ message: appCopy.feedback.attachmentFailed, tone: "error" });
@@ -74,7 +74,7 @@ export function useAttachments(sessionId: string | undefined) {
         try {
           cached.write(complete.markdown);
           if (cached.size > ATTACHMENT_MAX_BYTES) throw new Error("Project source exceeds the attachment limit.");
-          const file = await uploadMessageFile({ origin: pairing.origin, token: pairing.deviceToken, sessionId,
+          const file = await uploadMessageFile({ route, token: pairing.deviceToken, sessionId,
             file: { uri: cached.uri, name, mimeType: "text/markdown" } });
           setItems(previous => previous.map(item => item.key === key ? { ...item, name, status: "ready", file } : item));
         } finally { if (cached.exists) cached.delete(); }
