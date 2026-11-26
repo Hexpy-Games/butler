@@ -28,6 +28,11 @@ async fn device(fake: &FakeButlerCloud, name: &str, email: &str) -> Result<Devic
     )?;
     let s = setup.start().await?;
     let app = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    sign_in(&app, email).await?;
+    Ok(Device { s, app })
+}
+
+async fn sign_in(app: &AdminClient, email: &str) -> Result<(), HarnessError> {
     for body in [
         json!({"action": "start", "email": email}),
         json!({"action": "verify", "email": email, "code": "123456"}),
@@ -37,7 +42,7 @@ async fn device(fake: &FakeButlerCloud, name: &str, email: &str) -> Result<Devic
             .await?;
         assert_eq!(reply.status, 200, "{}", reply.text);
     }
-    Ok(Device { s, app })
+    Ok(())
 }
 impl Device {
     async fn call(&self, method: Method, path: &str, body: Value, status: u16) -> Value {
@@ -162,6 +167,7 @@ async fn canon_online_01_two_devices_converge() -> Result<(), HarnessError> {
     concurrent_edits(&fake, &a, &b, (&ap, &bp), &epic).await;
     let e2 = delete_and_resync(&fake, &a, &b, (&ap, &bp), &epic).await;
     viewer_downgrade(&fake, &a, &b, (&ap, &bp), &e2).await;
+    sign_out_and_back(&a, &b, (&ap, &bp), &e2).await;
     a.s.finish().await?;
     b.s.finish().await
 }
@@ -301,6 +307,35 @@ async fn viewer_downgrade(
     a.online(demote).await;
     eventually("B is a viewer without writing", move || async move {
         b.link(bp).await["role"] == "viewer"
+    })
+    .await;
+}
+
+/// Step 10: B signs out: its link goes offline and A's edits stop arriving; signing in again catches up.
+async fn sign_out_and_back(a: &Device, b: &Device, (ap, bp): (&str, &str), e2: &str) {
+    a.idle(ap).await;
+    let reply = b
+        .app
+        .send(Method::DELETE, "/setup/butler-account", None, &[])
+        .await
+        .unwrap();
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    eventually("B is offline", move || async move {
+        b.link(bp).await["connection"] == "offline"
+    })
+    .await;
+    let before = field(b, e2, "title").await;
+    assert_eq!(a.edit(e2, json!({"title": "tS"})).await, 200);
+    a.idle(ap).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(
+        field(b, e2, "title").await,
+        before,
+        "B got an edit while signed out"
+    );
+    sign_in(&b.app, B).await.unwrap();
+    eventually("B is back with A's edit", move || async move {
+        b.link(bp).await["connection"] == "connected" && field(b, e2, "title").await == "tS"
     })
     .await;
 }

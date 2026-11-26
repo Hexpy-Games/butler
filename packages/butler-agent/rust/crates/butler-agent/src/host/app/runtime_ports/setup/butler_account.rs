@@ -36,14 +36,18 @@ pub(crate) struct StoredAccount {
     pub(super) device_id: String,
 }
 
+/// Verify and SignOut wake Canon online so workers re-read the account.
 pub(super) async fn handle_and_wake(
     account: &ButlerAccount,
     request: ButlerAccountRequest,
     online: Option<&CanonOnline>,
 ) -> Result<Value, GatewayApplicationError> {
-    let verify = matches!(request, ButlerAccountRequest::Verify { .. });
+    let wake = matches!(
+        request,
+        ButlerAccountRequest::Verify { .. } | ButlerAccountRequest::SignOut
+    );
     let result = account.handle(request).await;
-    if verify
+    if wake
         && result.is_ok()
         && let Some(online) = online
     {
