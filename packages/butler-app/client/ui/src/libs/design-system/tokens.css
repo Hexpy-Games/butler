@@ -198,7 +198,7 @@
   --motion-agent-edge: 14s;
   --motion-pointer-glide: 400ms;
   /* Badge sheen: one lap of the band, then a pause before the next (JS reads the pause via motionDuration). */
-  --motion-sheen-lap: calc(var(--motion-deliberate) * 4);
+  --motion-sheen-lap: 1280ms;
   --motion-sheen-pause: 8s;
   /* Sequences. Rows of a setup card arrive 30ms apart once the morphing card
      is 94% there (150ms on the emphasized curve); intro text lines 70ms
@@ -628,7 +628,7 @@
   --badge-height: 18px;
   --badge-padding-inline: var(--space-sm);
   --badge-font-size: calc(var(--typo-caption-size) - 1px);
-  --badge-letter-spacing: 0.06em;
+  --badge-letter-spacing: calc(var(--badge-font-size) * 0.06);
   --badge-bg: var(--blue-badge);
   --badge-fg: var(--neutral-white);
   /* Peak of the sheen band over the fill; the label paints above it. */
@@ -1488,10 +1488,6 @@
   --tag-label-purple-fg: var(--purple-09);
   --tag-label-purple-border: var(--purple-03);
   /* Badge: a filled plan pill, 18px inside the Tag sm slot so rows keep their height. */
-  --badge-height: 18px;
-  --badge-padding-inline: var(--space-sm);
-  --badge-font-size: calc(var(--typo-caption-size) - 1px);
-  --badge-letter-spacing: 0.06em;
   --badge-bg: var(--blue-badge);
   --badge-fg: var(--neutral-white);
   /* Peak of the sheen band over the fill; the label paints above it. */
