@@ -172,9 +172,9 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   await openSecurity(page);
   const toggle = tunnelRow(page).getByRole("switch");
   await toggle.waitFor();
-  const checked = await toggle.getAttribute("aria-checked");
+  const toggled = page.waitForRequest((r) => new URL(r.url()).pathname === "/security/tunnel", { timeout: 1000 }).then(() => true, () => false);
   await badgeIn(tunnelRow(page)).click();
-  assert.equal(await toggle.getAttribute("aria-checked"), checked);
+  assert.equal(await toggled, false);
   await page.unroute("**/setup/butler-account");
   await page.reload();
   await openAccount(page);
