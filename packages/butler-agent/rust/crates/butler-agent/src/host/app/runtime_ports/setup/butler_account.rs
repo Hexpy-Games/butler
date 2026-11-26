@@ -12,9 +12,9 @@ use butler_turn::btcc::BtccError;
 use reqwest::{Method, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::watch;
 
 use crate::host::build_info::dev_build;
-use crate::host::canon_online::CanonOnline;
 
 pub(crate) const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
 const DEV_API_URL: &str = "https://butler-cloud-api-dev.hexpy-dev.workers.dev";
@@ -25,6 +25,8 @@ pub(crate) struct ButlerAccount {
     pub(super) data: PathBuf,
     pub(super) uploads: Client,
     file: PathBuf,
+    /// Bumped when the account file is written or removed; Canon online waits on it.
+    changes: watch::Sender<u64>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -34,26 +36,6 @@ pub(crate) struct StoredAccount {
     pub(crate) device_token: String,
     pub(super) account_id: String,
     pub(super) device_id: String,
-}
-
-/// Verify and SignOut wake Canon online so workers re-read the account.
-pub(super) async fn handle_and_wake(
-    account: &ButlerAccount,
-    request: ButlerAccountRequest,
-    online: Option<&CanonOnline>,
-) -> Result<Value, GatewayApplicationError> {
-    let wake = matches!(
-        request,
-        ButlerAccountRequest::Verify { .. } | ButlerAccountRequest::SignOut
-    );
-    let result = account.handle(request).await;
-    if wake
-        && result.is_ok()
-        && let Some(online) = online
-    {
-        online.poke();
-    }
-    result
 }
 
 impl ButlerAccount {
@@ -90,7 +72,17 @@ impl ButlerAccount {
             data: data_root.to_owned(),
             base_url,
             file: data_root.join("auth/butler-account.json"),
+            changes: watch::channel(0).0,
         })
+    }
+
+    pub(crate) fn changes(&self) -> watch::Receiver<u64> {
+        self.changes.subscribe()
+    }
+
+    /// Wakes Canon online so its workers re-read the account.
+    pub(crate) fn bump(&self) {
+        self.changes.send_modify(|n| *n = n.wrapping_add(1));
     }
 
     pub(crate) async fn handle(
@@ -259,6 +251,7 @@ impl ButlerAccount {
         })
         .await
         .map_err(GatewayApplicationError::internal_from)??;
+        self.bump();
         self.status(None).await
     }
 
@@ -289,7 +282,10 @@ impl ButlerAccount {
 
     pub(crate) async fn delete(&self) -> Result<(), GatewayApplicationError> {
         match tokio::fs::remove_file(&self.file).await {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.bump();
+                Ok(())
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(GatewayApplicationError::internal_from(error)),
         }
