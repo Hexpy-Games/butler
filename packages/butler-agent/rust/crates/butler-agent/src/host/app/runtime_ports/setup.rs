@@ -153,7 +153,10 @@ impl AppSetupPort for AppSetup {
         let this = self.0.clone();
         Box::pin(async move {
             match &this.butler_account {
-                Some(account) => account.handle(request).await,
+                Some(account) => {
+                    butler_account::handle_and_wake(account, request, this.canon_online.as_deref())
+                        .await
+                }
                 None => Err(butler_account_disabled()),
             }
         })

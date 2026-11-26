@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::host::build_info::dev_build;
+use crate::host::canon_online::CanonOnline;
 
 pub(crate) const DEFAULT_API_URL: &str = "https://api.butler.hexpy.games";
 const DEV_API_URL: &str = "https://butler-cloud-api-dev.hexpy-dev.workers.dev";
@@ -33,6 +34,22 @@ pub(crate) struct StoredAccount {
     pub(crate) device_token: String,
     pub(super) account_id: String,
     pub(super) device_id: String,
+}
+
+pub(super) async fn handle_and_wake(
+    account: &ButlerAccount,
+    request: ButlerAccountRequest,
+    online: Option<&CanonOnline>,
+) -> Result<Value, GatewayApplicationError> {
+    let verify = matches!(request, ButlerAccountRequest::Verify { .. });
+    let result = account.handle(request).await;
+    if verify
+        && result.is_ok()
+        && let Some(online) = online
+    {
+        online.poke();
+    }
+    result
 }
 
 impl ButlerAccount {

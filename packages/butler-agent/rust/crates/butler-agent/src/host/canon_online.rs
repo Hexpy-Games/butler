@@ -53,7 +53,7 @@ impl CanonOnline {
     }
 
     /// Every watcher sees each bump on its own next `changed()`.
-    fn poke(&self) {
+    pub(crate) fn poke(&self) {
         self.wake.send_modify(|n| *n = n.wrapping_add(1));
     }
 
