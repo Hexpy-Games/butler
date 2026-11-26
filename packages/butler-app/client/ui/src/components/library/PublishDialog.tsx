@@ -7,21 +7,10 @@ import {
 import { openLink } from "../browser/browserBridge";
 import type { LibraryItem } from "../browser/libraryStore";
 import { formatArtifactSize } from "../artifacts/artifactDisplay";
-import { ButlerAccountSignInDialog } from "../settings/ButlerAccountSignInDialog";
-import { useButlerAccount } from "../settings/hooks/useButlerAccount";
+import { ButlerAccountSignInStep } from "../settings/ButlerAccountSignInStep";
 import { closeLibraryDialogs } from "./libraryDialogs";
 import { pageHost } from "./publishing";
 import { usePublishDialog } from "./usePublishDialog";
-
-function PublishSignIn({ onCancel, onSignedIn }: { onCancel: () => void; onSignedIn: () => void }) {
-  const account = useButlerAccount();
-  const verify: typeof account.verify = async (email, code) => {
-    const result = await account.verify(email, code);
-    if (result.ok) onSignedIn();
-    return result;
-  };
-  return <ButlerAccountSignInDialog open onOpenChange={(open) => { if (!open) onCancel(); }} account={{ ...account, verify }} />;
-}
 
 export function PublishDialog({ item }: { item: LibraryItem }) {
   const state = usePublishDialog(item);
@@ -80,6 +69,6 @@ export function PublishDialog({ item }: { item: LibraryItem }) {
         <DialogFooter><ButtonContainer size="sm">{body.footer}</ButtonContainer></DialogFooter>
       </DialogContent>
     </Dialog>
-    {signIn ? <PublishSignIn onCancel={() => setSignIn(false)} onSignedIn={() => { setSignIn(false); state.reload(); }} /> : null}
+    {signIn ? <ButlerAccountSignInStep onCancel={() => setSignIn(false)} onSignedIn={() => { setSignIn(false); state.reload(); }} /> : null}
   </>;
 }

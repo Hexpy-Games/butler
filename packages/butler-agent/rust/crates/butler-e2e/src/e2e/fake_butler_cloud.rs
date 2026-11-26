@@ -26,6 +26,13 @@ use tokio::{
 
 use super::HarnessError;
 
+mod canon;
+mod canon_socket;
+mod tunnel;
+
+use canon_socket::{account, pending, timestamp};
+use tunnel::FakePush;
+
 const PAGE_ID: &str = "k7m2q9xd4b3hn";
 const PAGE_URL: &str = "https://pages.test/p/k7m2q9xd4b3hn/";
 
@@ -33,18 +40,13 @@ struct State {
     seen: Mutex<Vec<String>>,
     plan: Mutex<String>,
     devices: AtomicU64,
+    emails: Mutex<HashMap<u64, String>>,
+    canon: Mutex<canon::Canon>,
     backup: Mutex<Backup>,
     blobs: Mutex<BTreeSet<String>>,
     page: Mutex<Option<(String, u64)>>,
     tunnel: mpsc::UnboundedSender<WebSocket>,
     push: Mutex<FakePush>,
-}
-
-#[derive(Default)]
-struct FakePush {
-    registered: BTreeSet<String>,
-    sends: Vec<Value>,
-    gone: Option<String>,
 }
 
 pub struct FakeButlerCloud {
@@ -63,6 +65,8 @@ impl FakeButlerCloud {
             seen: Mutex::new(Vec::new()),
             plan: Mutex::new("free".into()),
             devices: AtomicU64::new(0),
+            emails: Mutex::default(),
+            canon: Mutex::default(),
             backup: Mutex::default(),
             blobs: Mutex::new(BTreeSet::new()),
             page: Mutex::new(None),
@@ -70,6 +74,10 @@ impl FakeButlerCloud {
             push: Mutex::default(),
         });
         let router = Router::new()
+            .route(
+                "/v1/canon/spaces/{id}/socket",
+                axum::routing::get(canon_socket::canon_socket),
+            )
             .fallback(route)
             .layer(DefaultBodyLimit::max(8 * 1024 * 1024 + 32))
             .with_state(state.clone());
@@ -82,19 +90,6 @@ impl FakeButlerCloud {
             task,
             tunnel: AsyncMutex::new(tunnel),
         })
-    }
-
-    #[expect(
-        clippy::expect_used,
-        reason = "Tunnel scenarios fetch the accepted desktop socket"
-    )]
-    pub async fn tunnel_socket(&self) -> WebSocket {
-        self.tunnel
-            .lock()
-            .await
-            .recv()
-            .await
-            .expect("desktop tunnel socket")
     }
 
     pub fn seen(&self) -> Vec<String> {
@@ -111,23 +106,6 @@ impl FakeButlerCloud {
             .plan
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = plan.to_owned();
-    }
-
-    pub fn push_sends(&self) -> Vec<Value> {
-        self.state
-            .push
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .sends
-            .clone()
-    }
-
-    pub fn set_push_gone(&self, token: &str) {
-        self.state
-            .push
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .gone = Some(token.to_owned());
     }
 
     /// Flips the last byte of every stored chunk; calling it again undoes it.
@@ -167,8 +145,6 @@ async fn route(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .push(format!("{method} {path}"));
-    let account = json!({"id": "acc_fake", "email": "user@example.com", "created_at": "2026-01-01T00:00:00Z"});
-
     if method == Method::POST && path == "/v1/auth/email/start" {
         return StatusCode::ACCEPTED.into_response();
     }
@@ -176,7 +152,15 @@ async fn route(
         let input: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
         return if input["code"] == "123456" {
             let id = state.devices.fetch_add(1, Ordering::Relaxed);
-            Json(json!({"device_token": format!("bct_fake{id}"), "account": account, "device": device(id)}))
+            let Some(email) = input["email"].as_str() else {
+                return failure(StatusCode::BAD_REQUEST, "invalid_request");
+            };
+            state
+                .emails
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(id, email.to_owned());
+            Json(json!({"device_token": format!("bct_fake{id}"), "account": account(email), "device": device(id)}))
                 .into_response()
         } else {
             (
@@ -186,15 +170,24 @@ async fn route(
                 .into_response()
         };
     }
-    let device_id: Option<u64> = headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer bct_fake"))
-        .and_then(|value| value.parse().ok())
-        .filter(|id| *id < state.devices.load(Ordering::Relaxed));
-    let Some(device_id) = device_id else {
+    let Some((device_id, email)) = state.bearer(&headers) else {
         return failure(StatusCode::UNAUTHORIZED, "unauthorized");
     };
+    let account = account(&email);
+    if let Some(path) = path.strip_prefix("/v1/canon/") {
+        return state
+            .canon
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .route(
+                method,
+                path,
+                uri.query(),
+                &account,
+                &device(device_id),
+                &body,
+            );
+    }
     if let Some(path) = path.strip_prefix("/v1/backup") {
         let quota = match state
             .plan

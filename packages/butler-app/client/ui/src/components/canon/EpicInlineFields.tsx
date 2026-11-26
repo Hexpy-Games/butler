@@ -11,8 +11,8 @@ import { InlineUnsavedDialog } from "./InlineUnsavedDialog.tsx";
 import { useInlineExitGuard } from "./useInlineExitGuard.ts";
 import { useEpicInlineEdit, type EpicTextField } from "./useEpicInlineEdit.ts";
 
-export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = false, summary, titleAction }: {
-  compact?: boolean; summary?: ReactNode; titleAction?: ReactNode;
+export function EpicInlineFields({ epic, busy, locked, onWrite, titleRef, compact = false, summary, titleAction }: {
+  locked?: string; compact?: boolean; summary?: ReactNode; titleAction?: ReactNode;
   epic: EpicDetail; busy: boolean; titleRef?: Ref<HTMLElement>;
   onWrite: (input: EpicInput, message?: string) => Promise<boolean>;
 }) {
@@ -53,7 +53,7 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
           <Box grow minWidth="0">{edit.draft?.field === field
           ? <EpicFieldInput epic={epic} field={field} value={edit.draft.value} busy={busy} valid={edit.valid}
             current={edit.draft.current} base={edit.draft.base} onChange={edit.change} onSave={guard.save} onCancel={guard.cancel} />
-          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} onEdit={() => void begin(field)} />}</Box>
+          : <EpicFieldRest field={field} epic={epic} compact={compact} titleRef={titleRef} triggerRef={triggers[field]} busy={busy} locked={locked} onEdit={() => void begin(field)} />}</Box>
           {field === "title" && titleAction && <Box shrink={false}>{titleAction}</Box>}
         </Stack>
         {field === "title" && summary}
@@ -66,14 +66,14 @@ export function EpicInlineFields({ epic, busy, onWrite, titleRef, compact = fals
   </>;
 }
 
-function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRef }: {
-  triggerRef: RefObject<HTMLElement | null>; field: EpicTextField; epic: EpicDetail; compact: boolean; busy: boolean; onEdit: () => void; titleRef?: Ref<HTMLElement>;
+function EpicFieldRest({ field, epic, compact, busy, locked, onEdit, titleRef, triggerRef }: {
+  locked?: string; triggerRef: RefObject<HTMLElement | null>; field: EpicTextField; epic: EpicDetail; compact: boolean; busy: boolean; onEdit: () => void; titleRef?: Ref<HTMLElement>;
 }) {
   const [hover, setHover] = useState(false), [focused, setFocused] = useState(false);
   const title = field === "title", value = epic[field];
   const Title = compact ? Typo.Body : Typo.PanelTitle;
   const label = appCopy.canon.inlineEdit[field];
-  return <Tooltip label={label}><Clickable bleed="both" stretch disabled={busy} aria-label={label}
+  return <Tooltip label={locked ?? label}><Clickable bleed="both" stretch disabled={busy} aria-label={label}
     role={title ? "button" : "group"} tabIndex={title ? 0 : -1}
     onClick={event => { if (!(event.target as HTMLElement).closest("a, button")) onEdit(); }}
     onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -85,10 +85,10 @@ function EpicFieldRest({ field, epic, compact, busy, onEdit, titleRef, triggerRe
       }} wrap="anywhere">{value}</Title>
         : <Box grow minWidth="0">{value ? <EpicMarkdown epicId={epic.id} description={value} attachments={epic.attachments} density="compact" />
           : <Typo.Caption>{appCopy.canon.descriptionPlaceholder}</Typo.Caption>}</Box>}
-      {title ? <Presence present={hover || focused} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
+      {title ? <Presence present={!locked && (hover || focused)} motion="fade"><Box shrink={false}><Pencil size="sm" /></Box></Presence>
         : <Stack align="row" shrink={false}><IconButton label={label} disabled={busy} ref={node => { triggerRef.current = node; }}
           onClick={event => { event.stopPropagation(); onEdit(); }}>
-          <Presence present={hover || focused} motion="fade"><Pencil size="sm" /></Presence>
+          <Presence present={!locked && (hover || focused)} motion="fade"><Pencil size="sm" /></Presence>
         </IconButton></Stack>}
     </Stack>
   </Clickable></Tooltip>;

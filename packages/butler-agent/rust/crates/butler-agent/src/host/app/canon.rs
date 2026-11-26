@@ -30,6 +30,11 @@ impl AppCanon {
         }
     }
 }
+impl AppCanon {
+    pub(crate) fn storage(&self) -> BtccStorage {
+        self.storage.clone()
+    }
+}
 impl AppCanonPort for AppCanon {
     fn proposal(&self, action: String, input: Value) -> ApplicationFuture<Value> {
         proposals::execute(self.storage.clone(), action, input)
@@ -143,7 +148,7 @@ impl AppCanonPort for AppCanon {
         })
     }
 }
-fn error(error: StorageError) -> GatewayApplicationError {
+pub(crate) fn error(error: StorageError) -> GatewayApplicationError {
     let StorageError::Port {
         code,
         message,

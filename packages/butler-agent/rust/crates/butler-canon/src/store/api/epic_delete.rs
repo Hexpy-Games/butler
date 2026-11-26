@@ -8,7 +8,12 @@ use serde::Deserialize;
 struct DeleteInput {
     expected_revision: i64,
 }
-pub(super) fn delete(tx: &Transaction<'_>, ctx: &Context, id: &str, value: Value) -> Result<Value> {
+pub(in crate::store) fn delete(
+    tx: &Transaction<'_>,
+    ctx: &Context,
+    id: &str,
+    value: Value,
+) -> Result<Value> {
     let input: DeleteInput = input(value)?;
     let old = read_work(tx, id)?;
     cas(&old, "revision", input.expected_revision)?;

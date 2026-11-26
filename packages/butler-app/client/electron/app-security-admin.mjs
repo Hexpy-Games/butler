@@ -43,6 +43,8 @@ const SECURITY_ROUTES = Object.freeze({
   updateSecuritySettings: { method: "PATCH", path: "/settings" },
   getButlerAccount: { method: "GET", path: "/setup/butler-account" },
   postButlerAccount: { method: "POST", path: "/setup/butler-account", payload: true },
+  getCanonOnline: { method: "GET", path: "/setup/canon-online" },
+  postCanonOnline: { method: "POST", path: "/setup/canon-online", payload: true },
   signOutButlerAccount: { method: "DELETE", path: "/setup/butler-account" },
   listButlerAccountDevices: { method: "GET", path: "/setup/butler-account/devices" },
   revokeButlerAccountDevice: { method: "DELETE", path: "/setup/butler-account/devices", credential: true },

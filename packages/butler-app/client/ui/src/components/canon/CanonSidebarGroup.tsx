@@ -8,8 +8,8 @@ import { CanonEpicRow } from "./CanonEpicRow.tsx";
 import { openPlanOverview } from "./canonNavigation.ts";
 import { useCanonSidebarDrag } from "./canonSidebarDrag.ts";
 
-export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onEdit, onReorder, onMove }: {
-  projectId: string; group: Group; depth: number; busy: boolean;
+export function CanonSidebarGroup({ projectId, group, depth, busy, locked, onCreate, onEdit, onReorder, onMove }: {
+  projectId: string; group: Group; depth: number; busy: boolean; locked?: string;
   onCreate: () => void; onEdit: () => void; onReorder: (ids: string[]) => void;
   onMove: (epic: EpicCard) => void;
 }) {
@@ -21,15 +21,15 @@ export function CanonSidebarGroup({ projectId, group, depth, busy, onCreate, onE
   const isHeader = (target: EventTarget) => Boolean(labelRef.current && (target as Element).closest('button, [role="button"]')?.contains(labelRef.current));
   const longPress = useLongPressAction(() => setMenuOpen(true));
   const source = useCanonSidebarDrag(state => state.source);
-  const valid = source?.projectId === projectId && source.groupKey !== group.key;
+  const valid = !locked && source?.projectId === projectId && source.groupKey !== group.key;
   const title = group.kind === "backlog" ? appCopy.canon.backlog : group.title;
   const overview = () => openPlanOverview(projectId, group.kind === "backlog" ? null : group.key);
   const actions = <ButtonContainer size="icon-sm" wrap={false} onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
-    <IconButton label={appCopy.canon.newEpic} aria-label={appCopy.canon.newInGroup(title)} disabled={busy} onClick={onCreate}><Plus /></IconButton>
+    <IconButton label={locked ?? appCopy.canon.newEpic} aria-label={appCopy.canon.newInGroup(title)} disabled={busy || Boolean(locked)} onClick={onCreate}><Plus /></IconButton>
     <NavRowSwap open={menuOpen} rest={<IconButton tabIndex={-1} label={`${title} ${expanded ? appCopy.space.collapse : appCopy.space.expand}`} onClick={toggle}>
       {expanded ? <ChevronDown /> : <ChevronRight />}</IconButton>}>
       <OverflowActionMenu label={appCopy.space.rowMenu(title)} open={menuOpen} onOpenChange={setMenuOpen}
-        items={[{ label: appCopy.canon.overview, onSelect: overview }, ...(group.kind === "plan" ? [{ label: appCopy.canon.edit, onSelect: onEdit }] : [])]} />
+        items={[{ label: appCopy.canon.overview, onSelect: overview }, ...(group.kind === "plan" && !locked ? [{ label: appCopy.canon.edit, onSelect: onEdit }] : [])]} />
     </NavRowSwap>
   </ButtonContainer>;
   const reorder = (source: string, target: string, after: boolean) => {

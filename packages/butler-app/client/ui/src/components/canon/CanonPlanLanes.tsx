@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { EpicCard as CardData } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, ArrowLeft, ArrowRight, Grid, IconButton, KanbanBoard, KanbanLane, Pencil, Plus, Section, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, ArrowLeft, ArrowRight, Grid, IconButton, KanbanBoard, KanbanLane, Pencil, Plus, Section, Stack, Tooltip, Typo } from "@/butler-ds";
 import { EpicCard } from "./EpicCard.tsx";
 import { CANON_LANES, canonLaneId } from "./canonLanes.ts";
-export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, onEdit, matches }: {
+export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, onEdit, matches, locked }: {
   matches: (epic: CardData) => boolean;
+  locked?: string;
   /** `id` is null for the backlog, which has no plan to edit. */
   plan: { id: string | null; title: string; works: CardData[] };
   caption: string; onEdit?: () => void; selected: string | null; onSelect: (id: string) => void; onCreate: (planId: string | null) => void;
@@ -44,7 +45,9 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
         <ArrowRight size="xs" />
       </IconButton>
     </>}
-    {onEdit && <IconButton label={appCopy.canon.edit} onClick={onEdit}><Pencil size="sm" /></IconButton>}
+    {onEdit && <Tooltip label={locked}>
+      <IconButton label={appCopy.canon.edit} disabled={Boolean(locked)} onClick={onEdit}><Pencil size="sm" /></IconButton>
+    </Tooltip>}
   </ButtonContainer>}>
     <Grid columns="1" ref={element => {
       // This wrapper owns the board as its direct child; keep DS internals untouched.
@@ -57,7 +60,7 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
         <KanbanLane laneId={canonLaneId(plan.id, status)} label={`${plan.title} · ${label}`} height="content" title={`${label} · ${cards.length}`}>
           {cards.map(epic => <EpicCard key={epic.id} epic={epic} ordinal={ordinals.get(epic.id)}
             selected={selected === epic.id} onSelect={onSelect} />)}
-          {status === "planned" && <Button variant="borderless" size="xs" onClick={() => onCreate(plan.id)}><Plus size="xs" />{appCopy.canon.newEpic}</Button>}
+          {status === "planned" && <Tooltip label={locked}><Button variant="borderless" size="xs" disabled={Boolean(locked)} onClick={() => onCreate(plan.id)}><Plus size="xs" />{appCopy.canon.newEpic}</Button></Tooltip>}
         </KanbanLane>
       </Box>;
     })}

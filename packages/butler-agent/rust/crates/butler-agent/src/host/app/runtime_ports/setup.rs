@@ -3,8 +3,10 @@
 //! gateway's [`AppSetupPort`].
 
 pub(in crate::host::app) mod butler_account;
+mod canon_cloud;
 mod push_relay;
-pub(crate) use butler_account::ButlerAccount;
+pub(crate) use butler_account::{ButlerAccount, signed_out};
+pub(crate) use canon_cloud::CloudIdentity;
 mod butler_vault;
 mod chatgpt_account;
 mod computer_memory;
@@ -24,9 +26,10 @@ use tokio::sync::watch;
 
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    ApplicationFuture, ButlerAccountRequest, GatewayApplicationError, LocalModelServersView,
-    OauthFlowView, ProviderKeyVerificationView, PublishingRequest, ReplacedCredentialView,
-    SavedCredentialView, SavedProviderKey, SetupReadinessView, butler_account_disabled,
+    ApplicationFuture, ButlerAccountRequest, CanonOnlineRequest, GatewayApplicationError,
+    LocalModelServersView, OauthFlowView, ProviderKeyVerificationView, PublishingRequest,
+    ReplacedCredentialView, SavedCredentialView, SavedProviderKey, SetupReadinessView,
+    butler_account_disabled,
 };
 use butler_models::models::{
     ComputerModel, CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe,
@@ -44,6 +47,7 @@ const LOCAL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// Everything first-run setup needs from the process.
 pub(crate) struct AppSetupParts {
     pub(crate) butler_account: Option<Arc<ButlerAccount>>,
+    pub(crate) canon_online: Option<Arc<crate::host::canon_online::CanonOnline>>,
     pub(crate) butler_backup: Option<crate::host::backup::BackupService>,
     pub(crate) computer_memory: Arc<ComputerMemory>,
     pub(crate) plugins: Arc<crate::host::plugins::Plugins>,
@@ -62,6 +66,7 @@ pub(crate) struct AppSetup(Arc<SetupInner>);
 struct SetupInner {
     computer_memory: Arc<ComputerMemory>,
     butler_account: Option<Arc<ButlerAccount>>,
+    canon_online: Option<Arc<crate::host::canon_online::CanonOnline>>,
     butler_backup: Option<crate::host::backup::BackupService>,
     plugins: Arc<crate::host::plugins::Plugins>,
     configuration: Arc<ModelConfiguration>,
@@ -88,6 +93,7 @@ impl AppSetup {
         );
         Self(Arc::new(SetupInner {
             butler_account: parts.butler_account,
+            canon_online: parts.canon_online,
             butler_backup: parts.butler_backup,
             computer_memory: parts.computer_memory,
             oauth: OauthFlows::new(parts.configuration.clone()),
@@ -147,7 +153,20 @@ impl AppSetupPort for AppSetup {
         let this = self.0.clone();
         Box::pin(async move {
             match &this.butler_account {
-                Some(account) => account.handle(request).await,
+                Some(account) => {
+                    butler_account::handle_and_wake(account, request, this.canon_online.as_deref())
+                        .await
+                }
+                None => Err(butler_account_disabled()),
+            }
+        })
+    }
+
+    fn canon_online(&self, request: CanonOnlineRequest) -> ApplicationFuture<serde_json::Value> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            match &this.canon_online {
+                Some(online) => online.handle(request).await,
                 None => Err(butler_account_disabled()),
             }
         })

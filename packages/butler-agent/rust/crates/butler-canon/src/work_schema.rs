@@ -54,6 +54,7 @@ fn create(connection: &Connection) -> rusqlite::Result<()> {
     proposals::upgrade(connection)?;
     connection.execute_batch(include_str!("work_schema/mcp.sql"))?;
     connection.execute_batch(include_str!("work_schema/activity.sql"))?;
+    connection.execute_batch(include_str!("work_schema/sync.sql"))?;
     criteria::upgrade(connection)?;
     let mut stmt = connection.prepare("PRAGMA table_info(canon_epic_work_links)")?;
     let columns = stmt

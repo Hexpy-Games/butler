@@ -4,7 +4,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
-import { ManagementPage, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
+import { Box, ManagementPage, Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardView as ProjectDashboardData,
@@ -100,12 +100,12 @@ export function ProjectDashboardView({
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
         <Stack gap="xl">
-        <ProjectDashboardHeader
+        <Box><ProjectDashboardHeader
           dashboard={dashboard}
           project={project}
           sessionsCount={sessions.length}
           onNewProjectChat={onNewProjectChat ?? openNewProjectChat}
-        />
+        /></Box>
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
         </Stack>

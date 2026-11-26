@@ -3,6 +3,7 @@
 //! - `GET`/`POST`/`DELETE /setup/butler-account`
 //! - `GET /setup/butler-account/devices`, `DELETE /setup/butler-account/devices/{id}`
 //! - `GET`/`POST /setup/butler-backup`
+//! - `GET`/`POST /setup/canon-online`
 //! - `GET /setup/readiness`, `POST /setup/readiness/retry`
 //! - `POST /setup/memory-model` (`{enabled}`: the persisted memory-model choice)
 //! - `GET /setup/local-model-servers`
@@ -23,7 +24,7 @@ use axum::{
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::{
-    HttpError, HttpState, butler_account, butler_backup, json, read_body_with_limit,
+    HttpError, HttpState, butler_account, butler_backup, canon_online, json, read_body_with_limit,
     subsessions::decode_component,
 };
 use crate::gateway::{
@@ -45,15 +46,7 @@ pub(super) async fn route(
             let view = setup.readiness().borrow().clone();
             envelope(StatusCode::OK, view)
         }
-        (&Method::POST, "/setup/readiness/retry") => {
-            let input: ReadinessRetry = optional_body(request).await?;
-            let view = if input.memory_model_only {
-                setup.retry_memory_model()
-            } else {
-                setup.retry_readiness()
-            };
-            envelope(StatusCode::ACCEPTED, view)
-        }
+        (&Method::POST, "/setup/readiness/retry") => retry_readiness(&setup, request).await,
         (&Method::POST, "/setup/memory-model") => {
             let input: MemoryModelChoice = body(request).await?;
             envelope(
@@ -106,6 +99,9 @@ pub(super) async fn route(
         (&Method::POST, "/setup/chatgpt-account/sign-out") => {
             envelope(StatusCode::OK, setup.chatgpt_sign_out().await?)
         }
+        (_, path @ "/setup/canon-online") => {
+            canon_online::route(&state, &setup, request, path).await
+        }
         (_, path) if path.starts_with("/credentials/") => {
             credential_route(&setup, request, uri).await
         }
@@ -122,6 +118,19 @@ struct VaultPassword {
 struct VaultPasswordChange {
     current: String,
     new: String,
+}
+
+async fn retry_readiness(
+    setup: &Arc<dyn crate::gateway::AppSetupPort>,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let input: ReadinessRetry = optional_body(request).await?;
+    let view = if input.memory_model_only {
+        setup.retry_memory_model()
+    } else {
+        setup.retry_readiness()
+    };
+    envelope(StatusCode::ACCEPTED, view)
 }
 
 fn secret(value: String) -> butler_platform::secrets::SecretText {

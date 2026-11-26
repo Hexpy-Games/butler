@@ -102,11 +102,14 @@ async fn cb_12_dev_upgrade_preserves_canon_and_second_start_is_identical()
             "canon_session_queue",
             "canon_session_queue_chains",
             "canon_session_queue_heads",
+            "canon_space_links",
             "canon_spec_bodies",
             "canon_spec_criteria",
             "canon_spec_nodes",
             "canon_spec_revisions",
             "canon_step_cancellations",
+            "canon_sync_entities",
+            "canon_sync_outbox",
             "canon_tags",
         ]
     );

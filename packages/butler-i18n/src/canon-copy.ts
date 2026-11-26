@@ -22,6 +22,47 @@ export interface CanonOrderCopy {
   deck: { expand: (count: number, front: string) => string; fold: (item: string) => string };
 }
 export interface CanonCopy {
+  online: {
+    title: string;
+    switchLabel: string;
+    switchHelp: string;
+    signInNeeded: string;
+    turnOffTitle: string;
+    turnOffConfirm: string;
+    turnOff: string;
+    linked: string;
+    unlinked: string;
+    members: string;
+    roles: Record<"owner" | "editor" | "viewer", string>;
+    roleLabel: string;
+    roleOf: (email: string) => string;
+    roleMe: (role: string, me: string) => string;
+    invited: (role: string) => string;
+    email: string;
+    invite: string;
+    inviteSent: (email: string) => string;
+    revokeInvite: string;
+    remove: string;
+    removeConfirm: (email: string) => string;
+    removed: string;
+    leave: string;
+    leaveConfirm: string;
+    left: string;
+    detached: string;
+    makeLocal: string;
+    loadFailed: string;
+    status: Record<"connected" | "offline" | "error" | "detached", string>;
+    pending: (status: string, n: number) => string;
+    lockedDetached: string;
+    lockedViewer: string;
+    join: string;
+    joinCode: string;
+    joinAction: string;
+    joinedName: string;
+    joined: string;
+    joinFailed: string;
+    conflictField: (label: string, value: string) => string;
+  };
   deletedTask: string;
   deletion: { changeDelete: string; changed: string; addDelete: string; action: string; title: (title: string) => string; detail: string; running: string; deleted: string; missing: string };
   proposalCard: {

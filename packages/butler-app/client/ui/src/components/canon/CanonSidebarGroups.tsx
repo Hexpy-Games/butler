@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { getCanon, getCanonPlan, type CanonPlan } from "@/app/canonApi.ts";
+import { useCanonOnlineLock } from "@/app/canonOnline.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { CanonSidebarGroup } from "./CanonSidebarGroup.tsx";
 import { useCanonSidebar } from "./useCanonSidebar.ts";
@@ -13,6 +14,7 @@ type Dialog = { kind: "create"; planId: string | null; plans: CanonPlan[] } | { 
 export function CanonSidebarGroups({ projectId, depth, expanded }: { projectId: string; depth: number; expanded: boolean }) {
   useAppLocale();
   const state = useCanonSidebar(projectId, expanded);
+  const locked = useCanonOnlineLock(projectId);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const create = async (planId: string | null) => {
     try { setDialog({ kind: "create", planId, plans: (await getCanon(projectId)).plans }); }
@@ -23,7 +25,7 @@ export function CanonSidebarGroups({ projectId, depth, expanded }: { projectId: 
     catch (error) { notifyError(error, appCopy.interfaceFeedback.requestFailed); }
   };
   return <>
-    {state.sidebar?.groups.map(group => <CanonSidebarGroup key={group.key} projectId={projectId} group={group} depth={depth} busy={state.busy}
+    {state.sidebar?.groups.map(group => <CanonSidebarGroup key={group.key} projectId={projectId} group={group} depth={depth} busy={state.busy} locked={locked}
       onCreate={() => void create(group.kind === "backlog" ? null : group.key)} onEdit={() => void edit(group.key)}
       onReorder={ids => void state.reorder(group.key, ids)} onMove={epic => void state.move(epic, group.key, group.kind === "backlog" ? appCopy.canon.backlog : group.title)} />)}
     {dialog?.kind === "create" && <EpicCreateDialog projectId={projectId} plans={dialog.plans} defaultPlanId={dialog.planId}

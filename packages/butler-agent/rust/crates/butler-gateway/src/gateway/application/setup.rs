@@ -5,9 +5,11 @@
 
 pub(crate) mod butler_account;
 pub(crate) mod butler_backup;
+pub(crate) mod canon_online;
 pub(crate) mod publishing;
 use butler_account::{ButlerAccountRequest, butler_account_disabled};
 use butler_backup::ButlerBackupRequest;
+use canon_online::CanonOnlineRequest;
 use publishing::PublishingRequest;
 
 use butler_platform::secrets::SecretText;
@@ -365,6 +367,10 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         _request: ButlerAccountRequest,
     ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(butler_account_disabled()) })
+    }
+
+    fn canon_online(&self, _request: CanonOnlineRequest) -> ApplicationFuture<Value> {
         Box::pin(async { Err(butler_account_disabled()) })
     }
 
