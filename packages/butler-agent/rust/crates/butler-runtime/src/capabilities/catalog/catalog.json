@@ -5991,7 +5991,7 @@
       "definition": {
         "type": "function",
         "name": "computer_add",
-        "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+        "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card. Port and key file are not on the first card. If connecting fails with ssh_unreachable or ssh_auth_failed, the same call shows a second card asking port and key file; pass port or key_file only when the user already gave them (they are suggested there, never used on the first attempt). retry: answered means a second attempt ran; retry: cancelled or deferred means nothing was added.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6008,6 +6008,15 @@
             "model": {
               "type": "string",
               "description": "follow, chatgpt, none, or key:<saved key label>."
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "key_file": {
+              "type": "string",
+              "description": "Path to a private key file on this device; never key contents."
             }
           }
         },
@@ -11870,7 +11879,7 @@
     "computer_add": {
       "type": "function",
       "name": "computer_add",
-      "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card.",
+      "description": "Add a computer using the name, SSH address, work folder, and optional model proposal. Use only when the user asked to add, change, or remove a computer (another machine reached over SSH). Never ask for or pass passwords or key contents. The user confirms every value on the card. A deferred or cancelled result changed nothing. To apply later, call the tool again. A deferred card stays open, so calling the tool again returns question_card_open until the user answers or drops that card. Port and key file are not on the first card. If connecting fails with ssh_unreachable or ssh_auth_failed, the same call shows a second card asking port and key file; pass port or key_file only when the user already gave them (they are suggested there, never used on the first attempt). retry: answered means a second attempt ran; retry: cancelled or deferred means nothing was added.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11887,6 +11896,15 @@
           "model": {
             "type": "string",
             "description": "follow, chatgpt, none, or key:<saved key label>."
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "key_file": {
+            "type": "string",
+            "description": "Path to a private key file on this device; never key contents."
           }
         }
       },

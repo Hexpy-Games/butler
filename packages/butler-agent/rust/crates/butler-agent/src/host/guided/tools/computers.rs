@@ -1,5 +1,6 @@
 mod apply;
 mod card;
+mod retry;
 
 use super::{GuidedTools, admin_client::AdminClient, dispatch::encoded};
 use butler_core::{json::JsonDocument, tool_protocol::ToolName};
@@ -85,7 +86,7 @@ async fn write(
             return tokio::select! {
                 () = invocation.cancellation.cancelled() => encoded(&json!({"ok":false,"status":"cancelled"})),
                 questions = card::build(owner, tool, &call.arguments) => match questions {
-                    Ok(questions) => super::question::admit(owner, call_id, questions, true, Some(call.name.clone())).await,
+                    Ok(questions) => super::question::admit(owner, call_id, questions, true, Some(call.name.clone()), None).await,
                     Err(error) => encoded(&gateway_failure(error)),
                 }
             };
@@ -96,7 +97,10 @@ async fn write(
         }
     };
     if execution.outcome == RequestOutcome::Applied {
-        return encoded(&json!({"ok":false,"error":{"code":"already_applied"}}));
+        if tool == ToolName::ComputerAdd {
+            return retry::resume(owner, invocation, call_id, &execution).await;
+        }
+        return already_applied();
     }
     let UserQuestionResponse::Answered { answers } = execution
         .question_response()
@@ -108,15 +112,16 @@ async fn write(
         .ok()
         .and_then(|questions| card::answers(tool, &questions, &answers));
     let Some((id, values)) = values else {
-        return encoded(&failure(
-            "card_mismatch",
-            "The stored computer card does not match this tool.",
-        ));
+        return card_mismatch();
     };
     if values.is_empty() || (tool == ToolName::ComputerAdd && values.len() != 4) {
         return encoded(&json!({"ok":true,"cancelled":true}));
     }
-    apply::claimed(
+    let name = values
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let result = apply::claimed(
         owner,
         invocation.cancellation,
         tool,
@@ -124,7 +129,24 @@ async fn write(
         id,
         values,
     )
-    .await
+    .await?;
+    if tool == ToolName::ComputerAdd
+        && let Some(name) = name
+    {
+        return retry::offer(owner, call, call_id, &name, result).await;
+    }
+    Ok(result)
+}
+
+fn already_applied() -> Result<JsonDocument, ToolExecutionError> {
+    encoded(&json!({"ok":false,"error":{"code":"already_applied"}}))
+}
+
+fn card_mismatch() -> Result<JsonDocument, ToolExecutionError> {
+    encoded(&failure(
+        "card_mismatch",
+        "The stored computer card does not match this tool.",
+    ))
 }
 
 async fn list(owner: &GuidedTools) -> Result<Value, Value> {

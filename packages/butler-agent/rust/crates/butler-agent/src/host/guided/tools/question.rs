@@ -26,7 +26,7 @@ pub(super) async fn execute(
     if owner.unattended() {
         return encode(&super::turn_guard::unattended_question());
     }
-    admit(owner, call_id, questions, wait, None).await
+    admit(owner, call_id, questions, wait, None, None).await
 }
 
 pub(super) async fn admit(
@@ -35,6 +35,7 @@ pub(super) async fn admit(
     questions: UserQuestions,
     wait: bool,
     executable: Option<String>,
+    slot: Option<&str>,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let admitted = owner
         .authority
@@ -45,6 +46,7 @@ pub(super) async fn admit(
                 source_session_id: owner.binding.source_session_id.clone(),
                 turn_id: owner.binding.turn_id.clone(),
                 call_id: call_id.into(),
+                slot: slot.map(str::to_owned),
                 model_ref: owner.binding.model_ref.clone(),
                 reasoning_effort: owner.binding.reasoning_effort.clone(),
             },
