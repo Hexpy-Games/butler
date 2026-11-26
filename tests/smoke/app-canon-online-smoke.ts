@@ -251,6 +251,17 @@ async function verifyOnline(page: Page, server: NativeAppServerHandle, projectId
   }
   await closeCanonAside(page);
 
+  await page.getByRole("button", { name: /^사이드바 (보기|숨기기)$/u }).first().waitFor();
+  const show = page.getByRole("button", { name: "사이드바 보기", exact: true });
+  if (await show.isVisible()) await show.click();
+  const project = page.locator(`[data-tree-item="p:${projectId}"] [data-test-class="tree-row"]`);
+  if (await project.getAttribute("aria-expanded") === "false") await project.click();
+  await page.locator(`[data-tree-item="p:${projectId}"] [data-canon-group="backlog"] [data-test-class="canon-sidebar-group"]`).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "계획 개요", exact: true }).click();
+  await page.locator('[data-test-class="canon-plan-overview"]').waitFor();
+  assert(await page.locator('[data-test-class="canon-plan-overview"]').getByRole("combobox", { name: "단축키가 입력창과 충돌 · 상태", exact: true }).isDisabled());
+  await openCanonBoard(page);
+
   members.members = [{ ...owner, account_id: "acc_owner" }, { ...editor, account_id: owner.account_id }, viewer];
   fake.links = [{ ...linked, role: "editor" }];
   await page.waitForResponse(response => response.url().endsWith("/setup/canon-online") && response.request().method() === "GET");

@@ -6,8 +6,8 @@ import { CanonAvatar } from "./CanonAvatar.tsx";
 import { CanonEpicStatus } from "./CanonEpicStatus.tsx";
 import { PlanEpicActions } from "./PlanEpicActions.tsx";
 import { openEpicConversation } from "./canonNavigation.ts";
-export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, onReorder }: {
-  projectId: string; rows: EpicCard[]; plans: CanonPlan[]; backlog: boolean; busy: boolean;
+export function PlanEpicList({ projectId, rows, plans, backlog, busy, locked, onWrite, onReorder }: {
+  projectId: string; rows: EpicCard[]; plans: CanonPlan[]; backlog: boolean; busy: boolean; locked?: string;
   onWrite: (epic: EpicCard, input: EpicInput, message: string) => void;
   onReorder: (ids: string[]) => void;
 }) {
@@ -23,9 +23,9 @@ export function PlanEpicList({ projectId, rows, plans, backlog, busy, onWrite, o
     </Stack>,
     description: <Stack as="span" gap="sm"><Typo.Caption truncate>{epic.description.split(/\r?\n/u)[0] || copy.noDescription}</Typo.Caption>
       <CriteriaProgress criteria={epic.criteria} />
-      {compact && <Box as="span" padding="xs"><PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} onWrite={onWrite} /></Box>}
+      {compact && <Box as="span" padding="xs"><PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} locked={locked} onWrite={onWrite} /></Box>}
     </Stack>,
-    actions: compact ? undefined : <PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} onWrite={onWrite} />,
+    actions: compact ? undefined : <PlanEpicActions onOpen={() => void openEpicConversation(projectId, epic)} epic={epic} plans={plans} busy={busy} locked={locked} onWrite={onWrite} />,
   }));
   return <SortableCardList data-test-class="canon-plan-epics" title={<Tooltip label={copy.sharedGrip}><Typo.Text>{copy.epicCount(rows.length)}</Typo.Text></Tooltip>}
       description={backlog ? copy.backlogOrderHelp : copy.sharedOrder} items={items} disabled={busy}
