@@ -5,6 +5,14 @@ export type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "des
 
 export interface VariantColors { background: string; foreground: string; border: string }
 
+export function disabledColors(t: Tokens, variant: ButtonVariant): VariantColors {
+  return {
+    background: variant === "ghost" ? "transparent" : t.color("--color-disabled-bg"),
+    foreground: t.color("--interactive-disabled-fg"),
+    border: "transparent",
+  };
+}
+
 /** Fill, label and border colours of a Button variant (web button.tsx, touch size). */
 export function variantColors(t: Tokens, variant: ButtonVariant): VariantColors {
   switch (variant) {

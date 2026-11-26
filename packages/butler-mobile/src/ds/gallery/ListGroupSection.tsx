@@ -12,6 +12,7 @@ const noop = () => {};
 export function ListGroupSection() {
   const t = useTokens();
   const [on, setOn] = useState(true);
+  const [choice, setChoice] = useState(1);
   return (
     <View style={{ paddingHorizontal: t.length("--adaptive-page-gutter"), gap: t.length("--space-4") }}>
       <ListGroup label="Preferences" footer={en.note} testID="ds-list-group-labelled">
@@ -24,6 +25,9 @@ export function ListGroupSection() {
         <ListRow title={en.sentence} meta={en.meta} />
         <ListRow title={en.sentence} description={en.note} />
         <ListRow title={en.action} accent onPress={noop} />
+      </ListGroup>
+      <ListGroup testID="ds-list-group-selection">
+        {[en.sentence, en.action].map((title, i) => <ListRow key={title} title={title} selection="single" selected={choice === i} onPress={() => setChoice(i)} />)}
       </ListGroup>
       <ListGroup testID="ds-list-group-destructive">
         <ListRow icon={icons.Unlink} title="Disconnect" destructive onPress={noop} />

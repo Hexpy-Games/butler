@@ -213,6 +213,12 @@ function ListRowSection() {
           <Forcing state={forced}><ListRow icon={icons.Folder} title={en.sentence} description={en.note} onPress={noop} {...props} /></Forcing>
         </Cell>
       ))}
+      <Cell name="single · off" list><ListRow title={en.sentence} selection="single" selected={false} onPress={noop} /></Cell>
+      <Cell name="single · on" list><ListRow title={en.sentence} description={en.note} selection="single" selected onPress={noop} /></Cell>
+      <Cell name="multi · off" list><ListRow title={en.sentence} selection="multi" selected={false} onPress={noop} /></Cell>
+      <Cell name="multi · on" list><ListRow title={en.sentence} selection="multi" selected onPress={noop} /></Cell>
+      <Cell name="single · disabled on" list><ListRow title={en.sentence} selection="single" selected disabled onPress={noop} /></Cell>
+      <Cell name="multi · disabled off" list><ListRow title={en.sentence} selection="multi" selected={false} disabled onPress={noop} /></Cell>
       {sets.slice(1).map(([name, s]) => (
         <Cell key={name} name={`description and meta · ${name}`} list><ListRow icon={icons.MessageSquare} title={s.sentence} description={s.note} meta={s.meta} /></Cell>
       ))}

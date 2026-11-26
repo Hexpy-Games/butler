@@ -9,6 +9,7 @@ import { IconSlot, useScaledLine } from "./internal/IconSlot";
 import { GroupDivider, GROUP_INNER_GAP, InListGroup } from "./internal/listGroup";
 import { run, useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
+import { SelectionMark } from "./internal/SelectionMark";
 import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
 
 export interface ListRowProps {
@@ -24,6 +25,8 @@ export interface ListRowProps {
   /** Opens the row's actions; also offered to screen readers as the "longpress" action. */
   onLongPress?: () => void;
   selected?: boolean;
+  /** Draws a leading radio (single) or check (multi) control that follows `selected`. Takes the leading icon slot; do not pass `icon` with it. */
+  selection?: "single" | "multi";
   disabled?: boolean;
   /** Danger-toned title and icon, for a destructive action row. */
   destructive?: boolean;
@@ -38,13 +41,13 @@ export interface ListRowProps {
 
 export function ListRow({
   title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, accent, titleLines = 1, descriptionLines = 2,
-  accessibilityLabel, accessibilityHint, testID, disclosure, navigates,
+  accessibilityLabel, accessibilityHint, testID, disclosure, navigates, selection,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const grouped = useContext(InListGroup);
   const press = usePress({ scale: false, disabled: disabled || (!onPress && !onLongPress) });
-  const filled = press.pressed || !!selected;
+  const filled = press.pressed || (!!selected && !grouped);
   const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
   useEffect(() => {
     if (reduced) underlay.setValue(filled ? 1 : 0);
@@ -84,12 +87,14 @@ export function ListRow({
 
   const body = (
     <>
-      {grouped ? <GroupDivider inset={padX + (icon ? iconSize + iconGap : 0)} /> : null}
+      {grouped ? <GroupDivider inset={padX + (selection || icon ? iconSize + iconGap : 0)} /> : null}
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: t.color("--selection-strong"), opacity: underlay }]}
       />
-      {icon ? (
+      {selection ? (
+        <IconSlot size={iconSize} lineHeight={titleLine}><SelectionMark kind={selection} selected={!!selected} disabled={!!disabled} size={iconSize} /></IconSlot>
+      ) : icon ? (
         <View style={{ opacity: 0.82 }}>
           <IconSlot size={iconSize} lineHeight={titleLine}>
             {React.isValidElement(icon) ? icon : <HugeiconsIcon icon={icon} size={iconSize} color={titleColor} />}
@@ -151,6 +156,10 @@ export function ListRow({
     boxShadow: press.focused ? t.shadow("--focus-ring").map(s => (grouped ? { ...s, inset: true } : s)) : undefined,
   } as const;
 
+  const selectionAccessibility = selection ? {
+    accessibilityRole: selection === "single" ? "radio" as const : "checkbox" as const,
+    accessibilityState: { checked: !!selected, disabled: !!disabled },
+  } : undefined;
   if (!onPress && !onLongPress) return <View style={container} testID={testID}>{body}</View>;
   return (
     <Pressable
@@ -159,6 +168,7 @@ export function ListRow({
       accessibilityLabel={accessibilityLabel ?? [title, description, meta].filter(Boolean).join(", ")}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ selected: !!selected, disabled: !!disabled, ...(disclosure ? { expanded } : {}) }}
+      {...selectionAccessibility}
       testID={testID}
       disabled={disabled}
       onPress={onPress}
