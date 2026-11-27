@@ -244,7 +244,7 @@ pub(super) async fn token_route_call(
     match token_route(path) {
         Some(("credentials", token)) => credentials(state, token, body).await,
         Some(("vault", token)) => super::pay::secrets(state, token, body).await,
-        Some(("inputs", token)) => super::input::pull(state, token, body).await,
+        Some(("inputs", token)) => super::input::pull(&state, token, body),
         _ => Err(HttpError::Internal),
     }
 }

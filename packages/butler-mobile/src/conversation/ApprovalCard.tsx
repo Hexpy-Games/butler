@@ -113,7 +113,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
       setPending(undefined); inFlight.current = false;
     }
   };
-  const host = currentInput?.origin ? new URL(currentInput.origin).host : undefined;
+  const host = currentInput?.origin && URL.canParse(currentInput.origin) ? new URL(currentInput.origin).host : undefined;
   return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={fillFailed ? browser.signinFillFailed : failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={<ButtonGroup layout="pair">
@@ -126,7 +126,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
         onPress={() => void send("done", base + "/hand-back" + query, {})} />
     </ButtonGroup>}>
     {host ? <Text literal>{host}</Text> : null}
-    {handoff.details.slice(0, fields.length || currentInput?.live ? -1 : undefined).map((line, index) => <Text key={index} literal>{line}</Text>)}
+    {handoff.details.filter(line => !(fields.length || offer) || line !== labels.onDesktop).map((line, index) => <Text key={index} literal>{line}</Text>)}
     {fields.map(kind => <TextField key={kind} label={labels.fields[kind]} value={values[kind] ?? ""}
       secureTextEntry={kind === "password"} autoComplete={kind === "otp" ? "one-time-code" : kind}
       keyboardType={kind === "otp" ? "number-pad" : undefined} returnKeyType="done" disabled={!!pending}

@@ -14,6 +14,15 @@ use tokio::sync::oneshot;
 type Result<T> = std::result::Result<T, HttpError>;
 
 const KINDS: [&str; 3] = ["username", "password", "otp"];
+const STATUSES: [&str; 7] = [
+    "ok",
+    "filled",
+    "no_fields",
+    "input_busy",
+    "origin_mismatch",
+    "input_unavailable",
+    "unavailable",
+];
 pub(super) const TTL: Duration = Duration::from_secs(10);
 
 pub(super) struct InputFill {
@@ -22,7 +31,7 @@ pub(super) struct InputFill {
     pub(super) expires: Instant,
 }
 
-pub fn secure_channel(request: &Request<Body>, client: &Client) -> Result<()> {
+pub(crate) fn secure_channel(request: &Request<Body>, client: &Client) -> Result<()> {
     if request.method() == Method::POST
         && !client.local
         && request.extensions().get::<TunnelPeer>().is_none()
@@ -67,7 +76,11 @@ async fn ask_host(
     }
 }
 
-pub async fn fields(state: &Arc<HttpState>, owner: String, reference: &str) -> Result<Value> {
+pub(crate) async fn fields(
+    state: &Arc<HttpState>,
+    owner: String,
+    reference: &str,
+) -> Result<Value> {
     let tab = hand_off_tab(state, owner, reference).await?;
     if state
         .browser
@@ -84,7 +97,7 @@ pub async fn fields(state: &Arc<HttpState>, owner: String, reference: &str) -> R
     ))
 }
 
-pub async fn fill(
+pub(crate) async fn fill(
     state: &Arc<HttpState>,
     owner: String,
     reference: &str,
@@ -130,7 +143,7 @@ pub async fn fill(
     Ok(result)
 }
 
-pub async fn save(
+pub(crate) async fn save(
     state: &Arc<HttpState>,
     owner: String,
     reference: &str,
@@ -155,7 +168,7 @@ pub async fn save(
     )
 }
 
-pub(super) async fn pull(state: Arc<HttpState>, token: &str, body: &Value) -> Result<Response> {
+pub(super) fn pull(state: &HttpState, token: &str, body: &Value) -> Result<Response> {
     let fill = state
         .browser
         .0
@@ -177,12 +190,10 @@ pub(super) async fn pull(state: Arc<HttpState>, token: &str, body: &Value) -> Re
 }
 
 fn shaped(result: &Value) -> Value {
-    let status = match result["status"].as_str() {
-        Some(
-            s @ ("filled" | "no_fields" | "origin_mismatch" | "input_unavailable" | "unavailable"),
-        ) => s,
-        _ => "unknown",
-    };
+    let status = result["status"]
+        .as_str()
+        .filter(|status| STATUSES.contains(status))
+        .unwrap_or("unknown");
     let fields: Vec<_> = result["fields"]
         .as_array()
         .into_iter()

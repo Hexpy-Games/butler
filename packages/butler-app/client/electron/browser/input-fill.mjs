@@ -1,6 +1,7 @@
 import { evaluateWorld, frameWorlds } from "./frame-worlds.mjs";
 import { dispatchKey, parseChord } from "./keyboard.mjs";
 import { detectSource, evaluate, settled, type } from "./signin-fill.mjs";
+import { offerTyped, rememberUsername } from "./signin-offer.mjs";
 
 const KINDS = ["username", "password", "otp"];
 
@@ -35,11 +36,13 @@ export async function fillInputs(browser, tab, token) {
     const values = await browser.pullInput(token, origin);
     if (!values || values.error) return { status: values?.error === "origin_mismatch" ? "origin_mismatch" : "input_unavailable" };
     let typed = false;
+    const sent = {};
     for (const kind of KINDS) {
       if (!values[kind] || !page[kind] || kind === "otp" && page.keypad) continue;
       if (tab.holder !== "user" || !tab.waiting) return { status: "input_unavailable" };
       if (new URL(contents.getURL()).origin !== origin) return { status: "origin_mismatch" };
       const filled = await type(tab, page[kind], values[kind], kind === "password");
+      if (filled && kind !== "otp") sent[kind] = values[kind];
       values[kind] = null;
       if (!filled) continue;
       typed = true;
@@ -52,6 +55,10 @@ export async function fillInputs(browser, tab, token) {
       tab.vaultFilled = true;
     }
     if (!typed) return { status: "no_fields" };
+    // The typed sign-in becomes the same in-memory save offer a submitted page form makes.
+    if (sent.password) void offerTyped(browser, tab, origin, sent.username ?? "", sent.password);
+    else if (sent.username) rememberUsername(tab, origin, origin, sent.username);
+    sent.username = sent.password = null;
     const beforeEnter = contents.getURL();
     await dispatchKey(tab, parseChord("Enter"));
     await settled(tab, 6000);
