@@ -13,6 +13,8 @@ import { screenshotTab, collectImage } from "./capture.mjs";
 import { zoomTab } from "./zoom.mjs";
 import { applySignedInPolicy, revokeSignedInSite, signedInPlace } from "./signed-in.mjs";
 import { fillSignIn } from "./signin-fill.mjs";
+import { fillInputs, inputFields } from "./input-fill.mjs";
+import { clearOffer, saveOffer } from "./signin-offer.mjs";
 import { fillPay, inspectPay } from "./pay-fill.mjs";
 import { makeAgentRoom } from "./capacity.mjs";
 import { devtoolsRead, onLocalPage, watchDevtools } from "./devtools.mjs";
@@ -155,6 +157,7 @@ export async function executeBrowser(browser, frame) {
 }
 async function executeCall(browser, frame, tracked) {
   const result = tracked && !browser.uses.has(frame.id) ? { status: "unknown", reason: "cancelled" } : await executeFrame(browser, frame);
+  if (["input.fields", "input.fill", "signin.save_offer"].includes(frame.op)) return result;
   const count = frame.op === "tab.act" ? frame.args?.steps?.length : 0;
   if (count >= 1 && count <= 10 && !Array.isArray(result.steps) && result.status !== "dialog_pending") {
     const status = result.status === "unknown" ? "unknown" : "not_dispatched";
@@ -189,7 +192,7 @@ async function executeFrame(browser, frame) {
   if (op === "tab.selection") return browser.selection.result(tab, session);
   // A loopback page is read where it is: never driven, whoever holds the tab.
   if (op === "tab.devtools" && onLocalPage(tab)) return tab.dialog && args.read === "dom" ? pendingDialog(tab) : devtoolsRead(tab, args);
-  if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
+  if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting", "input.fields", "input.fill", "signin.save_offer"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
   // A durable wait hands the tab to the user (as a sign-in step does) with a sticky hold; only their hand-back resumes it.
@@ -202,6 +205,12 @@ async function executeFrame(browser, frame) {
     return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch };
   }
   if (op === "tab.waiting") { tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || args.value === true; browser.publish(); return { status: "ok" }; }
+  if (op === "input.fields") return inputFields(tab);
+  if (op === "input.fill") {
+    if (tab.profile === "signed_in" && tab.holder === "user" && tab.waiting && tab.view) connectDebugger(browser, tab);
+    return fillInputs(browser, tab, args.token);
+  }
+  if (op === "signin.save_offer") return args.save ? await saveOffer(browser, tab.id) : (clearOffer(tab), browser.publish(), { ok: true });
   if (tab.holder === "user") return { status: "not_dispatched", reason: "user_control" };
   if (op === "tab.close") return requestClose(browser,tab);
   if (op === "tab.dialog") return answerDialog(browser,tab,args,frame.deliverStill);

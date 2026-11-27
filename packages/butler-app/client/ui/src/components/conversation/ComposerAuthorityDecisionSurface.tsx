@@ -37,7 +37,7 @@ function approvalText(text: string, as: "text" | "code") {
 export function ComposerAuthorityDecisionSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision }) {
   useAppLocale();
   const { handoff } = decision;
-  if (handoff) return <ComposerBrowserHandoffSurface placement={placement} decision={{ ...decision, handoff }} />;
+  if (handoff) return <ComposerBrowserHandoffSurface key={handoff.inputKey} placement={placement} decision={{ ...decision, handoff }} />;
   const Icon = KIND_ICONS[decision.actionKind];
   return <ComposerDecisionPanel
     placement={placement}

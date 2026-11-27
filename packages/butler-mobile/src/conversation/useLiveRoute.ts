@@ -8,7 +8,7 @@ import type { ProbeResult } from "@/connection/probe";
 import { problemFrom, type Problem } from "@/connection/problems";
 import { useRelayProxy } from "@/connection/proxy/useRelayProxy";
 import { loadRelayPeer } from "@/connection/relayPeer";
-import { chooseRoute, type Route } from "@/connection/route";
+import { chooseRoute, relayAddress, type Route } from "@/connection/route";
 import { createRelayFetch } from "@/connection/tunnel/relayFetch";
 import type { RelayPeer } from "@/connection/tunnel/transport";
 
@@ -22,6 +22,7 @@ interface LiveRouteOptions {
   listeners: RefObject<Set<(event: LiveEvent) => void>>;
   activePairing: Pairing | null;
   activeRoute: Route | null;
+  client: GatewayClient | null;
   peer: RelayPeer | null;
   setPairing: (pairing: Pairing) => void;
   setRoute: (route: Route) => void;
@@ -35,7 +36,7 @@ interface LiveRouteOptions {
 }
 
 export function useLiveRoute({
-  pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
+  pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, client, peer,
   setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, setRevoked, teardown,
 }: LiveRouteOptions) {
   const reroute = useRef<() => Promise<void>>(async () => {});
@@ -113,5 +114,11 @@ export function useLiveRoute({
       clearTimeout(timer.current);
     };
   }, [live, timer]);
-  return { access, open };
+  const secureClient = useMemo(() => {
+    if (activeRoute?.kind === "relay") return client;
+    const origin = activePairing && relayAddress(activePairing);
+    if (!origin || !activePairing || relay.current?.peer !== peer || !relay.current) return null;
+    return createGatewayClient({ origin, fetch: relay.current.fetch, token: () => activePairing.deviceToken });
+  }, [activePairing, activeRoute, client, peer, relay]);
+  return { access, open, secureClient };
 }
