@@ -6,6 +6,27 @@ async fn auto_and_full_access_generate_losslessly_and_record_cost() -> Result<()
         let f = Fixture::start(access, "openai").await?;
         f.script("Make a picture", vec![generate("gen")]);
         f.run("Make a picture").await?;
+        assert!(
+            f.script
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .flat_map(|request| request["input"].as_array().into_iter().flatten())
+                .any(|item| {
+                    item["type"] == "function_call_output"
+                        && item["call_id"] == "gen"
+                        && item["output"].as_array().is_some_and(|parts| {
+                            parts.iter().any(|part| {
+                                part["type"] == "input_image"
+                                    && part["image_url"].as_str().is_some_and(|url| {
+                                        url.starts_with("data:image/jpeg;base64,")
+                                    })
+                            })
+                        })
+                }),
+            "the follow-up model request must receive the generated JPEG"
+        );
         let output = f.output("gen");
         assert_eq!(output["schema"], "butler.image.v1", "{output}");
         assert_eq!(output["status"], "ok");
@@ -45,9 +66,9 @@ async fn auto_and_full_access_generate_losslessly_and_record_cost() -> Result<()
         f.run("Make this picture brighter").await?;
         // The next turn's history names the image the previous turn made.
         assert!(
-            f.script.requests.lock().unwrap()[sent..]
-                .iter()
-                .any(|r| r.to_string().contains(&format!("[image:{id}]"))),
+            f.script.requests.lock().unwrap()[sent..].iter().any(|r| r
+                .to_string()
+                .contains(&format!("\\nattachments: [image:{id}]"))),
             "the next turn must see the generated image id"
         );
         let edited = f.output("same-bytes-edit");

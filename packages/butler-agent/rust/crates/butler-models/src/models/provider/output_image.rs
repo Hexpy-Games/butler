@@ -7,7 +7,13 @@ pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
     if !matches!(
         message.name.as_deref(),
         Some(
-            "output_check" | "browser_observe" | "browser_act" | "browser_screenshot" | "tool_call"
+            "output_check"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_screenshot"
+                | "generate_image"
+                | "edit_image"
+                | "tool_call"
         )
     ) {
         return None;
@@ -21,11 +27,17 @@ pub(super) fn parts(message: &ModelRoundMessage) -> Option<(String, String)> {
                 | "butler.browser-observation.v1"
                 | "butler.browser-zoom.v1"
                 | "butler.browser-capture.v1"
+                | "butler.image.v1"
         )
     ) {
         return None;
     }
-    let image = output.as_object_mut()?.remove("image")?;
+    let key = if output["image"].is_object() {
+        "image"
+    } else {
+        "view"
+    };
+    let image = output.as_object_mut()?.remove(key)?;
     if image["mime_type"] != "image/jpeg" {
         return None;
     }

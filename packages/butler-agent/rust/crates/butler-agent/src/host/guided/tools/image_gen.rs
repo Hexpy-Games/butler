@@ -52,8 +52,12 @@ pub(super) async fn execute(
     let generated = butler_models::models::generate_image(request.0, invocation.cancellation).await;
     let result = match generated {
         Ok(result) => {
+            let vision = client
+                .vision(&invocation.model_execution.active_model_ref())
+                .await;
             persist(
                 &client, invocation, call, result, source, mask, parent, &model, size, quality,
+                vision,
             )
             .await
         }
@@ -85,6 +89,7 @@ async fn persist(
     model: &butler_models::models::ModelProviderMetadata,
     size: Option<String>,
     quality: Option<String>,
+    vision: bool,
 ) -> Result<Value, ImageGenError> {
     let bytes = if let (Some(source), Some(mask)) = (source, mask) {
         tokio::task::spawn_blocking(move || {
@@ -118,7 +123,7 @@ async fn persist(
         .call(
             "images.store",
             &Value::Null,
-            &json!({"data":STANDARD.encode(bytes),"parent_id":parent,"model_ref":model.model_ref}),
+            &json!({"data":STANDARD.encode(&bytes),"parent_id":parent,"model_ref":model.model_ref}),
             invocation.cancellation,
         )
         .await;
@@ -133,9 +138,35 @@ async fn persist(
             "Image usage could not be recorded.",
         ));
     }
-    Ok(
-        json!({"schema":"butler.image.v1","status":"ok","image":id,"parent":parent,"width":stored["width"],"height":stored["height"],"model":model.display_name,"model_ref":model.model_ref,"size":size,"quality":quality,"url":stored["signed_url"],"deliverables":[{"kind":"image","id":id}]}),
-    )
+    let mut output = json!({"schema":"butler.image.v1","status":"ok","image":id,"parent":parent,"width":stored["width"],"height":stored["height"],"model":model.display_name,"model_ref":model.model_ref,"size":size,"quality":quality,"url":stored["signed_url"],"deliverables":[{"kind":"image","id":id}]});
+    if vision && let Ok(Some(data)) = tokio::task::spawn_blocking(move || encode_view(&bytes)).await
+    {
+        output["view"] = json!({"mime_type":"image/jpeg","data":data});
+    }
+    Ok(output)
+}
+fn encode_view(bytes: &[u8]) -> Option<String> {
+    let image = image::load_from_memory(bytes).ok()?;
+    for limit in [768, 512] {
+        let side = limit.min(image.width().max(image.height()));
+        let thumbnail = image.thumbnail(side, side).into_rgba8();
+        let thumbnail = image::RgbImage::from_fn(thumbnail.width(), thumbnail.height(), |x, y| {
+            let [red, green, blue, alpha] = thumbnail.get_pixel(x, y).0;
+            let alpha = u16::from(alpha);
+            image::Rgb([red, green, blue].map(|channel| {
+                u8::try_from((u16::from(channel) * alpha + 255 * (255 - alpha)) / 255)
+                    .unwrap_or(u8::MAX)
+            }))
+        });
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 75)
+            .encode_image(&thumbnail)
+            .ok()?;
+        if jpeg.len() <= 150 * 1024 {
+            return Some(STANDARD.encode(jpeg));
+        }
+    }
+    None
 }
 fn invalid(_: impl std::fmt::Display) -> ImageGenError {
     ImageGenError::new("image_invalid", "Invalid image data.")
