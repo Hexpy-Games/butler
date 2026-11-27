@@ -60,10 +60,16 @@ pub(in crate::gateway::http) async fn route(
         );
     }
     let params = query(request.uri());
-    let whole = |key: &str| params.get(key).and_then(|v| v.parse::<u64>().ok());
-    let dpr = params.get("dpr").and_then(|v| v.parse::<f64>().ok());
-    let viewport = live::viewport(whole("width"), whole("height"), dpr)
-        .ok_or_else(|| error(400, "invalid_viewport"))?;
+    let args = if params.contains_key("height") || params.contains_key("dpr") {
+        let whole = |key: &str| params.get(key).and_then(|v| v.parse::<u64>().ok());
+        let dpr = params.get("dpr").and_then(|v| v.parse::<f64>().ok());
+        let viewport = live::viewport(whole("width"), whole("height"), dpr)
+            .ok_or_else(|| error(400, "invalid_viewport"))?;
+        json!({"viewport": viewport})
+    } else {
+        let width = params.get("width").and_then(|v| v.parse::<i64>().ok());
+        json!({"width": width.unwrap_or(720).clamp(320, 1280)})
+    };
     let (session, _) = open_hand_off(&state, tab)
         .await?
         .ok_or_else(|| error(409, "no_hand_off"))?;
@@ -72,7 +78,7 @@ pub(in crate::gateway::http) async fn route(
         .extensions()
         .get::<ListenerScope>()
         .map_or_else(CancellationToken::new, |scope| scope.closed.clone());
-    let viewer = live::attach(&state, tab, &session, &viewport).await?;
+    let viewer = live::attach(&state, tab, &session, args).await?;
     let mut frames = viewer.feed.frame.subscribe();
     frames.mark_changed();
     let stream = ViewStream {

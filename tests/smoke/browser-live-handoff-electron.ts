@@ -8,6 +8,7 @@ const evidence = process.env.BUTLER_BROWSER_EVIDENCE;
 assert.ok(evidence);
 const app = await redesignApp(evidence);
 const stream = new AbortController();
+const legacyStream = new AbortController();
 try {
   console.log(`Electron PID ${await app.main<number>("process.pid")}`);
   let tab = "", modelMessages = "";
@@ -41,12 +42,7 @@ try {
   const post = (seq: number, events: unknown[]) => app.gateway.api(`${path}/input`, {
     method: "POST", body: JSON.stringify({ client, seq, events }), signal: AbortSignal.timeout(5000),
   });
-  const started = performance.now();
-  const response = fetch(new URL(`${path}?width=390&height=844&dpr=2`, app.gateway.url), {
-    headers: { ...app.gateway.authHeaders, accept: "application/vnd.butler.browser-live" },
-    signal: AbortSignal.any([stream.signal, AbortSignal.timeout(30_000)]),
-  });
-  async function* records() {
+  async function* records(response: Promise<Response>) {
     const reply = await response;
     assert.equal(reply.status, 200, "live stream opens");
     assert.ok(reply.body);
@@ -64,7 +60,26 @@ try {
       }
     }
   }
-  const reader = records();
+  const legacyReader = records(fetch(new URL(`${path}?width=720`, app.gateway.url), {
+    headers: { ...app.gateway.authHeaders, accept: "application/vnd.butler.browser-live" },
+    signal: AbortSignal.any([legacyStream.signal, AbortSignal.timeout(30_000)]),
+  }));
+  for (;;) {
+    const next = await legacyReader.next();
+    assert.ok(!next.done, "width-only stream ended before its first frame");
+    if (next.value.type !== 2) continue;
+    assert.ok(next.value.payload[0] === 0xff && next.value.payload[1] === 0xd8, "width-only JPEG frame");
+    break;
+  }
+  assert.equal(await app.main<number>(`${subject}.view.webContents.executeJavaScript("innerWidth")`), before);
+  legacyStream.abort();
+  await waitBrowser(async () => await app.main<boolean>(`!${browser}.phoneLive.feeds.has(${subject}.id)`), "width-only stream stopped");
+  const started = performance.now();
+  const response = fetch(new URL(`${path}?width=390&height=844&dpr=2`, app.gateway.url), {
+    headers: { ...app.gateway.authHeaders, accept: "application/vnd.butler.browser-live" },
+    signal: AbortSignal.any([stream.signal, AbortSignal.timeout(30_000)]),
+  });
+  const reader = records(response);
   const firstFrame = (async () => {
     let meta: { width: number; height: number } | undefined;
     for (;;) {
@@ -105,6 +120,7 @@ try {
   assert.doesNotMatch(modelMessages, /typed-7311/u);
   assert.match(modelMessages, /entered by user \(hidden\)/u);
 } finally {
+  legacyStream.abort();
   stream.abort();
   await app.stop();
 }

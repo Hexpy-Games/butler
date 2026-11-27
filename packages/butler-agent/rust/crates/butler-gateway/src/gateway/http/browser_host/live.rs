@@ -80,7 +80,7 @@ pub(super) async fn attach(
     state: &Arc<HttpState>,
     tab: &str,
     session: &str,
-    viewport: &Value,
+    mut args: Value,
 ) -> Result<Viewer, HttpError> {
     let unavailable = || error(409, "live_unavailable");
     let (viewer, start) = {
@@ -105,9 +105,9 @@ pub(super) async fn attach(
             let sub = Uuid::new_v4().to_string();
             let id = Uuid::new_v4().to_string();
             let (sender, receiver) = oneshot::channel();
+            args["sub"] = json!(sub);
             host.try_send(json!({
-                "id": id, "op": "live.start", "session": session, "tab": tab,
-                "args": {"sub": sub, "viewport": viewport}
+                "id": id, "op": "live.start", "session": session, "tab": tab, "args": args
             }))
             .map_err(|_| unavailable())?;
             hub.pending.insert(id.clone(), sender.into());

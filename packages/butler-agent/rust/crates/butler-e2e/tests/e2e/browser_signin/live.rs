@@ -268,12 +268,14 @@ async fn slow_viewer_gets_latest_frame() -> Result<(), HarnessError> {
     waiting_card(&s, &turn).await?;
 
     let mut stream = Client::new()
-        .get(format!("{}{LIVE}{VIEW}", s.gw.base))
+        .get(format!("{}{LIVE}?width=4000", s.gw.base))
         .bearer_auth(&s.gw.token)
         .send()
         .await?;
     assert_eq!(stream.status(), 200);
     let start = host.last("live.start").unwrap();
+    assert_eq!(start["args"]["width"], 1280);
+    assert!(start["args"].get("viewport").is_none());
     let sub = start["args"]["sub"].as_str().unwrap();
     let upload_path = format!("/internal/browser-host/live/{sub}");
     let mut records = Records::default();
