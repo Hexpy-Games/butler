@@ -99,12 +99,7 @@ async fn typed_input_reaches_only_the_page_and_save_goes_to_main() -> Result<(),
     }
 
     let pin = crate::gateway_pairing::support::helpers::issue(&admin).await?;
-    let (paired, answer) = tokio::join!(
-        s.gw.post("/devices/pair", json!({"code":pin["code"],"device_name":"Test phone","platform":"ios","public_key":"later","match_code":"47"})),
-        admin.answer_pairing(Some("47")),
-    );
-    answer?;
-    let paired = paired?;
+    let paired = s.gw.post("/devices/pair", json!({"code":pin["code"],"device_name":"Test phone","platform":"ios","public_key":"later"})).await?;
     assert_eq!(paired.status, 201);
     let phone = Gateway::new(
         s.gw.base.clone(),
