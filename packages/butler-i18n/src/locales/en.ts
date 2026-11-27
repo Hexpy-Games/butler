@@ -522,7 +522,6 @@ export const enUsCopy: AppCopy = {
     glow: { busy: "View browser · Butler is using it", attention: "View browser · Needs you", error: "View browser · Error" },
   },
   mobile: {
-    browserLive: { screen: "Browser screen", keyboard: "Keyboard", connecting: "Connecting…", ended: "Screen closed.", failed: "Couldn't open the screen." },
     appName: "Butler",
     pair: {
       title: "Connect to Butler",
@@ -642,6 +641,7 @@ export const enUsCopy: AppCopy = {
     outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed.", savedToLibrary: "Saved to Library.", saveFailed: "Could not save to Library." },
     library: { changeFailed: "Could not save the change." },
     automations: { nextRun: "Next run", lastRun: "Last run", deleteFailed: "Could not delete the schedule.", edit: "Edit", allRuns: "All runs" },
+    browserLive: { screen: "Browser screen", keyboard: "Keyboard", connecting: "Connecting…", ended: "Screen closed.", failed: "Couldn't open the screen." },
   },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",

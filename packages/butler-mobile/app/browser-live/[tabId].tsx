@@ -4,7 +4,7 @@ import { LiveScreen } from "@/browserLive/LiveScreen";
 export default function BrowserLiveRoute() {
   const { tabId, session, request } = useLocalSearchParams<{ tabId: string; session?: string; request?: string }>();
   return <>
-    <Stack.Screen options={{ presentation: "fullScreenModal", headerShown: false }} />
+    <Stack.Screen options={{ headerShown: false }} />
     <LiveScreen tabId={tabId} session={session ?? ""} request={request ?? ""} />
   </>;
 }

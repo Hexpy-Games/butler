@@ -20,6 +20,7 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
   const [pending, setPending] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const closed = useRef(false);
+  const handingBack = useRef(false);
   const width = Math.round(Math.max(stage.width, stage.height) * Math.min(PixelRatio.get(), 2));
   const { size, uri, status } = useLiveFrames(route, pairing?.deviceToken, tabId, width);
   const box = useMemo(() => size ? fit(stage, size) : null, [stage, size]);
@@ -31,12 +32,13 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
   useEffect(() => {
     if (status !== "ended" || closed.current) return;
     closed.current = true;
-    showToast({ message: labels.ended });
+    if (!handingBack.current) showToast({ message: labels.ended });
     router.back();
   }, [status, labels.ended]);
 
   const done = async () => {
-    if (!client || pending || closed.current) return;
+    if (!client || handingBack.current || closed.current) return;
+    handingBack.current = true;
     setPending(true);
     try {
       await client.request(`/authority-requests/${encodeURIComponent(request)}/hand-back?session_id=${encodeURIComponent(session)}`, { body: {} });
@@ -45,6 +47,7 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
         router.back();
       }
     } catch {
+      handingBack.current = false;
       if (!closed.current) showToast({ message: copy.interfaceDetails.decisionFailed, tone: "error" });
     } finally {
       setPending(false);

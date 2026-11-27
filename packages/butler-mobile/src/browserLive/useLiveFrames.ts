@@ -79,6 +79,9 @@ function connect(
           update({ status: body?.error?.code === "live_unavailable" ? "failed" : "ended" });
           return;
         }
+      } else if (response.status >= 400 && response.status < 500) {
+        if (!stopped && !signal.aborted) update({ status: "failed" });
+        return;
       }
       if (!response.ok || !response.body) throw new Error("Browser live stream unavailable");
       reader = response.body.getReader();
