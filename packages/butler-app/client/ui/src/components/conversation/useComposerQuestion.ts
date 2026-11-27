@@ -83,7 +83,7 @@ export function useComposerQuestion(): {
         o.kind === "password_setup" && response[index]?.selected.includes(o.id))).at(0);
       if (option) {
         const summary = findSessionSummary(useButlerStore.getState().navigation, sessionId);
-        if (summary && !summary.computer_id) {
+        if (!summary?.computer_id) {
           setSetup({ key, name: option.description ?? "", requestRef: request.request_ref, answers });
           return;
         }

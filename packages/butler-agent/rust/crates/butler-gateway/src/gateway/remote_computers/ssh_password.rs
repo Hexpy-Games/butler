@@ -86,7 +86,11 @@ fn classify(output: &HookOutput, requests: usize) -> Result<(), HttpError> {
             "Unsupported computer.",
         )),
         Some(255) if output.stderr.contains("Permission denied") => {
-            Err(remote_error("ssh_password_wrong", "Wrong password."))
+            if requests == 0 {
+                Err(install_failed())
+            } else {
+                Err(remote_error("ssh_password_wrong", "Wrong password."))
+            }
         }
         Some(255) | None => Err(connection_error(&output.stderr)),
         _ => Err(install_failed()),

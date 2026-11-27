@@ -72,7 +72,7 @@ fn password_fixture(
 
 async fn add_with_password(
     password: &str,
-) -> Result<(Scenario, RemoteHome, TestSshd, AdminClient, String), HarnessError> {
+) -> Result<(Scenario, RemoteHome, TestSshd, AdminClient, String, Files), HarnessError> {
     let setup = Setup::new("COMPUTER-SSH-KEY-ADD")?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.home = format!(
@@ -159,7 +159,7 @@ async fn add_with_password(
     assert_eq!(started.status, 200, "{started:?}");
     assert_eq!(started.data(), &json!({"state":"ready","version":version}));
     assert_eq!(fs::read_to_string(&count)?, "2\n");
-    Ok((s, remote, sshd, api, id))
+    Ok((s, remote, sshd, api, id, files))
 }
 
 #[tokio::test]
@@ -169,7 +169,7 @@ async fn add_with_password_installs_and_uses_the_device_key() -> Result<(), Harn
         Path::new("/usr/sbin/sshd").exists(),
         "Requires a local sshd"
     );
-    let (s, remote, _sshd, _api, _id) = add_with_password(PASSWORD).await?;
+    let (s, remote, _sshd, _api, _id, _files) = add_with_password(PASSWORD).await?;
     drop(remote);
     s.finish().await
 }
@@ -287,7 +287,7 @@ async fn delete_removes_the_key_line() -> Result<(), HarnessError> {
         Path::new("/usr/sbin/sshd").exists(),
         "Requires a local sshd"
     );
-    let (s, remote, _sshd, api, id) = add_with_password(PASSWORD).await?;
+    let (s, remote, _sshd, api, id, _files) = add_with_password(PASSWORD).await?;
     let removed = api
         .send(Method::DELETE, &format!("/computers/{id}"), None, &[])
         .await?;
@@ -342,7 +342,7 @@ async fn password_never_persists() -> Result<(), HarnessError> {
     let password = format!("ssh-key-persistence-{}", uuid::Uuid::new_v4());
     let encoded = STANDARD.encode(&password);
     let needles = [password.as_bytes(), encoded.as_bytes()];
-    let (added, remote, _sshd, _api, _id) = add_with_password(&password).await?;
+    let (added, remote, _sshd, _api, _id, _files) = add_with_password(&password).await?;
     let (retried, _retry_sshd, _server) = retry_with_password(&password).await?;
     for s in [&added, &retried] {
         for root in [

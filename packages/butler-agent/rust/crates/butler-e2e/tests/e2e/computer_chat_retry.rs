@@ -119,7 +119,8 @@ async fn chat_add_asks_for_a_key_file_after_key_login_fails() -> Result<(), Harn
          "options":[{"id":"none","label":"설정 안 함"}]},
         {"id":"computer_add:ssh_auth_failed.key_file","eyebrow":"키 파일",
          "title":"키로 로그인할 수 없습니다. Studio의 키 파일","kind":"single","allow_custom":true,
-         "options":[{"id":"none","label":"설정 안 함"}]}
+         "options":[{"id":"password_setup","label":"비밀번호로 연결 설정","description":"Studio","kind":"password_setup"},
+                    {"id":"none","label":"설정 안 함"}]}
     ]})).await?;
     assert_eq!(listed(&api).await?, json!([]));
     reply(
