@@ -244,6 +244,53 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .is_ok_and(|text| text.contains("\"v\":2"))
     })
     .await;
+    let logs = s.sandbox.data.join("cognition/consolidation/logs");
+    let events: Vec<Value> = std::fs::read_dir(logs)?
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .flat_map(|text| {
+            text.lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect::<Vec<Value>>()
+        })
+        .collect();
+    let standing: Vec<_> = events
+        .iter()
+        .filter(|event| event["phase"] == "standing_facts")
+        .collect();
+    assert_eq!(standing.len(), 1, "{events:?}");
+    let standing = standing[0];
+    assert_eq!(standing["status"], "ok", "{standing}");
+    assert_eq!(standing["metrics"]["calls"], 1, "{standing}");
+    assert!(
+        standing["metrics"]["sources_folded"].as_u64().unwrap() >= 1,
+        "{standing}"
+    );
+    assert!(
+        standing["metrics"]["lines_added"].as_u64().unwrap() >= 1,
+        "{standing}"
+    );
+    assert!(
+        standing["metrics"]["bytes"].as_u64().unwrap() > 0,
+        "{standing}"
+    );
+    for event in events.iter().filter(|event| event["phase"] == "health") {
+        assert!(
+            event["metrics"]["memory_chunks_count"].as_i64().unwrap() >= 1,
+            "{event}"
+        );
+    }
+    assert!(
+        events.iter().all(|event| event["phase"] != "consolidate"),
+        "{events:?}"
+    );
+    let optimize = events
+        .iter()
+        .find(|event| event["phase"] == "optimize")
+        .unwrap();
+    assert!(
+        optimize["metrics"].get("caches_compacted").is_none(),
+        "{optimize}"
+    );
     assert!(server.chat_requests().iter().any(|request| {
         let text = request.to_string();
         text.contains("You keep a short fact sheet about one person")

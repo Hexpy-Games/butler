@@ -7,7 +7,6 @@ mod cache_work;
 mod candidates;
 mod canonical_inventory;
 mod connection;
-mod consolidate;
 pub(in crate::cognition) mod episode_fts;
 mod failure;
 mod identity_decision;
@@ -52,7 +51,6 @@ pub(in crate::cognition) use canonical_inventory::{
     InventoryPhase, InventoryState, InventoryWrite, Uncovered,
 };
 pub use connection::GRAPH_BUSY_TIMEOUT;
-pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
 pub use jobs::{GraphProgress, JobOutcome};
 pub(in crate::cognition) use stage_state::StageWrite;
@@ -90,13 +88,6 @@ pub(super) struct GraphRepository {
 }
 
 impl GraphRepository {
-    pub(in crate::cognition) fn consolidate(
-        &mut self,
-        now_ms: i64,
-        decay_d: f64,
-    ) -> CognitionResult<GraphConsolidateMetrics> {
-        consolidate::run(self.connection_mut()?, now_ms, decay_d)
-    }
     pub(in crate::cognition) fn removable_vector_keys(&self) -> CognitionResult<Vec<String>> {
         vector_optimize::removable_keys(self.connection()?)
     }

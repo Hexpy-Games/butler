@@ -1,24 +1,21 @@
-//! Required native effects for the source-configured four-phase memory cycle.
+//! Required native effects for the source-configured memory cycle.
 
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
-    ConfiguredPhase, ConfiguredPhaseExecutor, ConfiguredPhaseFuture, GraphConsolidationService,
-    MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeOutcome,
-    VectorOptimizeService,
+    ConfiguredPhase, ConfiguredPhaseExecutor, ConfiguredPhaseFuture, MemoryHealthService,
+    MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeOutcome, VectorOptimizeService,
 };
 
 pub(in crate::host) struct ConfiguredPhases {
     pub consumer: Arc<MemorySyncConsumer>,
-    pub consolidate: GraphConsolidationService,
     pub optimize: VectorOptimizeService,
     pub capsules: Arc<ProjectCapsuleService>,
     pub health: MemoryHealthService,
     pub generation_id: String,
-    pub activation_decay_d: f64,
     pub project_capsule_refresh_limit: usize,
 }
 
@@ -48,16 +45,6 @@ impl ConfiguredPhaseExecutor for ConfiguredPhases {
                         "generationId":self.generation_id,
                     }))
                 }
-                ConfiguredPhase::Consolidate => {
-                    let now: chrono::DateTime<chrono::Utc> = SystemTime::now().into();
-                    self.consolidate
-                        .run(
-                            &self.generation_id,
-                            now.timestamp_millis(),
-                            self.activation_decay_d,
-                        )
-                        .await
-                }
                 ConfiguredPhase::Optimize => {
                     let outcome = self
                         .optimize
@@ -71,12 +58,10 @@ impl ConfiguredPhaseExecutor for ConfiguredPhases {
                             json!({"available":false,"reason":reason,"vectors_pruned":vectors_pruned})
                         }
                         VectorOptimizeOutcome::Metrics {
-                            caches_compacted,
-                            summaries_re_embedded,
                             vectors_pruned,
                             lancedb_compacted,
                         } => {
-                            json!({"caches_compacted":caches_compacted,"summaries_re_embedded":summaries_re_embedded,"vectors_pruned":vectors_pruned,"lancedb_compacted":lancedb_compacted})
+                            json!({"vectors_pruned":vectors_pruned,"lancedb_compacted":lancedb_compacted})
                         }
                     })
                 }

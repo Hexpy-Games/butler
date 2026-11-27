@@ -186,9 +186,7 @@ fn complete(
     Ok(ProviderPromptResult {
         text,
         model: reported_model.to_owned(),
-        usage: (config.metadata.provider_id == "openai")
-            .then_some(decoded.usage)
-            .flatten(),
+        usage: decoded.usage,
     })
 }
 

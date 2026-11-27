@@ -1,6 +1,6 @@
 //! Read-only source-compatible memory health summary for consolidation metrics.
 //!
-//! [`MemoryHealthService`] gathers the legacy stores, the last maintenance
+//! [`MemoryHealthService`] gathers the serving store's counts, the last maintenance
 //! run (`maintenance`), the writer lock and the serving generation
 //! (`serving`) into a [`MemoryHealthReport`] (`sources`, typed in `report`).
 
@@ -60,9 +60,9 @@ impl MaintenanceStatus {
 /// A memory health reading.
 #[derive(Clone, Debug)]
 pub struct MemoryHealthReport {
-    /// Legacy memory chunks.
+    /// Memory chunks of the store that serves recall.
     pub memory_chunks_count: i64,
-    /// Legacy vector rows, when a vector snapshot exists.
+    /// Vector rows of the store that serves recall, when known.
     pub vector_rows_count: Option<f64>,
     /// State of the maintenance runs.
     pub maintenance_status: MaintenanceStatus,
