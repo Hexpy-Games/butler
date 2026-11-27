@@ -1,6 +1,8 @@
 //! A native app trades a pairing code for its own device token (JSON); see
 //! `connect` for browsers.
 use super::super::{HttpError, HttpState, error::json, read_body_with_limit};
+use super::browser_session::{Decision, PairingRequest};
+use super::keys::Keyed;
 use crate::gateway::{
     ButlerAccountRequest, DeviceKind, GatewayApplicationError, PUSH_KINDS,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -32,6 +34,8 @@ struct PairRequest {
     code: String,
     device_name: String,
     platform: String,
+    #[serde(default)]
+    match_code: String,
     #[serde(default)]
     noise_static: Option<String>,
 }
@@ -77,21 +81,48 @@ pub(in crate::gateway::http) async fn pair_device_request(
             "device_name (1-64 characters) and platform (ios or android) are required.",
         ));
     };
+    validate_match_code(&pair.match_code)?;
     let code = pair.code.trim();
     if code.len() != 8 || !code.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(super::connect::invalid_code());
     }
+    let pairing = PairingRequest {
+        device_name: name.into(),
+        platform: pair.platform.trim().to_ascii_lowercase(),
+        match_code: pair.match_code,
+        choices: Vec::new(),
+    };
+    let change = state.remote.changes.lock().await;
+    let (keyed, pairing_id) =
+        redeem_device(state, &key, code, &ip, pairing, noise_static.is_some()).await?;
+    drop(change);
+    let mut pending = wait_for_pairing(keyed, &pairing_id).await?;
     let _change = state.remote.changes.lock().await;
-    state.pairing.check(&key)?;
+    let sessions = pending.keyed.sessions.as_ref().ok_or(HttpError::Internal)?;
+    let response =
+        paired_response(state, sessions, &pairing_id, name, &ip, kind, noise_static).await?;
+    pending.disarm();
+    Ok(response)
+}
+
+async fn redeem_device(
+    state: &HttpState,
+    key: &str,
+    code: &str,
+    ip: &str,
+    pairing: PairingRequest,
+    has_noise_static: bool,
+) -> Result<(Arc<Keyed>, String), HttpError> {
+    state.pairing.check(key)?;
     let keyed = state
         .security
         .sessions()
-        .ok_or_else(|| super::connect::rejected(state, &key))?;
+        .ok_or_else(|| super::connect::rejected(state, key))?;
     let sessions = keyed
         .sessions
         .as_ref()
-        .ok_or_else(|| super::connect::rejected(state, &key))?;
-    if noise_static.is_some()
+        .ok_or_else(|| super::connect::rejected(state, key))?;
+    if has_noise_static
         && let Some(tunnel) = &state.tunnel
         && state.devices.noise_device_count() >= 5
         && !matches!(tunnel.plan().await?.as_deref(), Some("pro" | "enterprise"))
@@ -102,10 +133,66 @@ pub(in crate::gateway::http) async fn pair_device_request(
             "Remove a paired phone first.",
         ));
     }
-    let Some(Some(pairing_id)) = sessions.redeem(code, true, &ip) else {
-        return Err(super::connect::rejected(state, &key));
+    let Some(Some(pairing_id)) = sessions.redeem(code, true, ip, Some(pairing)) else {
+        return Err(super::connect::rejected(state, key));
     };
-    paired_response(state, sessions, &pairing_id, name, &ip, kind, noise_static).await
+    Ok((keyed, pairing_id))
+}
+
+pub(super) fn validate_match_code(code: &str) -> Result<(), HttpError> {
+    if code.len() == 2 && code.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Ok(());
+    }
+    Err(HttpError::public(
+        400,
+        "invalid_request",
+        "match_code (2 digits) is required.",
+    ))
+}
+
+pub(super) struct PendingPairing<'a> {
+    keyed: Arc<Keyed>,
+    id: Option<&'a str>,
+}
+
+impl PendingPairing<'_> {
+    pub(super) fn disarm(&mut self) {
+        self.id = None;
+    }
+}
+
+impl Drop for PendingPairing<'_> {
+    fn drop(&mut self) {
+        if let Some(id) = self.id
+            && let Some(sessions) = &self.keyed.sessions
+        {
+            sessions.abandon(id);
+        }
+    }
+}
+
+pub(super) async fn wait_for_pairing(
+    keyed: Arc<Keyed>,
+    id: &str,
+) -> Result<PendingPairing<'_>, HttpError> {
+    let pending = PendingPairing {
+        keyed,
+        id: Some(id),
+    };
+    let sessions = pending.keyed.sessions.as_ref().ok_or(HttpError::Internal)?;
+    match sessions.wait_decision(id).await {
+        Decision::Approved => Ok(pending),
+        Decision::Rejected => Err(HttpError::public(
+            403,
+            "pairing_rejected",
+            "The computer declined this device.",
+        )),
+        Decision::Expired => Err(HttpError::public(
+            410,
+            "pairing_expired",
+            "No answer from the computer. Try again.",
+        )),
+    }
 }
 
 fn validate_noise_static(

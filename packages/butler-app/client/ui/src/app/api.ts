@@ -609,6 +609,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const action = method === "POST" ? "issuePairingCode" : "getPairingStatus";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
+  if (method === "POST" && url.pathname === "/security/pairing/decision") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "decidePairing", parseBody(options.body)));
+  }
   if (url.pathname === "/security/devices" && (method === "GET" || method === "DELETE")) {
     const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));

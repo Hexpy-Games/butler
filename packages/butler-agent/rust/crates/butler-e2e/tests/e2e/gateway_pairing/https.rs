@@ -55,15 +55,22 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
         ("cf-visitor", "malformed", false),
     ] {
         let pin = issue(&app).await?;
-        let response = browser
-            .post(format!("{}/connect", s.gw.base))
-            .header("host", "butler.example.com")
-            .header("origin", "https://butler.example.com")
-            .header("sec-fetch-site", "same-origin")
-            .header(name, value)
-            .form(&[("code", pin["code"].as_str().unwrap())])
-            .send()
-            .await?;
+        let (response, answer) = tokio::join!(
+            browser
+                .post(format!("{}/connect", s.gw.base))
+                .header("host", "butler.example.com")
+                .header("origin", "https://butler.example.com")
+                .header("sec-fetch-site", "same-origin")
+                .header(name, value)
+                .form(&[
+                    ("code", pin["code"].as_str().unwrap()),
+                    ("match_code", "47")
+                ])
+                .send(),
+            app.answer_pairing(Some("47")),
+        );
+        answer?;
+        let response = response?;
         assert_eq!(response.status().as_u16(), 303);
         let cookie = response.headers()["set-cookie"].to_str().unwrap();
         assert_eq!(
@@ -83,7 +90,12 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
     let host_cookie = host_cookie.unwrap();
     assert_eq!(read(&s.gw, &browser, &host_cookie).await?, 200);
     let pin = issue(&app).await?;
-    let local = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let (local, answer) = tokio::join!(
+        connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let local = local?;
     assert_eq!(local.status().as_u16(), 303);
     assert!(
         !local.headers()["set-cookie"]
@@ -92,14 +104,21 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
             .contains("Secure")
     );
     let pin = issue(&app).await?;
-    let rewritten = browser
-        .post(format!("{}/connect", s.gw.base))
-        .header("origin", "https://butler.example.com")
-        .header("sec-fetch-site", "same-origin")
-        .header("x-forwarded-proto", "https")
-        .form(&[("code", pin["code"].as_str().unwrap())])
-        .send()
-        .await?;
+    let (rewritten, answer) = tokio::join!(
+        browser
+            .post(format!("{}/connect", s.gw.base))
+            .header("origin", "https://butler.example.com")
+            .header("sec-fetch-site", "same-origin")
+            .header("x-forwarded-proto", "https")
+            .form(&[
+                ("code", pin["code"].as_str().unwrap()),
+                ("match_code", "47")
+            ])
+            .send(),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let rewritten = rewritten?;
     assert_eq!(rewritten.status().as_u16(), 303);
     assert!(
         rewritten.headers()["set-cookie"]
@@ -111,7 +130,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
         .post(format!("{}/connect", s.gw.base))
         .header("host", "unregistered.example.com")
         .header("x-forwarded-proto", "https")
-        .form(&[("code", "00000000")])
+        .form(&[("code", "00000000"), ("match_code", "47")])
         .send()
         .await?;
     assert_eq!(denied.status().as_u16(), 403);

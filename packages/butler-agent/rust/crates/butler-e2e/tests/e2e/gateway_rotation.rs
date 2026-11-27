@@ -56,7 +56,7 @@ async fn connect_form(
     Ok(browser
         .post(url(gw, "/connect"))
         .header("origin", gw.base.as_str())
-        .form(&[("code", code)])
+        .form(&[("code", code), ("match_code", "47")])
         .send()
         .await?)
 }
@@ -136,7 +136,7 @@ async fn sec_10_rotation_revokes_the_old_code_everywhere() -> Result<(), Harness
         .send(Method::POST, "/security/pairing", None, &[])
         .await?;
     let typed =
-        connect_code_signs_in(&s.gw, &browser, pin.data()["code"].as_str().unwrap()).await?;
+        connect_code_signs_in(&s.gw, &browser, pin.data()["code"].as_str().unwrap(), &app).await?;
     let stream = LiveEvents::subscribe(&s.gw, 0).await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -227,6 +227,7 @@ async fn connect_code_signs_in(
     gw: &Gateway,
     browser: &reqwest::Client,
     code: &str,
+    app: &AdminClient,
 ) -> Result<String, HarnessError> {
     let page = browser
         .get(url(gw, "/connect"))
@@ -239,7 +240,12 @@ async fn connect_code_signs_in(
     let wrong = connect_form(gw, browser, "not-the-code").await?;
     assert_eq!(wrong.status().as_u16(), 401);
     assert!(wrong.headers().get("set-cookie").is_none());
-    let signed_in = connect_form(gw, browser, code).await?;
+    let (signed_in, answer) = tokio::join!(
+        connect_form(gw, browser, code),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let signed_in = signed_in?;
     assert_eq!(signed_in.status().as_u16(), 303);
     let cookie = cookie_pair(signed_in.headers());
     assert_eq!(page_read(gw, browser, &cookie).await?, 200);

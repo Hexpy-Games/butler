@@ -34,6 +34,7 @@ const SECURITY_ROUTES = Object.freeze({
   setTunnel: { method: "PUT", path: "/security/tunnel", payload: true },
   issuePairingCode: { method: "POST", path: "/security/pairing" },
   getPairingStatus: { method: "GET", path: "/security/pairing" },
+  decidePairing: { method: "POST", path: "/security/pairing/decision", payload: true },
   listPairedDevices: { method: "GET", path: "/security/devices" },
   revokePairedDevice: { method: "DELETE", path: "/security/devices", device: true },
   revokeAllPairedDevices: { method: "DELETE", path: "/security/devices" },
