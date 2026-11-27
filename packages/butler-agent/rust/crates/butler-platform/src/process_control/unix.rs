@@ -131,6 +131,14 @@ pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.process_group(0)
 }
 
+pub(super) fn detach_outliving_session(command: &mut Command) -> &mut Command {
+    detach(command)
+}
+
+pub(super) fn breakaway_denied(_error: &io::Error) -> bool {
+    false
+}
+
 /// SIGINT and SIGTERM, in that order; for a session, also SIGHUP and SIGPIPE.
 #[derive(Debug)]
 pub(super) struct ShutdownRequests {

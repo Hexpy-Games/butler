@@ -194,6 +194,16 @@ pub fn detach(command: &mut Command) -> &mut Command {
     sys::detach(command)
 }
 
+/// Detach a process that must outlive the login or SSH session that started it.
+pub fn detach_outliving_session(command: &mut Command) -> &mut Command {
+    sys::detach_outliving_session(command)
+}
+
+/// Whether a spawn with `detach_outliving_session` failed because the caller's Job Object forbids breakaway.
+pub fn breakaway_denied(error: &io::Error) -> bool {
+    sys::breakaway_denied(error)
+}
+
 /// Keep a detached child from retaining this controller's inherited output
 /// pipes in addition to its explicitly redirected streams. Unix is unchanged.
 pub fn prepare_detached_spawn() -> io::Result<()> {

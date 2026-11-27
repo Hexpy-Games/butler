@@ -174,3 +174,70 @@ async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Res
     sandbox.mark_success();
     Ok(())
 }
+
+#[tokio::test]
+async fn remote_service_answers_relay_requests_and_exits_when_idle() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut sandbox = Sandbox::new("REMOTE-RELAY")?;
+    let mut launch = Launch::new(&sandbox)?;
+    if butler_platform::process_control::SIGNALS {
+        // Unix socket paths are limited to about 100 bytes.
+        launch.data = PathBuf::from(format!(
+            "/tmp/bre-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir(&launch.data)?;
+    }
+    let data = RemoteData(launch);
+    let output = data
+        .0
+        .command_without_local_auth()
+        .args(["start", "--remote", "--data"])
+        .arg(&data.0.data)
+        .arg("--json")
+        .env("BUTLER_REMOTE_IDLE_SECONDS", "30")
+        .output()?;
+    assert!(
+        output.status.success(),
+        "start failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let started: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(started["ok"], true);
+    let record = instance_record(&data.0.data).ok_or_else(|| harness_error("no service record"))?;
+    let pid = record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| harness_error("no service PID"))?;
+    let reply = data
+        .0
+        .env_command(&data.0.binary)
+        .env_remove("BUTLER_APP_LOCAL_AUTH_REQUIRED")
+        .env_remove("BUTLER_APP_LOCAL_AUTH_FILE")
+        .arg("--remote-request")
+        .arg(&data.0.data)
+        .args(["GET", "/health"])
+        .stdin(std::process::Stdio::null())
+        .output()?;
+    assert!(
+        reply.status.success(),
+        "relay failed: {}",
+        String::from_utf8_lossy(&reply.stderr)
+    );
+    let reply: Value = serde_json::from_slice(&reply.stdout)?;
+    assert_eq!(reply["status"], 200);
+    let idle_started = Instant::now();
+    while process_start(pid)
+        .map_err(|error| harness_error(error.to_string()))?
+        .is_some()
+    {
+        if idle_started.elapsed() >= Duration::from_secs(120) {
+            return Err(harness_error("remote service did not exit when idle"));
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    drop(data);
+    sandbox.mark_success();
+    Ok(())
+}

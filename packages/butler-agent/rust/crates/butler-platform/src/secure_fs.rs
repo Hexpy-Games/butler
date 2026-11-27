@@ -57,6 +57,8 @@ use unix as sys;
 mod windows;
 #[cfg(windows)]
 use windows as sys;
+#[cfg(windows)]
+pub(crate) use windows::{owned_by_current_user, protect_kernel_object};
 
 /// Whether this host can restrict files and directories to their owner.
 pub const OWNER_ONLY: bool = sys::OWNER_ONLY;

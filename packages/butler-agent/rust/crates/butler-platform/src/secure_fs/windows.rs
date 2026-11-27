@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::replace_retry::{DeleteProbe, replacement_retry_allowed};
 use super::{ExchangeError, FileIdentity, FileMode, FileTime, Writability};
 mod acl;
+pub(crate) use acl::{owned_by_current_user, protect_kernel_object};
 
 pub(super) const OWNER_ONLY: bool = false;
 pub(super) const PERMISSION_MODES: bool = false;

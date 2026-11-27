@@ -410,13 +410,23 @@ fn spawn_service(
     if std::env::args_os().any(|s| s == "--safe-mode") {
         command.arg("--safe-mode");
     }
-    if std::env::args_os().any(|s| s == "--remote") {
+    let remote = std::env::args_os().any(|s| s == "--remote");
+    if remote {
         command.arg("--remote");
     }
     process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
-    process_control::detach(&mut command);
+    if remote {
+        process_control::detach_outliving_session(&mut command);
+    } else {
+        process_control::detach(&mut command);
+    }
     command.spawn().map_err(|source| {
-        crate::host::HostError::new("native_service_spawn_failed").with_source(source)
+        let code = if remote && process_control::breakaway_denied(&source) {
+            "remote_service_breakaway_denied"
+        } else {
+            "native_service_spawn_failed"
+        };
+        crate::host::HostError::new(code).with_source(source)
     })
 }
 

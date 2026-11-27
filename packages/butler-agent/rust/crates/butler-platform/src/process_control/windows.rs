@@ -34,6 +34,8 @@ const DETACHED_PROCESS: u32 = 0x0000_0008;
 /// `CREATE_NEW_PROCESS_GROUP`: console control events of the caller's group
 /// do not reach the child.
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+/// CREATE_BREAKAWAY_FROM_JOB: the child leaves the caller's Job Object (an SSH session's).
+const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 /// `CREATE_NO_WINDOW`: a console program runs without opening a window,
 /// even when this process (a detached service) has no console to share.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -176,6 +178,14 @@ pub(super) fn prepare_detached_spawn() -> io::Result<()> {
 
 pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+}
+
+pub(super) fn detach_outliving_session(command: &mut Command) -> &mut Command {
+    command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB)
+}
+
+pub(super) fn breakaway_denied(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(5)
 }
 
 /// The console control events that ask a console process to stop. A
