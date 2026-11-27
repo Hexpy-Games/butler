@@ -8,6 +8,9 @@ import { sessionMark } from "@/conversation/sessions";
 import { ListModeMenu } from "./ListModeMenu";
 import type { ListMode } from "./listMode";
 
+/** Home rows are ungrouped ListRows: padX --space-sm, chevron ArrowRight01 at --icon-size-md whose ink ends at x 15.75 of 24 (path x 15 + half the 1.5 stroke). */
+const ROW_CHEVRON_INK_INSET = 8.25 / 24;
+
 export function HomeShortcuts({ status, general, mode, onModeChange }: { status?: string; general?: SessionSummary; mode: ListMode; onModeChange(mode: ListMode): void }) {
   const t = useTokens(), app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const mark = general ? sessionMark(general) : null;
@@ -27,7 +30,8 @@ export function HomeShortcuts({ status, general, mode, onModeChange }: { status?
     {status ? <Text variant="caption" tone="tertiary">{status}</Text> : null}
     <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: t.length("--space-sm") }}>
       <View style={{ flex: 1 }}><Text variant="caption" tone="secondary" weight="medium" lines={1}>{app.space.conversationList}</Text></View>
-      <ListModeMenu value={mode} onChange={onModeChange} labels={{ all: app.space.all, recent: app.space.recent }} label={app.space.views} />
+      <ListModeMenu value={mode} onChange={onModeChange} labels={{ all: app.space.all, recent: app.space.recent }} label={app.space.views}
+        endInset={t.length("--space-sm") + t.length("--icon-size-md") * ROW_CHEVRON_INK_INSET} />
     </View>
   </View>;
 }
