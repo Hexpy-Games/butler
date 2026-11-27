@@ -358,6 +358,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/allowed-folders/remove", Handler::Authority),
     ("/internal/browser-host/credentials/{id}", Handler::Browser),
     ("/internal/browser-host/vault/{id}", Handler::Browser),
+    ("/internal/browser-host/inputs/{id}", Handler::Browser),
     ("/internal/browser-host/results/{id}", Handler::Browser),
     ("/internal/browser-host/renders/{id}", Handler::Browser),
     ("/internal/browser-host/images/{id}", Handler::Browser),

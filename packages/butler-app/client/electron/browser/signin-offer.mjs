@@ -20,7 +20,7 @@ export function installSignInOffers(browser) {
     clearPending(tab);
     tab.pendingUsername = { origin, frameOrigin: frame.origin, username, timer: setTimeout(() => clearPending(tab), USERNAME_MS) };
   });
-  ipcMain.on("butler-browser:signin-candidate", async (event, input) => {
+  ipcMain.on("butler-browser:signin-candidate", (event, input) => {
     const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
     const frame = event.senderFrame;
     if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user") return;
@@ -33,10 +33,13 @@ export function installSignInOffers(browser) {
     const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : "";
     if (!username || !password) return;
     // The Agent checks store availability and whether this exact sign-in is already saved.
-    if (!await browser.signInOfferWanted?.({ origin, frame_origin: frameOrigin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
-    clearOffer(tab);
-    tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
-    browser.publish();
+    const check = (async () => {
+      if (!await browser.signInOfferWanted?.({ origin, frame_origin: frameOrigin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
+      clearOffer(tab);
+      tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
+      browser.publish();
+    })().finally(() => { if (tab.offerCheck === check) tab.offerCheck = null; });
+    tab.offerCheck = check;
   });
 }
 

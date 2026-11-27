@@ -2,12 +2,20 @@ import { imageApprovalMedia } from "../images/ImageApprovalMedia";
 import type { ComposerDecisionDetail, ComposerDecisionMedia } from "@/butler-ds";
 import { useBrowserDecisionMedia } from "./useBrowserDecisionMedia";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { approvalRequestView, browserHandoffView, type ApprovalRequestView } from "@/app/approvalRequest.ts";
 import { canOpenHandoffTab, openHandoffTab } from "@/components/browser/browserHandoff.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import type { AuthorityApprovalCard } from "@/app/types.ts";
+
+export type InputKind = "username" | "password" | "otp";
+export interface HandoffInput {
+  origin: string;
+  fields: InputKind[];
+  live: boolean;
+  save_offer: { username: string; host: string } | null;
+}
 
 export interface ComposerAuthorityDecision {
   /** The plain-language question, also shown on the pending attachment. */
@@ -29,7 +37,14 @@ export interface ComposerAuthorityDecision {
   onShowDecision: () => void; onOpenSource: () => void;
   onComposeMessage: () => void;
   /** A step only the user can do in a tab: open the tab or stop; the hand-back resolves it. */
-  handoff?: { canOpenTab: boolean; signIn: boolean; onOpenTab: () => void; onStop: () => void; onDone: () => void };
+  handoff?: {
+    canOpenTab: boolean; signIn: boolean; onOpenTab: () => void; onStop: () => void; onDone: () => void;
+    inputKey: string;
+    loadInput: () => Promise<HandoffInput>;
+    fillInput: (origin: string, values: Partial<Record<InputKind, string>>) => Promise<{ status: string; handed_back: boolean }>;
+    saveInput: (save: boolean) => Promise<{ saved: boolean; handed_back: boolean }>;
+    onHandedBack: () => void;
+  };
 }
 
 export function useComposerAuthorityDecision(): ComposerAuthorityDecision | undefined {
@@ -42,6 +57,9 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [failed, setFailed] = useState<string>();
   const inFlight = useRef(new Set<string>());
+  const inputPath = `/authority-requests/${encodeURIComponent(request?.requestRef ?? "")}/input`;
+  const inputQuery = `?session_id=${encodeURIComponent(sessionId)}`;
+  const loadInput = useCallback(() => api<HandoffInput>(inputPath + inputQuery), [inputPath, inputQuery]);
   if (!request) return undefined;
   const key = `${sessionId}:${request.requestRef}`;
   const settle = async (apply: () => Promise<boolean>) => {
@@ -62,7 +80,10 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
   const handoff = browserHandoffView(request, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
   return {
     media: imageApprovalMedia(request) ?? media,
-    ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
+    ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, inputKey: key, loadInput,
+      fillInput: (origin, values) => api(inputPath + inputQuery, { method: "POST", body: JSON.stringify({ origin, values }) }),
+      saveInput: (save) => api(inputPath + "-save" + inputQuery, { method: "POST", body: JSON.stringify({ save }) }),
+      onHandedBack: () => void useButlerStore.getState().refreshAuthorityApprovals(sessionId),
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
       onStop: () => void stopRequest(request),
       onDone: () => void settle(async () => {

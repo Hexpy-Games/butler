@@ -91,10 +91,14 @@ export function ActivityLayoutHarness() {
   if (streaming && length === 0) messages.pop();
   const turn = { ...HARNESS_SS03_OBSERVER_VIEW.latest_turn!, id: "activity-layout-0",
     state: running ? "running" : "delivered", progress: { safe_progress_rows: rows } };
+  const inputState = params.get("handoff-input");
   const approvalFixture = (window as Window & { butlerApprovalFixture?: unknown }).butlerApprovalFixture;
-  const approval = normalizeApprovalSummary(approvalFixture ?? { action_kind: "other", count: 1, risk: "low",
+  const approval = normalizeApprovalSummary(approvalFixture ?? (inputState ? {
+    action_kind: "other", count: 1, risk: "low", targets: [],
+    operation: { tool: "browser_sign_in_wait", access: "read_only", targets: ["login.example.com"] },
+  } : { action_kind: "other", count: 1, risk: "low",
     targets: [{ kind: "folder", path: "C:\\Users\\test\\Downloads" }], examples: ["C:\\Users\\test\\Downloads"],
-    operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } });
+    operation: { tool: "list_files", access: "read_only", targets: ["C:\\Users\\test\\Downloads"] } }));
   const decision = approvalRequestView({ approval, reason: (window as Window & { butlerApprovalReason?: string }).butlerApprovalReason ?? "", scope: undefined }, appCopy.interfaceTemplates.approvalRequest, appCopy.guided.tools);
   const canOpenTab = params.get("browser") === "1";
   const handoff = browserHandoffView({ approval }, appCopy.interfaceTemplates.approvalRequest, canOpenTab);
@@ -103,7 +107,12 @@ export function ActivityLayoutHarness() {
       <AdaptiveShellSidebar open={false} />
       <AdaptiveShellWorkspace><Stack fill gap="md" data-stub-stream-complete={round === rounds && length === roundText.length}>
       {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision, ...handoff,
-        ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn, onOpenTab: () => {}, onStop: () => {}, onDone: () => {} } } : {}),
+        ...(handoff ? { handoff: {
+          canOpenTab, signIn: handoff.signIn, inputKey: inputState ?? "", onOpenTab: () => {}, onStop: () => {}, onDone: () => {}, onHandedBack: () => {},
+          loadInput: inputState === "fields" ? loadHandoffFields : inputState === "save" ? loadHandoffOffer : loadEmptyHandoff,
+          fillInput: async () => ({ status: "filled", handed_back: false }),
+          saveInput: async (save) => ({ saved: save, handed_back: false }),
+        } } : {}),
         pending: false, pendingCount: 1, scope: undefined, composingMessage: false,
         onAllow: async () => {}, onAllowConversation: async () => {}, onDeny: async () => {},
         onShowDecision: () => {}, onOpenSource: () => {}, onComposeMessage: () => {},
@@ -127,3 +136,11 @@ export function ActivityLayoutHarness() {
     </AdaptiveShell>
   );
 }
+
+const loadEmptyHandoff = async () => ({ origin: "", fields: [], live: false, save_offer: null });
+const loadHandoffFields = async () => ({
+  origin: "https://login.example.com", fields: ["username", "password", "otp"] as ("username" | "password" | "otp")[], live: false, save_offer: null,
+});
+const loadHandoffOffer = async () => ({
+  origin: "https://login.example.com", fields: [], live: false, save_offer: { username: "alex@example.com", host: "login.example.com" },
+});

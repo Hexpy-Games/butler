@@ -38,6 +38,24 @@ try {
   await app.main(publicResolverPatch(module));
   await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: "light", access_mode: "full_access" }) });
   await app.call("open");
+  const handoff = await app.call<string>("create", { owner: "conversation:general", url: fixtures.url("login.fixture-shop.test", "/login") });
+  await app.page.clickSelector('[data-slot="titlebar-leading"] button');
+  await waitBrowser(() => app.main(`Boolean(${tabOf(handoff)}.attached && !${tabOf(handoff)}.covered)`), "hand-off page attached");
+  await waitBrowser(() => page(handoff, "Boolean(document.querySelector('input[type=password]'))"), "hand-off login page");
+  const postsBefore = fixtures.posts.length;
+  const filled = await app.main<{ status: string }>(`(async()=>{
+    const browser=globalThis.browserAgentSubject,tab=${tabOf(handoff)},previous=browser.pullInput;
+    await browser.execute({op:"tab.wait", session:"general", tab:tab.id});
+    browser.pullInput=async()=>({username:"owner@fixture.test",password:${JSON.stringify(CANARY)}});
+    try {return await browser.execute({op:"input.fill",session:"general",tab:tab.id,args:{token:"fixture"}});}
+    finally {browser.pullInput=previous;}
+  })()`);
+  assert.equal(filled.status, "filled");
+  assert.ok(fixtures.posts.slice(postsBefore).includes("login.fixture-shop.test/session"));
+  // The fixture redirects only when both posted values match.
+  await waitBrowser(() => page(handoff, "location.pathname==='/mfa'"), "hand-off sign-in accepted");
+  await waitBrowser(() => app.main(`${tabOf(handoff)}.saveOffer?.username === "owner@fixture.test"`), "hand-off save offer");
+  await app.call("close", { id: handoff });
   const mine = await app.call<string>("create", { url: fixtures.url("login.fixture-shop.test", "/login") });
   await app.click("브라우저");
   await waitBrowser(() => page(mine, "Boolean(document.querySelector('input[type=password]'))"), "login page");

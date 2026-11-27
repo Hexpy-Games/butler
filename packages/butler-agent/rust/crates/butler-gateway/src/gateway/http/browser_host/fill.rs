@@ -10,6 +10,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::Response,
 };
+use butler_platform::secrets::SecretText;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -175,11 +176,24 @@ pub(super) async fn credentials(
     let secret = signin_secrets::get(&state, &fill.entry)
         .await?
         .ok_or_else(|| error(404, "signin_secret_missing"))?;
-    let mut body = zeroize::Zeroizing::new(String::from("{\"password\":"));
-    let quoted = zeroize::Zeroizing::new(
-        serde_json::to_string(secret.expose()).map_err(|_| HttpError::Internal)?,
-    );
-    body.push_str(&quoted);
+    secret_response([("password", secret.expose())])
+}
+
+pub(super) fn secret_response<'a>(
+    values: impl IntoIterator<Item = (&'static str, &'a str)>,
+) -> Result<Response, HttpError> {
+    let mut body = zeroize::Zeroizing::new(String::from("{"));
+    for (index, (kind, text)) in values.into_iter().enumerate() {
+        if index > 0 {
+            body.push(',');
+        }
+        body.push('"');
+        body.push_str(kind);
+        body.push_str("\":");
+        let quoted =
+            zeroize::Zeroizing::new(serde_json::to_string(text).map_err(|_| HttpError::Internal)?);
+        body.push_str(&quoted);
+    }
     body.push('}');
     let mut response = Response::new(Body::from(body.as_bytes().to_vec()));
     *response.status_mut() = StatusCode::OK;
@@ -213,4 +227,86 @@ pub(in crate::gateway::http) fn mint(
         );
     }
     Ok(token)
+}
+
+pub(super) fn token_route(path: &str) -> Option<(&str, &str)> {
+    let (kind, token) = path
+        .strip_prefix("/internal/browser-host/")?
+        .split_once('/')?;
+    matches!(kind, "credentials" | "vault" | "inputs").then_some((kind, token))
+}
+
+pub(super) async fn token_route_call(
+    state: Arc<HttpState>,
+    path: &str,
+    body: &Value,
+) -> Result<Response, HttpError> {
+    match token_route(path) {
+        Some(("credentials", token)) => credentials(state, token, body).await,
+        Some(("vault", token)) => super::pay::secrets(state, token, body).await,
+        Some(("inputs", token)) => super::input::pull(state, token, body).await,
+        _ => Err(HttpError::Internal),
+    }
+}
+
+pub(super) struct InputToken<'a> {
+    state: &'a HttpState,
+    reference: &'a str,
+    pub(super) token: String,
+    generation: u64,
+}
+
+impl<'a> InputToken<'a> {
+    pub(super) fn mint(
+        state: &'a HttpState,
+        reference: &'a str,
+        tab: &str,
+        origin: &Value,
+        values: Vec<(&'static str, SecretText)>,
+    ) -> Result<Self, HttpError> {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        if hub.input_busy.contains(reference) {
+            return Err(error(409, "input_busy"));
+        }
+        let origin = hub
+            .tabs
+            .get(tab)
+            .and_then(|tab| tab["url"].as_str())
+            .and_then(super::pay::origin_of)
+            .filter(|current| origin.as_str() == Some(current.as_str()))
+            .ok_or_else(|| error(409, "page_changed"))?;
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        hub.input_busy.insert(reference.into());
+        hub.inputs.insert(
+            token.clone(),
+            super::input::InputFill {
+                values,
+                origin,
+                expires: Instant::now() + super::input::TTL,
+            },
+        );
+        Ok(Self {
+            state,
+            reference,
+            token,
+            generation: hub.generation,
+        })
+    }
+
+    pub(super) fn remove_token(&self) {
+        if let Ok(mut hub) = self.state.browser.0.lock() {
+            hub.inputs.remove(&self.token);
+        }
+    }
+}
+
+impl Drop for InputToken<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut hub) = self.state.browser.0.lock()
+            && hub.generation == self.generation
+        {
+            hub.inputs.remove(&self.token);
+            hub.input_busy.remove(self.reference);
+        }
+    }
 }

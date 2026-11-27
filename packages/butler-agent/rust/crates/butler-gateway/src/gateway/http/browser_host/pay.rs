@@ -73,7 +73,7 @@ fn refused(reason: &str, recovery: &str) -> Value {
     json!({"status":"not_dispatched","reason":reason,"recovery":recovery})
 }
 
-fn origin_of(raw: &str) -> Option<String> {
+pub(super) fn origin_of(raw: &str) -> Option<String> {
     let url = url::Url::parse(raw).ok()?;
     matches!(url.scheme(), "http" | "https").then(|| url.origin().ascii_serialization())
 }
