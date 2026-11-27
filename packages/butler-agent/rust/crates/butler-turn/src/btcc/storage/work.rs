@@ -13,7 +13,7 @@ mod monitoring;
 mod mutation;
 mod observer;
 mod read;
-mod relation;
+pub(super) mod relation;
 mod review;
 mod scope_selection;
 mod terminal;

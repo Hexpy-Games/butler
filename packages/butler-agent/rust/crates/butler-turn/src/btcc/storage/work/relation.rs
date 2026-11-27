@@ -410,7 +410,7 @@ pub(super) fn create_and_bind(
     })
 }
 
-pub(super) fn abandon(
+pub(in crate::btcc::storage) fn abandon(
     db: &Connection,
     work_id: &str,
     clock: &dyn Fn() -> String,
