@@ -13,12 +13,13 @@ const noop = () => {};
 const site = "example-shop.test", host = "login.example-shop.test";
 
 /** The browser hand-off card: secure fields, typed values, the save-sign-in prompt, and the plain Stop/Done card. */
-export function BrowserHandoffSection() {
+export function BrowserHandoffSection({ state }: { state?: string }) {
+  const shown = (name: string) => !state || state === name;
   return <>
-    <Sample name="fields" fields={["username", "password"]} />
-    <Sample name="typed" fields={["username", "password"]} initial={{ username: "me@example.com", password: "correct-horse-42" }} />
-    <Sample name="save" fields={[]} offer={{ username: "me@example.com", host }} />
-    <Sample name="plain" fields={[]} />
+    {shown("fields") ? <Sample name="fields" fields={["username", "password"]} /> : null}
+    {shown("typed") ? <Sample name="typed" fields={["username", "password"]} initial={{ username: "me@example.com", password: "correct-horse-42" }} /> : null}
+    {shown("save") ? <Sample name="save" fields={[]} offer={{ username: "me@example.com", host }} /> : null}
+    {shown("plain") ? <Sample name="plain" fields={[]} /> : null}
   </>;
 }
 

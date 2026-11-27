@@ -456,7 +456,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "work-activity", title: "WorkActivity", render: () => <WorkActivitySection /> },
   { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
-  { id: "browser-handoff", title: "Browser hand-off", render: () => <BrowserHandoffSection /> },
+  { id: "browser-handoff", title: "Browser hand-off", render: (state) => <BrowserHandoffSection state={state} /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
   { id: "icon", title: "Icon", render: () => <IconSection /> },
