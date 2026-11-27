@@ -56,8 +56,8 @@ export function AssistantMessageBody({ message, running, liveActivity, turnLiveB
           ) : failureNotice ? <AssistantFailureNotice message={message} /> : message.text.trim() || message.initiated?.kind === "work_failed" ? (
             <MessageBubble><AssistantReplyText message={message} refreshFileUrls={refreshFileUrls} /></MessageBubble>
           ) : null}
-          {stewardProgress && <ErrorBoundary fallback={null}><StewardParentProgress progress={stewardProgress} /></ErrorBoundary>}
           <MessageBubbleAttachments>
+            {stewardProgress && <ErrorBoundary fallback={null}><StewardParentProgress progress={stewardProgress} /></ErrorBoundary>}
             {!failureNotice && <AnswerBlocks sets={message.answer_blocks} receipts={message.canon_proposals} messageId={message.id} replyText={message.text}
               sessionId={message.chat_id} turnId={message.turn_id} />}
             {attachments}

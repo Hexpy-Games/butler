@@ -22,6 +22,7 @@ mod tool;
 mod vault;
 mod vault_switch;
 mod wait;
+mod wait_delegated;
 
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use host::{admin, attach, call, call_turn, snapshot, tab};

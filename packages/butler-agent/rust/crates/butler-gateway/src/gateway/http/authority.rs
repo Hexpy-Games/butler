@@ -44,23 +44,19 @@ pub(super) async fn route(
     if method == Method::DELETE
         && let Some(grant) = path.strip_prefix("/authority-permissions/")
     {
-        let grant = decode_component(grant)?;
-        state.application.authority_revoke(owner, grant).await?;
-        return json(
-            StatusCode::OK,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: json!({"revoked":true}),
-            },
-        );
+        return revoke_grant(&state, owner, grant).await;
     }
     if method == Method::POST
         && let Some(rest) = path.strip_prefix("/authority-requests/")
         && let Some((reference, action)) = rest.rsplit_once('/')
-        && matches!(action, "allow" | "deny" | "modify" | "answer")
+        && matches!(action, "allow" | "deny" | "modify" | "answer" | "hand-back")
         && !reference.contains('/')
     {
         let request_ref = decode_component(reference)?;
+        if action == "hand-back" {
+            super::browser_host::hand_back_wait(&state, owner, &request_ref).await?;
+            return accepted(json!({"request_ref":request_ref,"handed_back":true}));
+        }
         let (allow_scope, alternative_input) = match action {
             "allow" | "deny" => (decision_scope(request, action).await?, None),
             "answer" => (None, Some(question_answer(request).await?)),
@@ -79,19 +75,40 @@ pub(super) async fn route(
             })
             .await?;
         timing.mark("decision_done");
-        return json(
-            StatusCode::ACCEPTED,
-            ApiEnvelope {
-                protocol_version: APP_PROTOCOL_VERSION,
-                data: json!({
-                    "request_ref":decision.request_ref,
-                    "decision":decision.decision,
-                    "scheduled":decision.admitted,
-                }),
-            },
-        );
+        return accepted(json!({
+            "request_ref":decision.request_ref,
+            "decision":decision.decision,
+            "scheduled":decision.admitted,
+        }));
     }
     Err(HttpError::public(404, "not_found", "Route not found."))
+}
+
+fn accepted(data: Value) -> Result<Response, HttpError> {
+    let protocol_version = APP_PROTOCOL_VERSION;
+    json(
+        StatusCode::ACCEPTED,
+        ApiEnvelope {
+            protocol_version,
+            data,
+        },
+    )
+}
+
+async fn revoke_grant(
+    state: &HttpState,
+    owner: String,
+    grant: &str,
+) -> Result<Response, HttpError> {
+    let grant = decode_component(grant)?;
+    state.application.authority_revoke(owner, grant).await?;
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data: json!({"revoked":true}),
+        },
+    )
 }
 
 async fn decision_scope(request: Request<Body>, action: &str) -> Result<Option<String>, HttpError> {

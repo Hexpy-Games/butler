@@ -139,7 +139,7 @@ export async function executeBrowser(browser, frame) {
   }
   if (frame.op === "use.started") { startUse(browser, frame); return; }
   if (frame.op === "use.ended") { endUse(browser, frame.args.id, frame.args.abort); return; }
-  if (frame.op === "use.given_back") { for (const tab of [...browser.tabs.values()]) if (tab.owner === `conversation:${frame.session}` && tab.holder === "user") controlTab(browser, tab, "agent"); return; }
+  if (frame.op === "use.given_back") { for (const tab of [...browser.tabs.values()]) if (tab.owner === `conversation:${frame.session}` && tab.holder === "user" && (!frame.tab || tab.id === frame.tab)) controlTab(browser, tab, "agent"); return; }
   if (frame.op === "use.revoked") {
     const tab = browser.tabs.get(frame.tab);
     if (tab?.owner === `conversation:${frame.session}`) { if (tab.agent) browser.close(frame.tab); else controlTab(browser, tab, "user", true); }

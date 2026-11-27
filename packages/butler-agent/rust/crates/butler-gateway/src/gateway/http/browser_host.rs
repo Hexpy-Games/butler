@@ -13,7 +13,7 @@ pub(super) mod reader;
 mod report;
 mod shots;
 pub(super) mod signed_in;
-pub(super) use hand_back::give_back_on_message;
+pub(super) use hand_back::{give_back_on_message, hand_back_wait};
 mod still_delivery;
 mod usage;
 use super::{Client, HttpError, HttpState};

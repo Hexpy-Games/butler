@@ -9,6 +9,53 @@ use tokio_util::sync::CancellationToken;
 /// Why a non-public address does not open in a tab, and where such pages go.
 const NON_PUBLIC: &str = "Browser tabs open only public web addresses. Open a local server with preview_start, and hand a local file to the user with deliver_files (a page or site with output_publish). Never open either with run_command.";
 
+/// A direction to work parked on a browser hand-off hands that tab back, as the
+/// card's Done does, so the work reads the direction at its next round.
+pub(in crate::host::guided::tools) async fn hand_back_directed(
+    owner: &GuidedTools,
+    relation_id: &str,
+) {
+    let Some(client) = Client::new(owner).await else {
+        return;
+    };
+    let encode = |s: &str| url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>();
+    let session = encode(&client.session);
+    let Ok(page) = client
+        .admin
+        .data(
+            Method::GET,
+            &format!("/authority-requests?session_id={session}"),
+            None,
+        )
+        .await
+    else {
+        return;
+    };
+    for request in page["requests"].as_array().map_or(&[][..], Vec::as_slice) {
+        let (Some(reference), Some(source)) = (
+            request["request_ref"].as_str(),
+            request["source_session_id"].as_str(),
+        ) else {
+            continue;
+        };
+        if owner
+            .subsessions
+            .direction_waits_on(relation_id, source)
+            .await
+            .unwrap_or(false)
+        {
+            let path = format!(
+                "/authority-requests/{}/hand-back?session_id={session}",
+                encode(reference)
+            );
+            let _ = client
+                .admin
+                .data(Method::POST, &path, Some(&json!({})))
+                .await;
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(in crate::host::guided::tools) struct Client {
     admin: AdminClient,

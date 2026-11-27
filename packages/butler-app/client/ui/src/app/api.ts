@@ -113,6 +113,7 @@ interface ButlerAppBridge extends PendingAsksBridge {
   revokeAuthorityPermissions?: (input: unknown) => Promise<unknown>;
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  handBackAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
   denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   answerUserQuestions?: (input?: unknown) => Promise<unknown>;
@@ -878,6 +879,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: url.searchParams.get("session_id") ?? undefined,
       requestRef: decodeURIComponent(authorityAllowMatch[1] ?? ""),
       scope: parseBody(options.body).scope,
+    });
+  }
+  const authorityHandBackMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/hand-back$/u,
+  );
+  if (method === "POST" && authorityHandBackMatch) {
+    return await callBridge<T>(bridge, "handBackAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityHandBackMatch[1] ?? ""),
     });
   }
   const authorityRevokeMatch = url.pathname.match(/^\/authority-permissions\/([^/]+)$/u);

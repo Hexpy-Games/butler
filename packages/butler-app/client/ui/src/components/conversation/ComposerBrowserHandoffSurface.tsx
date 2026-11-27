@@ -2,7 +2,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, ComposerDecisionPanel, Globe2, Key, Square, Typo } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 
-/** A step only the user can do in a tab: open the tab (desktop) or stop. The hand-back resolves it; nothing to allow. */
+/** A step only the user can do in a tab: open the tab (desktop), mark it done, or stop. The hand-back resolves it; nothing to allow. */
 export function ComposerBrowserHandoffSurface({ decision, placement }: { placement?: "composer" | "conversation"; decision: ComposerAuthorityDecision & Required<Pick<ComposerAuthorityDecision, "handoff">> }) {
   useAppLocale();
   const copy = appCopy.interfaceTemplates.approvalRequest.signInHandoff;
@@ -14,11 +14,13 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
     eyebrow={copy.eyebrow}
     title={decision.title}
     details={decision.details}
+    error={decision.error}
     onOpen={decision.onOpenSource}
     aside={decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : undefined}
     data-test-class="composer-browser-handoff"
     actions={<ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" iconStart={<Square size="sm" />} onClick={handoff.onStop}>{copy.stop}</Button>
+      <Button type="button" size="sm" variant={handoff.canOpenTab ? "secondary" : "default"} disabled={decision.pending} onClick={handoff.onDone}>{copy.done}</Button>
       {handoff.canOpenTab && <Button type="button" size="sm" onClick={handoff.onOpenTab}>{copy.openTab}</Button>}
     </ButtonContainer>}
   />;

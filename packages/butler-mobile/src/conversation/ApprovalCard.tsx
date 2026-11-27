@@ -52,26 +52,37 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
   </DecisionCard>;
 }
 
-export function BrowserHandoffCard({ card, sessionId, turn, reload }: {
-  card: AuthorityApprovalCard; sessionId: string; turn: SessionView["active_turn"]; reload(): void;
+export function BrowserHandoffCard({ card, view, reload }: {
+  card: AuthorityApprovalCard; view: SessionView; reload(): void;
 }) {
   const copy = getAppCopy(useAppLocale());
   const { client } = useConversation();
-  const [pending, setPending] = useState<"stop" | "done">();
+  const [pending, setPending] = useState<"stop" | "done" | "sent">();
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
-  const view = browserHandoffView(card, copy.interfaceTemplates.approvalRequest);
-  const stop = async () => {
-    if (!client || !turn || inFlight.current) return;
-    inFlight.current = true; setPending("stop"); setFailed(false);
-    try { await client.request(`/turns/${encodeURIComponent(turn.id)}/cancel`, { body: {} }); setPending("done"); reload(); }
+  const sessionId = view.session_id;
+  const turn = view.active_turn;
+  const child = view.steward_children?.find(c => c.session_id === card.sourceSessionId);
+  const handoff = browserHandoffView(card, copy.interfaceTemplates.approvalRequest);
+  const send = async (kind: "stop" | "done", path: string, body: Record<string, string>) => {
+    if (!client || inFlight.current) return;
+    inFlight.current = true; setPending(kind); setFailed(false);
+    try { await client.request(path, { body }); setPending("sent"); reload(); }
     catch { setFailed(true); inFlight.current = false; setPending(undefined); }
   };
-  if (!view) return null;
-  return <DecisionCard eyebrow={copy.interfaceTemplates.approvalRequest.signInHandoff.eyebrow} title={view.title}
+  if (!handoff) return null;
+  const labels = copy.interfaceTemplates.approvalRequest.signInHandoff;
+  return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={failed ? copy.interfaceDetails.decisionFailed : undefined}
-    actions={<ButtonGroup>{card.sourceSessionId && card.sourceSessionId !== sessionId ? null : <Button label={copy.interfaceTemplates.approvalRequest.signInHandoff.stop} variant="secondary"
-      onPress={() => void stop()} loading={pending === "stop"} disabled={!!pending || !turn} />}</ButtonGroup>}>
-    {view.details.map((line, index) => <Text key={index} literal>{line}</Text>)}
+    actions={<ButtonGroup layout="pair">
+      <Button label={labels.stop} variant="secondary" loading={pending === "stop"} disabled={!!pending || (!child && !turn)}
+        onPress={() => {
+          if (child) void send("stop", `/steward-relations/${encodeURIComponent(child.relation.relation_id)}/cancel`, { parent_session_id: sessionId });
+          else if (turn) void send("stop", `/turns/${encodeURIComponent(turn.id)}/cancel`, {});
+        }} />
+      <Button label={labels.done} loading={pending === "done"} disabled={!!pending}
+        onPress={() => void send("done", `/authority-requests/${encodeURIComponent(card.requestRef)}/hand-back?session_id=${encodeURIComponent(sessionId)}`, {})} />
+    </ButtonGroup>}>
+    {handoff.details.map((line, index) => <Text key={index} literal>{line}</Text>)}
   </DecisionCard>;
 }
