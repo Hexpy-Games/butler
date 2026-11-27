@@ -520,6 +520,7 @@ export const koKrCopy: AppCopy = {
     glow: { busy: "브라우저 보기 · 버틀러가 사용 중", attention: "브라우저 보기 · 직접 확인 필요", error: "브라우저 보기 · 오류" },
   },
   mobile: {
+    browserLive: { screen: "브라우저 화면", keyboard: "키보드", connecting: "연결하는 중…", ended: "화면이 닫혔습니다.", failed: "화면을 열 수 없습니다." },
     appName: "버틀러",
     pair: {
       title: "버틀러에 연결",

@@ -522,6 +522,7 @@ export const enUsCopy: AppCopy = {
     glow: { busy: "View browser · Butler is using it", attention: "View browser · Needs you", error: "View browser · Error" },
   },
   mobile: {
+    browserLive: { screen: "Browser screen", keyboard: "Keyboard", connecting: "Connecting…", ended: "Screen closed.", failed: "Couldn't open the screen." },
     appName: "Butler",
     pair: {
       title: "Connect to Butler",
