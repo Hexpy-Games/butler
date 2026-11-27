@@ -193,7 +193,7 @@ fn resolve_seeds(
 }
 
 /// Expands from the resolved nodes over eligible adjacency (none when the
-/// graph channel is not admitted) and identity members.
+/// graph channel is not admitted), identity members, and each seed's linked copies.
 fn expand_graph(
     sources: &IdentitySources<'_>,
     input: &RecallRequest,
@@ -206,6 +206,7 @@ fn expand_graph(
     let graph = sources.graph;
     let admitted = input.admitted_channels.clone().unwrap_or_default();
     let mut source_current = |binding: &IdentitySourceBinding| sources.source_current(binding);
+    let cued = resolved.iter().map(String::as_str).collect::<HashSet<_>>();
     let mut members = |node: &str, limit: usize| {
         let result = graph.identity_members(
             node,
@@ -215,10 +216,21 @@ fn expand_graph(
             &mut source_current,
             &mut || now_millis(),
         )?;
-        Ok::<_, CognitionError>(IdentityMembers {
-            members: result.members,
-            partial: result.partial,
-        })
+        let mut members = result.members;
+        let mut partial = result.partial;
+        if admitted.graph && cued.contains(node) {
+            // A seed is read across every copy linked to it. A node reached by
+            // traversal is not, so a much-linked thing cannot flood the walk.
+            let (copies, cut) =
+                graph.linked_copies(input, node, limit.saturating_sub(members.len()))?;
+            partial |= cut;
+            for copy in copies {
+                if !members.contains(&copy) {
+                    members.push(copy);
+                }
+            }
+        }
+        Ok::<_, CognitionError>(IdentityMembers { members, partial })
     };
     let mut adjacency_cache = HashMap::<(String, usize, usize), (Vec<RecallEdge>, bool)>::new();
     crate::cognition::recall::expand_graph(
