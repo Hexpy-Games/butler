@@ -3,6 +3,7 @@ import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import AlertCircleIcon from "@hugeicons/core-free-icons/AlertCircleIcon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+import ArrowUpDownIcon from "@hugeicons/core-free-icons/ArrowUpDownIcon";
 import AttachmentIcon from "@hugeicons/core-free-icons/AttachmentIcon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import CheckmarkCircle02Icon from "@hugeicons/core-free-icons/CheckmarkCircle02Icon";
@@ -121,6 +122,7 @@ export const icons = {
   CheckIcon: Tick02Icon,
   ChevronRight: ArrowRight01Icon,
   ArrowLeft: ArrowLeft01Icon,
+  ArrowUpDown: ArrowUpDownIcon,
   SendHorizontal: SentIcon,
   Settings: Settings01Icon,
   Square: SquareIcon,

@@ -41,7 +41,7 @@ test("spaceTree projects live nodes in order and visibleRows collapses descendan
   ]);
 });
 
-test("recentRows flattens a canon tree to its sessions, newest first, General included", () => {
+test("recentRows flattens a canon tree to its sessions, newest first", () => {
   const at = (id: string, last_activity_at: string, extra?: Partial<SessionSummary>): SessionSummary => ({
     id, kind: "chat", title: id, session_hint: "", created_at: last_activity_at, updated_at: last_activity_at,
     last_activity_at, unread: false, pinned: false, archived: false, automation_target_count: 0, ...extra,
@@ -59,7 +59,7 @@ test("recentRows flattens a canon tree to its sessions, newest first, General in
   const tree = withCanon(spaceTree(view), new Map([["project", {
     project_id: "project", groups: [{ key: "backlog", kind: "backlog", title: "", rows: [epic] }],
   }]]), "Backlog");
-  expect(recentRows(tree, "General").map(r => [r.key, r.session!.title])).toEqual([
-    ["s:a", "a"], ["s:b", "b"], ["s:nested", "nested"], ["s:old", "old"], ["s:general", "General"],
+  expect(recentRows(tree).map(r => [r.key, r.session!.title])).toEqual([
+    ["s:a", "a"], ["s:b", "b"], ["s:nested", "nested"], ["s:old", "old"],
   ]);
 });

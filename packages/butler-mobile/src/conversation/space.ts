@@ -81,11 +81,10 @@ export function withCanon(tree: ReturnType<typeof spaceTree>, sidebars: Readonly
   return { general: tree.general, children };
 }
 
-/** Desktop's 최신 view: every session once (General under its display title), flat, newest activity first, ties by id. */
-export function recentRows(tree: ReturnType<typeof spaceTree>, generalTitle: string): SpaceRow[] {
+/** Desktop's 최신 view without General (home shows it as its own card): every session row once, flat, newest activity first, ties by id. */
+export function recentRows(tree: ReturnType<typeof spaceTree>): SpaceRow[] {
   const rows = new Map<string, SpaceRow>();
   for (const siblings of tree.children.values()) for (const row of siblings) if (row.session) rows.set(row.key, { ...row, depth: 0 });
-  if (tree.general) rows.set("s:general", { key: "s:general", kind: "session", title: generalTitle, session: { ...tree.general, title: generalTitle }, depth: 0 });
   return [...rows.values()].sort((a, b) => b.session!.last_activity_at.localeCompare(a.session!.last_activity_at) || a.session!.id.localeCompare(b.session!.id));
 }
 
