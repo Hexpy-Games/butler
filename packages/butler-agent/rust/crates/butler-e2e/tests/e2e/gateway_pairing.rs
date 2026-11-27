@@ -21,7 +21,12 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     let events = LiveEvents::subscribe(&s.gw, 0).await?;
     let browser = browser();
     let pin = issue(&app).await?;
-    let response = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let (response, answer) = tokio::join!(
+        connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     assert!(
         !response.headers()["set-cookie"]
@@ -73,7 +78,12 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     assert_eq!(devices(&app).await?, listed);
     assert_eq!(read(&s.gw, &browser, &cookie).await?, 200);
     let other_pin = issue(&app).await?;
-    let other_response = connect(&s.gw, &browser, other_pin["code"].as_str().unwrap()).await?;
+    let (other_response, answer) = tokio::join!(
+        connect(&s.gw, &browser, other_pin["code"].as_str().unwrap()),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let other_response = other_response?;
     let other_cookie = cookie_pair(&other_response);
     let stream = browser
         .get(format!("{}/events/live?cursor=0", s.gw.base))
@@ -176,7 +186,12 @@ async fn sec_14_pairing_codes_are_bounded_single_use_and_post_only() -> Result<(
         rejected(&s.gw, &browser, old["code"].as_str().unwrap()).await?,
         no_pin
     );
-    let paired = connect(&s.gw, &browser, current["code"].as_str().unwrap()).await?;
+    let (paired, answer) = tokio::join!(
+        connect(&s.gw, &browser, current["code"].as_str().unwrap()),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let paired = paired?;
     assert_eq!(paired.status().as_u16(), 303);
     assert_eq!(
         rejected(&s.gw, &browser, current["code"].as_str().unwrap()).await?,
@@ -245,7 +260,12 @@ async fn lan_pairing_code_connect_and_list_device() -> Result<(), HarnessError> 
     let remote = butler_e2e::e2e::gateway::Gateway::new(base, s.gw.token.clone());
     let browser = browser();
     let pin = issue(&app).await?;
-    let response = connect(&remote, &browser, pin["code"].as_str().unwrap()).await?;
+    let (response, answer) = tokio::join!(
+        connect(&remote, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(Some("47")),
+    );
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     assert!(
         !response.headers()["set-cookie"]

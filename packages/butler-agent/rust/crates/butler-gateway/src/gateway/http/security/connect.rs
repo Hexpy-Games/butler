@@ -1,6 +1,8 @@
 //! A browser redeems a one-time code; only POST accepts short pairing codes.
 use super::super::{HttpError, HttpState, read_body_with_limit};
+use super::browser_session::PairingRequest;
 use super::connect_page::ConnectPage;
+use super::device_pair::{validate_match_code, wait_for_pairing};
 use axum::{
     body::Body,
     extract::ConnectInfo,
@@ -12,6 +14,7 @@ use std::sync::Arc;
 
 pub(in crate::gateway::http) const CONNECT_PATH: &str = "/connect";
 pub(in crate::gateway::http) const MAX_FORM_BYTES: usize = 4096;
+const REMOTE_BROWSER: &str = "Remote device · browser";
 
 pub(in crate::gateway::http) async fn connect_request(
     state: &Arc<HttpState>,
@@ -47,7 +50,8 @@ pub(in crate::gateway::http) async fn connect_request(
         None if form => String::new(),
         None => return Ok(ConnectPage::Ask.response()),
     };
-    let _change = state.remote.changes.lock().await;
+    let pairing = pairing_request(form, &code, &encoded)?;
+    let mut change = state.remote.changes.lock().await;
     state.pairing.check(&key)?;
     let keyed = state
         .security
@@ -58,17 +62,63 @@ pub(in crate::gateway::http) async fn connect_request(
         .as_ref()
         .ok_or_else(|| rejected(state, &key))?;
     let paired = sessions
-        .redeem(&code, form, &ip)
+        .redeem(&code, form, &ip, pairing)
         .ok_or_else(|| rejected(state, &key))?;
+    let mut pending = if let Some(id) = &paired {
+        drop(change);
+        let pending = wait_for_pairing(keyed.clone(), id).await?;
+        change = state.remote.changes.lock().await;
+        Some(pending)
+    } else {
+        None
+    };
     let name = if paired.is_some() {
-        "Remote device · browser"
+        REMOTE_BROWSER
     } else {
         "This computer · browser"
     };
+    let (response, id) = connect_response(state, replaced, name, &ip, secure).await?;
+    if let (Some(pairing_id), Some(pending)) = (&paired, &mut pending) {
+        sessions.paired(pairing_id, &id);
+        pending.disarm();
+    }
+    drop(change);
+    Ok(response)
+}
+
+fn pairing_request(
+    form: bool,
+    code: &str,
+    encoded: &[u8],
+) -> Result<Option<PairingRequest>, HttpError> {
+    let mut digits = code.bytes().filter(|&byte| !matches!(byte, b'-' | b' '));
+    if !form || digits.clone().count() != 8 || !digits.all(|byte| byte.is_ascii_digit()) {
+        return Ok(None);
+    }
+    let match_code = url::form_urlencoded::parse(encoded)
+        .find(|(name, _)| name == "match_code")
+        .map(|(_, value)| value.into_owned())
+        .unwrap_or_default();
+    validate_match_code(&match_code)?;
+    Ok(Some(PairingRequest {
+        device_name: REMOTE_BROWSER.into(),
+        platform: "browser".into(),
+        match_code,
+        choices: Vec::new(),
+    }))
+}
+
+async fn connect_response(
+    state: &HttpState,
+    replaced: Option<String>,
+    name: &str,
+    ip: &str,
+    secure: bool,
+) -> Result<(Response, String), HttpError> {
     if let Some(old) = replaced {
         state.devices.revoke(Some(old)).await?;
     }
-    let (cookie, id) = state.devices.pair(name, &ip, secure).await?;
+    let (cookie, id) = state.devices.pair(name, ip, secure).await?;
     let mut payload = Map::new();
     payload.insert("device_id".into(), Value::String(id.clone()));
     payload.insert("name".into(), Value::String(name.into()));
@@ -76,9 +126,6 @@ pub(in crate::gateway::http) async fn connect_request(
         .application
         .publish_gateway_event("security.device_paired", payload)
         .await?;
-    if let Some(pairing_id) = paired {
-        sessions.paired(&pairing_id, &id);
-    }
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::SEE_OTHER;
     let headers = response.headers_mut();
@@ -89,7 +136,7 @@ pub(in crate::gateway::http) async fn connect_request(
         header::REFERRER_POLICY,
         HeaderValue::from_static("same-origin"),
     );
-    Ok(response)
+    Ok((response, id))
 }
 
 pub(super) fn invalid_code() -> HttpError {

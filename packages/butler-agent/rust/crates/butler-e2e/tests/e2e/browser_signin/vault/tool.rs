@@ -142,7 +142,12 @@ async fn phone_allows(
 ) -> Result<(), HarnessError> {
     let phone = browser();
     let code = issue(admin).await?;
-    let cookie = cookie_pair(&connect(&s.gw, &phone, code["code"].as_str().unwrap()).await?);
+    let (paired, answer) = tokio::join!(
+        connect(&s.gw, &phone, code["code"].as_str().unwrap()),
+        admin.answer_pairing(Some("47")),
+    );
+    answer?;
+    let cookie = cookie_pair(&paired?);
     let send = |method: Method, path: String, body: Option<Value>| {
         let mut request = phone
             .request(method, format!("{}{path}", s.gw.base))

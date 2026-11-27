@@ -2,7 +2,7 @@ use super::helpers::*;
 use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::Value;
 use std::{process::Stdio, time::Duration};
-use tokio::io::{AsyncBufReadExt, BufReader, Lines};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Lines};
 
 /// The next issued code with the pairing link printed above it; asserts its QR was drawn.
 async fn next_pairing(
@@ -43,7 +43,7 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
     let mut command = tokio::process::Command::from(s.agent.launch.command());
     let mut child = command
         .args(["remote", "pair"])
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -96,7 +96,24 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
     expected.extend(origins.iter().map(|o| ("a".to_owned(), (*o).to_owned())));
     expected.push(("c".to_owned(), third.clone()));
     assert_eq!(pairs, expected);
-    let response = connect(&s.gw, &browser, &pairs.last().unwrap().1).await?;
+    let mut stdin = child.stdin.take().unwrap();
+    let (response, answer) = tokio::join!(
+        connect(&s.gw, &browser, &pairs.last().unwrap().1),
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !lines
+                .next_line()
+                .await?
+                .expect("CLI stopped before prompt")
+                .starts_with("Pick the number shown on the device: ")
+            {}
+            let mut prompt = [0; b"Number (Enter to decline): ".len()];
+            lines.get_mut().read_exact(&mut prompt).await?;
+            assert_eq!(&prompt, b"Number (Enter to decline): ");
+            stdin.write_all(b"47\n").await
+        }),
+    );
+    answer.expect("CLI prompt timeout")?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     let mut output = String::new();
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -131,17 +148,31 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
     let mut alias_command = tokio::process::Command::from(s.agent.launch.command());
     let mut alias = alias_command
         .args(["remote", "code"])
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
     let mut alias_lines = BufReader::new(alias.stdout.take().unwrap()).lines();
     let (_, code) = next_pairing(&mut alias_lines).await?;
-    assert_eq!(
-        connect(&s.gw, &browser, &code).await?.status().as_u16(),
-        303
+    let mut alias_stdin = alias.stdin.take().unwrap();
+    let (response, answer) = tokio::join!(
+        connect(&s.gw, &browser, &code),
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !alias_lines
+                .next_line()
+                .await?
+                .expect("CLI stopped before prompt")
+                .starts_with("Pick the number shown on the device: ")
+            {}
+            let mut prompt = [0; b"Number (Enter to decline): ".len()];
+            alias_lines.get_mut().read_exact(&mut prompt).await?;
+            assert_eq!(&prompt, b"Number (Enter to decline): ");
+            alias_stdin.write_all(b"47\n").await
+        }),
     );
+    answer.expect("CLI alias prompt timeout")?;
+    assert_eq!(response?.status().as_u16(), 303);
     assert!(
         tokio::time::timeout(Duration::from_secs(5), alias.wait())
             .await

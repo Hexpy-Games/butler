@@ -8,6 +8,7 @@
 //!   with no connection token metadata.
 //! - `POST /security/pairing`: issue an eight-digit one-time pairing code.
 //! - `GET /security/pairing`: status for foreground issuers.
+//! - `POST /security/pairing/decision`: allow or decline a pairing request.
 //! - `GET`/`DELETE /security/devices[/{id}]`: list and revoke devices.
 //! - `POST /security/connection-code/rotate`: a new code; the old one, its
 //!   signed URLs, browser sessions and live streams stop working at once.
@@ -24,7 +25,7 @@ use axum::response::Response;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::{Client, HttpError, HttpState, json};
+use super::{Client, HttpError, HttpState, json, read_body_with_limit};
 use crate::gateway::protocol::{APP_PROTOCOL_VERSION, ApiEnvelope};
 use crate::gateway::{GatewayExposure, MAX_ALLOWED_HOSTS, normalize_allowed_host};
 
@@ -120,6 +121,7 @@ pub(super) async fn route(
                 .ok_or_else(code_unavailable)?
                 .pairing_status())
         }
+        (Method::POST, "/security/pairing/decision") => pairing_decision(&state, request).await,
         (Method::GET, "/security/oauth") => {
             ok(state.application.setup()?.oauth_credentials().await?)
         }
@@ -150,6 +152,32 @@ pub(super) async fn route(
         (Method::POST, "/security/connection-code/rotate") => rotate(&state, client).await,
         _ => Err(HttpError::public(404, "not_found", "Route not found.")),
     }
+}
+
+async fn pairing_decision(
+    state: &HttpState,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    #[derive(Deserialize)]
+    struct PairingDecision {
+        id: String,
+        #[serde(default)]
+        pick: Option<String>,
+    }
+
+    let body = read_body_with_limit(request.into_body(), 1024).await?;
+    let decision: PairingDecision =
+        serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
+    let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
+    let sessions = keyed.sessions.as_ref().ok_or_else(code_unavailable)?;
+    if sessions.decide(&decision.id, decision.pick.as_deref()) {
+        return ok(sessions.pairing_status());
+    }
+    Err(HttpError::public(
+        409,
+        "pairing_not_pending",
+        "That request is no longer waiting.",
+    ))
 }
 
 async fn devices(

@@ -254,6 +254,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/security/devices", Handler::Security),
     ("/security/devices/{id}", Handler::Security),
     ("/security/pairing", Handler::Security),
+    ("/security/pairing/decision", Handler::Security),
     ("/security/pairing/clock", Handler::Security),
     ("/security/signins", Handler::Security),
     ("/security/signins/site", Handler::Security),
