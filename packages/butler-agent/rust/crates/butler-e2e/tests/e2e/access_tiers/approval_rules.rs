@@ -112,6 +112,61 @@ async fn prefix_rule_from_card_covers_later_commands() -> Result<(), HarnessErro
 }
 
 #[tokio::test]
+async fn prefix_rules_apply_through_cmd_wrapper() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !WINDOWS_SHELL {
+        return Ok(());
+    }
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("APPROVAL-CMD-PREFIX")?
+        .access(Access::AskExceptReads)
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    let mut s = setup.start().await?;
+    let project = s.sandbox.workspace.join("작업 Project");
+    let chat = crate::project_workspace::bind_project(&mut s, project.parent().unwrap()).await?;
+    let mut git = std::process::Command::new("git");
+    let status = git.args(["init", "-q"]).current_dir(&project).status()?;
+    assert!(status.success());
+    for (name, stage, remove) in [
+        ("a", "cmd /c git add a.txt", "rm a.txt"),
+        ("b", "cmd /c git add b.txt", "cmd /c rm b.txt"),
+    ] {
+        std::fs::write(project.join(format!("{name}.txt")), name)?;
+        for (action, command) in [("Stage", stage), ("Remove", remove)] {
+            let prompt = format!("{action} {name}.");
+            let args = json!({"command":command,"state_effect":"mutation","summary":prompt});
+            let step = call(&format!("{action}-{name}"), "run_command", &args);
+            script.rounds.lock().unwrap().insert(prompt, vec![step]);
+        }
+    }
+    let turn = paused(&s, &chat, "Stage a.").await?;
+    let operation = &s.gw.approval_requests(&chat).await?[0]["approval"]["operation"];
+    assert_eq!(operation["rule_prefixes"], json!(["git add"]));
+    approve(&s, &chat, "allow", Some("always")).await?;
+    delivered(&s, &chat, &turn).await?;
+    let project_id = s.gw.get("/projects").await?.data()["projects"][0]["id"].clone();
+    let body = json!({"kind":"project","project_id":project_id,
+        "workspace_mode":"local","title":"Second chat"});
+    let reply = s.gw.post("/sessions", body).await?;
+    let second_chat = reply.data()["session"]["id"].as_str().unwrap();
+    let turn = s.gw.say_turn(second_chat, "Stage b.").await?;
+    delivered(&s, second_chat, &turn).await?;
+    assert_counts(&s, &turn, 0, 0)?;
+    let turn = paused(&s, &chat, "Remove a.").await?;
+    approve(&s, &chat, "deny", Some("always")).await?;
+    delivered(&s, &chat, &turn).await?;
+    let turn = s.gw.say_turn(&chat, "Remove b.").await?;
+    delivered(&s, &chat, &turn).await?;
+    assert_counts(&s, &turn, 0, 0)?;
+    let result = outputs(&s, &chat, &turn, &script, "Remove b.").await?;
+    assert!(result.join("\n").contains("denied_by_rule"));
+    assert!(project.join("b.txt").is_file());
+    server.abort();
+    s.finish().await
+}
+
+#[tokio::test]
 async fn allowed_folder_is_in_scope() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (url, script, server) = stub::start().await?;

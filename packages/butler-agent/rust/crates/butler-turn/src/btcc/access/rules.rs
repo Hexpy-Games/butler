@@ -62,6 +62,7 @@ pub enum RuleVerdict {
 }
 
 pub fn rule_verdict(command: &str, rules: &[CommandRule]) -> RuleVerdict {
+    let command = butler_platform::command_sandbox::path_script(command);
     if rules.is_empty() {
         return RuleVerdict::NoRule;
     }

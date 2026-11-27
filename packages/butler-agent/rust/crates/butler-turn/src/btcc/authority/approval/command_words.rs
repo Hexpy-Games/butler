@@ -335,6 +335,7 @@ pub(in crate::btcc) fn normalize_prefix(text: &str) -> Option<Vec<String>> {
 }
 
 pub(in crate::btcc) fn rule_prefixes(line: &str) -> Option<Vec<String>> {
+    let line = butler_platform::command_sandbox::path_script(line);
     let mut prefixes = Vec::new();
     for (index, words) in segments(line)?.into_iter().enumerate() {
         if !read_only(&words, index == 0) {
