@@ -42,10 +42,15 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
       inFlight.current = false; setPending(false);
     }
   };
+  const save = <ButtonContainer size="sm" justify="end">
+    <Button type="button" size="sm" variant="secondary" disabled={pending || decision.pending} onClick={() => void act(false)}>{browser.later}</Button>
+    <Button type="button" size="sm" disabled={pending || decision.pending} onClick={() => void act(true)}>{browser.saveSignIn}</Button>
+  </ButtonContainer>;
+  // With fields the card's own 입력 replaces 입력 완료 (owner, 2026-11-27); 입력 완료 stays on the plain card.
   const buttons = <ButtonContainer size="sm" justify="end">
     <Button type="button" size="sm" variant="secondary" iconStart={<Square size="sm" />} onClick={handoff.onStop}>{copy.stop}</Button>
-    <Button type="button" size="sm" variant={handoff.canOpenTab || fields.length ? "secondary" : "default"} disabled={decision.pending || pending} onClick={handoff.onDone}>{copy.done}</Button>
-    {handoff.canOpenTab && <Button type="button" size="sm" onClick={handoff.onOpenTab}>{copy.openTab}</Button>}
+    {!fields.length && <Button type="button" size="sm" variant={handoff.canOpenTab ? "secondary" : "default"} disabled={decision.pending || pending} onClick={handoff.onDone}>{copy.done}</Button>}
+    {handoff.canOpenTab && <Button type="button" size="sm" variant={fields.length ? "secondary" : "default"} onClick={handoff.onOpenTab}>{copy.openTab}</Button>}
     {fields.length > 0 && <Button type="button" size="sm" disabled={!canFill || pending || decision.pending} onClick={() => void act()}>{copy.submit}</Button>}
   </ButtonContainer>;
   return <ComposerDecisionPanel placement={placement} media={decision.media}
@@ -54,7 +59,7 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
     error={failed ? browser.signinFillFailed : decision.error} onOpen={decision.onOpenSource}
     aside={decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : undefined}
     data-test-class="composer-browser-handoff"
-    actions={fields.length || offer ? <Stack fill gap="sm">
+    form={fields.length || offer ? <Stack fill gap="sm">
       {fields.map(kind => <Field key={kind}>
         <FieldLabel htmlFor={formId + kind}>{copy.fields[kind]}</FieldLabel>
         <Input id={formId + kind} type={kind === "password" ? "password" : "text"}
@@ -65,14 +70,9 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
             event.preventDefault(); event.stopPropagation(); void act();
           }} />
       </Field>)}
-      {offer && <Stack gap="xs">
-        <Typo.Label literal>{browser.saveSignIn} · {offer.username} · {offer.host}</Typo.Label>
-        <ButtonContainer size="sm" justify="end">
-          <Button type="button" size="sm" variant="secondary" disabled={pending || decision.pending} onClick={() => void act(false)}>{browser.later}</Button>
-          <Button type="button" size="sm" disabled={pending || decision.pending} onClick={() => void act(true)}>{browser.saveSignIn}</Button>
-        </ButtonContainer>
-      </Stack>}
-      {offer && !fields.length ? null : buttons}
-    </Stack> : buttons}
+      {offer && <Typo.Label literal>{copy.savePrompt(offer.username)}</Typo.Label>}
+      {offer && fields.length > 0 && save}
+    </Stack> : undefined}
+    actions={offer && !fields.length ? save : buttons}
   />;
 }

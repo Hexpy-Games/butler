@@ -123,10 +123,12 @@ export function BrowserHandoffCard({ card, view, reload }: {
           if (child) void send("stop", `/steward-relations/${encodeURIComponent(child.relation.relation_id)}/cancel`, { parent_session_id: sessionId });
           else if (turn) void send("stop", `/turns/${encodeURIComponent(turn.id)}/cancel`, {});
         }} />
-      <Button label={labels.done} variant={fields.length ? "secondary" : "default"} loading={pending === "done"} disabled={!!pending}
-        onPress={() => void send("done", base + "/hand-back" + query, {})} />
+      {fields.length ? <Button label={labels.submit} disabled={!fields.some(kind => values[kind]) || !!pending}
+        loading={pending === "input"} onPress={() => void act()} />
+        : <Button label={labels.done} loading={pending === "done"} disabled={!!pending}
+          onPress={() => void send("done", base + "/hand-back" + query, {})} />}
     </ButtonGroup>}>
-    <BrowserHandoffForm labels={{ fields: labels.fields, submit: labels.submit, saveSignIn: browser.saveSignIn, later: browser.later }}
+    <BrowserHandoffForm labels={{ fields: labels.fields, savePrompt: labels.savePrompt, saveSignIn: browser.saveSignIn, later: browser.later }}
       host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details}
       fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
       onSubmit={() => void act()} pending={pending} offer={offer ?? undefined} onSave={save => void act(save)} />
@@ -135,12 +137,11 @@ export function BrowserHandoffCard({ card, view, reload }: {
 
 /** The hand-off card body: site, details, secure fields with their submit, and the save-sign-in prompt. */
 export function BrowserHandoffForm({ labels, host, details, fields, values, onChange, onSubmit, pending, offer, onSave }: {
-  labels: { fields: Record<InputKind, string>; submit: string; saveSignIn: string; later: string };
+  labels: { fields: Record<InputKind, string>; savePrompt(username: string): string; saveSignIn: string; later: string };
   host?: string; details: string[]; fields: InputKind[]; values: Partial<Record<InputKind, string>>;
   onChange(kind: InputKind, value: string): void; onSubmit(): void; pending?: HandoffPending;
   offer?: { username: string; host: string }; onSave(save: boolean): void;
 }) {
-  const canFill = fields.some(kind => values[kind]);
   return <>
     {host ? <Text literal>{host}</Text> : null}
     {details.map((line, index) => <Text key={index} literal>{line}</Text>)}
@@ -148,10 +149,8 @@ export function BrowserHandoffForm({ labels, host, details, fields, values, onCh
       secureTextEntry={kind === "password"} autoComplete={kind === "otp" ? "one-time-code" : kind}
       keyboardType={kind === "otp" ? "number-pad" : undefined} returnKeyType="done" disabled={!!pending}
       onChangeText={value => onChange(kind, value)} onSubmitEditing={onSubmit} />)}
-    {fields.length > 0 ? <ButtonGroup><Button label={labels.submit} disabled={!canFill || !!pending}
-      loading={pending === "input"} onPress={onSubmit} /></ButtonGroup> : null}
     {offer ? <>
-      <Text literal>{labels.saveSignIn} · {offer.username} · {offer.host}</Text>
+      <Text literal>{labels.savePrompt(offer.username)}</Text>
       {fields.length ? <SaveButtons labels={labels} pending={pending} onSave={onSave} /> : null}
     </> : null}
   </>;

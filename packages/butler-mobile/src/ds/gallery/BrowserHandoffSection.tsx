@@ -35,9 +35,9 @@ function Sample({ name, fields, initial = {}, offer }: {
     <DecisionCard eyebrow={labels.eyebrow} title={copy.interfaceTemplates.approvalRequest.waitHandoff("sign_in")}
       actions={offer && !fields.length ? <SaveButtons labels={{ saveSignIn: copy.browser.saveSignIn, later: copy.browser.later }} onSave={noop} /> : <ButtonGroup layout="pair">
         <Button label={labels.stop} variant="secondary" onPress={noop} />
-        <Button label={labels.done} variant={fields.length ? "secondary" : "default"} onPress={noop} />
+        <Button label={fields.length ? labels.submit : labels.done} onPress={noop} />
       </ButtonGroup>}>
-      <BrowserHandoffForm labels={{ fields: labels.fields, submit: labels.submit, saveSignIn: copy.browser.saveSignIn, later: copy.browser.later }}
+      <BrowserHandoffForm labels={{ fields: labels.fields, savePrompt: labels.savePrompt, saveSignIn: copy.browser.saveSignIn, later: copy.browser.later }}
         host={form ? host : undefined} details={form ? [] : [site, labels.onDesktop]}
         fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
         onSubmit={noop} offer={offer} onSave={noop} />
