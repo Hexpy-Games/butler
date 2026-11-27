@@ -13,6 +13,7 @@ use super::{
     active_service_async,
 };
 use crate::host::ServiceConfiguration;
+use crate::host::service::configuration::remote_socket_path;
 use crate::host::service::instance::{
     DATA_BUSY, InstanceRecord, Ownership, observe_async, record_process_gone,
 };
@@ -158,14 +159,15 @@ async fn app_health_ready(
     if !record.app_enabled {
         return true;
     }
-    if let Some(socket) = config.app.remote_socket() {
+    if record.remote {
+        let socket = remote_socket_path(&config.data_root);
         let tokens = probe_tokens(config);
         if tokens.is_empty() {
             return true;
         }
         for token in &tokens {
             let request = crate::host::cli::remote_relay::socket_request(
-                &socket.path,
+                &socket,
                 "GET",
                 "/runtime-readiness",
                 token,

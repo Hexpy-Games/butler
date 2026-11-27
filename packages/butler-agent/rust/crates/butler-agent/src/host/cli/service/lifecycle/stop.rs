@@ -29,6 +29,10 @@ pub(super) enum StopReport {
 }
 
 /// The instance a stop ended.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent facts about the stopped instance"
+)]
 pub(super) struct StoppedInstance {
     /// Its PID.
     pub(super) pid: u32,
@@ -38,6 +42,8 @@ pub(super) struct StoppedInstance {
     pub(super) forced: bool,
     /// The App supervised it, so the App starts its replacement on restart.
     pub(super) app_supervised: bool,
+    /// It ran in remote mode, so its replacement does too.
+    pub(super) remote: bool,
     /// A login job (launchd, systemd) ran it, so the manager starts its
     /// replacement on restart.
     pub(super) managed: bool,
@@ -123,6 +129,7 @@ pub(super) async fn stop_service_admitted(
         nonce: record.nonce,
         forced,
         app_supervised: record.app_supervised,
+        remote: record.remote,
         managed,
     };
     Ok((StopReport::Stopped(stopped), admission))

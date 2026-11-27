@@ -10,6 +10,7 @@ use butler_platform::{process_control, secure_fs, user_dirs};
 use serde_json::{Value, json};
 
 use super::Action;
+use crate::host::service::configuration::remote_requested;
 use crate::host::service::instance::{
     AdmissionLock, DATA_BUSY, InstanceRecord, Ownership, StopReason, StopRequest, StopRequester,
     instance_is_locked, observe, process_matches, record_process_gone, refuse_live_legacy_process,
@@ -176,13 +177,14 @@ async fn start_service(
     }
 
     let admission = acquire_admission(data_root, installation).await?;
-    start_service_admitted(installation, config, admission).await
+    start_service_admitted(installation, config, admission, remote_requested()).await
 }
 
 async fn start_service_admitted(
     installation: &ResolvedInstallation,
     config: &ServiceConfiguration,
     admission: AdmissionLock,
+    remote: bool,
 ) -> Result<Value, crate::host::HostError> {
     let data_root = &config.data_root;
     refuse_live_legacy_process(data_root)?;
@@ -210,7 +212,7 @@ async fn start_service_admitted(
         let ready = wait_until_ready(config, None, Some(registered.nonce)).await?;
         return Ok(start_result(&ready, true));
     }
-    let mut spawned = spawn_service(installation, data_root)?;
+    let mut spawned = spawn_service(installation, data_root, remote)?;
     let registered = match wait_until_registered(data_root, &mut spawned).await {
         Ok(record) => record,
         Err(message) => {
@@ -251,10 +253,10 @@ async fn start_replacement(
     stopped: &StopReport,
 ) -> Result<Value, crate::host::HostError> {
     let StopReport::Stopped(instance) = stopped else {
-        return start_service_admitted(installation, config, admission).await;
+        return start_service_admitted(installation, config, admission, remote_requested()).await;
     };
     if !instance.app_supervised && !instance.managed {
-        return start_service_admitted(installation, config, admission).await;
+        return start_service_admitted(installation, config, admission, instance.remote).await;
     }
     if instance.managed {
         managed::request(butler_platform::service_registration::start).await?;
@@ -372,6 +374,7 @@ pub(super) fn active_service(
 fn spawn_service(
     installation: &ResolvedInstallation,
     data_root: &Path,
+    remote: bool,
 ) -> Result<Child, crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
     let executable = butler_platform::process_names::current_exe()
@@ -410,7 +413,7 @@ fn spawn_service(
     if std::env::args_os().any(|s| s == "--safe-mode") {
         command.arg("--safe-mode");
     }
-    if std::env::args_os().any(|s| s == "--remote") {
+    if remote {
         command.arg("--remote");
     }
     process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;

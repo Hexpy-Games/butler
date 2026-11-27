@@ -174,3 +174,64 @@ async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Res
     sandbox.mark_success();
     Ok(())
 }
+
+#[tokio::test]
+async fn restart_keeps_remote_mode() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut sandbox = Sandbox::new("REMOTE-RESTART")?;
+    let mut launch = Launch::new(&sandbox)?;
+    launch.data = PathBuf::from(format!(
+        "/tmp/bre-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4().simple()
+    ));
+    fs::create_dir(&launch.data)?;
+    let data = RemoteData(launch);
+
+    let output = data
+        .0
+        .command_without_local_auth()
+        .args(["start", "--remote", "--data"])
+        .arg(&data.0.data)
+        .arg("--json")
+        .env("HOME", &sandbox.home)
+        .env("BUTLER_DATA", &data.0.data)
+        .output()?;
+    let started: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(started["ok"], true);
+    let record = instance_record(&data.0.data).ok_or_else(|| harness_error("no service record"))?;
+    let pid1 = record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| harness_error("no service PID"))?;
+
+    let output = data
+        .0
+        .command_without_local_auth()
+        .args(["restart", "--data"])
+        .arg(&data.0.data)
+        .arg("--json")
+        .env("HOME", &sandbox.home)
+        .env("BUTLER_DATA", &data.0.data)
+        .output()?;
+    let restarted: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(restarted["ok"], true);
+    let record = instance_record(&data.0.data).ok_or_else(|| harness_error("no service record"))?;
+    let pid2 = record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| harness_error("no service PID"))?;
+    assert_ne!(pid1, pid2);
+    assert_eq!(record["remote"], true);
+    assert_eq!(record["state"], "ready");
+    let token = data
+        .0
+        .data_folder_token()
+        .ok_or_else(|| harness_error("no local token"))?;
+    let socket = data.0.data.join("remote/agent.sock");
+    assert_eq!(request_status(&socket, "/health", &token, None).await?, 200);
+    assert_eq!(listening_tcp_ports(pid2).await?, Default::default());
+    drop(data);
+    sandbox.mark_success();
+    Ok(())
+}
