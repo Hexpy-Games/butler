@@ -66,6 +66,7 @@ import Album02Icon from "@hugeicons/core-free-icons/Album02Icon";
 import Bookmark02Icon from "@hugeicons/core-free-icons/Bookmark02Icon";
 import Share08Icon from "@hugeicons/core-free-icons/Share08Icon";
 import PauseIcon from "@hugeicons/core-free-icons/PauseIcon";
+import UnfoldMoreIcon from "@hugeicons/core-free-icons/UnfoldMoreIcon";
 
 export const icons = {
   Scrap: Album02Icon,
@@ -121,6 +122,7 @@ export const icons = {
   CheckIcon: Tick02Icon,
   ChevronRight: ArrowRight01Icon,
   ArrowLeft: ArrowLeft01Icon,
+  UnfoldMore: UnfoldMoreIcon,
   SendHorizontal: SentIcon,
   Settings: Settings01Icon,
   Square: SquareIcon,

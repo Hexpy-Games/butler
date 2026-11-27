@@ -7,7 +7,13 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
     if !result.ok
         || !matches!(
             result.name.as_str(),
-            "output_check" | "browser_observe" | "browser_act" | "browser_screenshot" | "tool_call"
+            "output_check"
+                | "browser_observe"
+                | "browser_act"
+                | "browser_screenshot"
+                | "generate_image"
+                | "edit_image"
+                | "tool_call"
         )
     {
         return false;
@@ -29,12 +35,20 @@ pub(in crate::host::guided::tools::message) fn admitted(result: &ToolResult) -> 
                 | "butler.browser-observation.v1"
                 | "butler.browser-zoom.v1"
                 | "butler.browser-capture.v1"
+                | "butler.image.v1"
         )
-    ) || value["image"]["mime_type"] != "image/jpeg"
-    {
+    ) {
         return false;
     }
-    value["image"]["data"].as_str().is_some_and(|data| {
+    let image = if value["image"].is_object() {
+        &value["image"]
+    } else {
+        &value["view"]
+    };
+    if image["mime_type"] != "image/jpeg" {
+        return false;
+    }
+    image["data"].as_str().is_some_and(|data| {
         STANDARD
             .decode(data)
             .is_ok_and(|bytes| bytes.len() <= 150 * 1024 && bytes.starts_with(&[0xff, 0xd8]))
