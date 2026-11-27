@@ -1,6 +1,10 @@
 //! Stream a response from the computer's local socket over a pinned SSH connection.
 use super::{
-    Computer, HttpError, deploy, relay::unavailable, remote_error, ssh, target::SshTarget,
+    Computer, HttpError, deploy,
+    relay::unavailable,
+    remote_command::{self, Shell},
+    remote_error, ssh,
+    target::SshTarget,
 };
 use axum::body::{Body, Bytes};
 use butler_platform::hook_process::StreamingProcess;
@@ -34,10 +38,7 @@ pub(super) async fn open(
     cancel: CancellationToken,
 ) -> Result<Opened, HttpError> {
     let target = SshTarget::of(computer).await?;
-    let command = format!(
-        r#""$HOME/.butler-remote/current/butler-agent" --remote-stream "$HOME/.butler-remote/data" '{}'"#,
-        path.replace('\'', "'\\''")
-    );
+    let command = remote_command::stream(Shell::of(&computer.os), path);
     let args = target.arguments("yes", &[], &command)?;
     let mut body = BufReader::with_capacity(65_536, ssh::spawn(args).await?);
     let mut line = Vec::new();

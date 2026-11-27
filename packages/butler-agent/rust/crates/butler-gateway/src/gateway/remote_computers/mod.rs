@@ -17,7 +17,9 @@ pub(super) use live_records::names_running_turn;
 pub(in crate::gateway) use pending::{
     decide as decide_pending, get as get_pending, list as list_pending,
 };
+mod probe;
 mod relay;
+mod remote_command;
 mod remove;
 mod sessions;
 pub(super) use relay::{Reply, data};

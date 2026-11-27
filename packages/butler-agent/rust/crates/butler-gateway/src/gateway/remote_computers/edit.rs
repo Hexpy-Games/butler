@@ -1,6 +1,6 @@
 use super::{
     AddInput, AppSetupPort, Computer, HostInput, HttpError, ModelInput, ModelSource, environment,
-    list, locked, model_sync, remote_error, ssh, ssh_key, ssh_password::Install, store,
+    list, locked, model_sync, probe, remote_error, ssh, ssh_key, ssh_password::Install, store,
 };
 use std::{path::Path, sync::Arc};
 use tokio_util::sync::CancellationToken;
@@ -164,7 +164,7 @@ async fn finish(
 struct TargetDetails {
     check: ssh::HostCheck,
     install: Install,
-    platform: Option<ssh::Platform>,
+    platform: Option<probe::Platform>,
     managed_key: bool,
     target_changed: bool,
 }
