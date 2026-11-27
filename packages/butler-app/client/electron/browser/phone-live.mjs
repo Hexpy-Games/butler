@@ -38,17 +38,16 @@ export class PhoneLive {
         if (this.feeds.get(tab.id) !== feed) return;
         if (tab.holder !== "user") { await this.stop(tab.id); return; }
         const { width, height } = tab.view.getBounds();
-        const response = await deliver({ width, height, jpeg: params.data });
+        const response = await deliver({ width, height, jpeg: params.data }).catch(() => null);
         if (this.feeds.get(tab.id) !== feed) return;
-        if (response.status === 404) { await this.stop(tab.id); return; }
-        if (!response.ok) return;
+        if (response?.status === 404) { await this.stop(tab.id); return; }
         const wait = feed.lastAck + 100 - performance.now();
         if (wait > 0) await delay(Math.ceil(wait));
         if (this.feeds.get(tab.id) !== feed) return;
         if (tab.holder !== "user") { await this.stop(tab.id); return; }
         feed.lastAck = performance.now();
         await contents.debugger.sendCommand("Page.screencastFrameAck", { sessionId: params.sessionId });
-      }).catch(() => {});
+      }).catch(() => this.stop(tab.id));
     };
     this.feeds.set(tab.id, feed);
     contents.once("destroyed", feed.destroyed);
@@ -86,6 +85,6 @@ export class PhoneLive {
     const feed = this.feeds.get(tab.id);
     if (tab.holder !== "user" || !feed || feed.sub !== sub) return { status: "refused", reason: "live_not_held" };
     if (events.some(event => event.t === "text" || event.t === "key")) tab.userTyped = true;
-    return applyEvents(tab, feed, events);
+    return applyEvents(tab, events);
   }
 }

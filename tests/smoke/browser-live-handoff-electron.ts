@@ -33,9 +33,6 @@ try {
   assert.equal(await app.main(`${subject}.attached===${browser}.agentWindow && !${browser}.agentWindow.isVisible()`), true);
   const point = await app.main<{ x: number; y: number }>(`${subject}.view.webContents.executeJavaScript(
     "(()=>{const r=document.querySelector('input').getBoundingClientRect();return {x:(r.x+r.width/2)/innerWidth,y:(r.y+r.height/2)/innerHeight}})()")`);
-  await app.main(`globalThis.liveFrameEvents=0;${subject}.view.webContents.debugger.on("message",(_event,method,_params,sessionId)=>{
-    if(method==="Page.screencastFrame" && !sessionId) globalThis.liveFrameEvents++;
-  })`);
   const path = `/browser/tabs/${encodeURIComponent(tab)}/live`;
   const client = crypto.randomUUID();
   const tap = [{ t: "down", ...point }, { t: "up", ...point }];
@@ -76,14 +73,7 @@ try {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), Math.max(0, 5000 - (performance.now() - started))); });
   const frame = await Promise.race([firstFrame, deadline]).finally(() => clearTimeout(timer));
-  if (!frame || frame[0] !== 0xff || frame[1] !== 0xd8) {
-    const before = await app.main<number>("globalThis.liveFrameEvents");
-    await post(1, tap).catch(() => {});
-    await Bun.sleep(1000);
-    const after = await app.main<number>("globalThis.liveFrameEvents");
-    assert.fail(`No FF D8 frame within 5 s. Page.screencastFrame events by deadline: ${before}; after tap: ${after}`);
-  }
-  console.log(`First JPEG frame in ${Math.round(performance.now() - started)} ms`);
+  assert.ok(frame && frame[0] === 0xff && frame[1] === 0xd8, "JPEG frame within 5 s");
   await post(1, tap);
   await post(2, [{ t: "text", value: "typed-7311" }]);
   assert.equal(await app.main(`${subject}.view.webContents.executeJavaScript("document.querySelector('input').value")`), "typed-7311");

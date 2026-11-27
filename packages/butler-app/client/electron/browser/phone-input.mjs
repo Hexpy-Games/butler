@@ -1,53 +1,66 @@
 import { cdpMouse, insertText, routeTarget } from "./frame-input.mjs";
 import { parseChord, sendChord } from "./keyboard.mjs";
+import { nativeFrameWorld } from "./native-worlds.mjs";
 
 const KEYS = new Set(["Backspace", "Delete", "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Space"]);
 
-export async function applyEvents(tab, feed, events) {
+export async function applyEvents(tab, events) {
   const { width, height } = tab.view.getBounds();
   if (!width || !height) return { status: "refused", reason: "live_unavailable" };
   const send = cdpMouse(tab);
   const debuggerApi = tab.view.webContents.debugger;
   async function keyTarget() {
-    if (feed.keyTarget) return feed.keyTarget;
-    for (const sessionId of tab.frameSessions.values()) {
-      const api = { sendCommand: (method, params) => debuggerApi.sendCommand(method, params, sessionId) };
-      const focused = await api.sendCommand("Runtime.evaluate", { expression: "document.hasFocus()", returnByValue: true }).catch(() => null);
-      if (focused?.result?.value === true) return feed.keyTarget = routeTarget({}, { sessionId, api });
+    for (const [frameId, sessionId] of tab.frameSessions) {
+      const focused = await nativeFrameWorld(tab, frameId)?.executeJavaScriptInIsolatedWorld(9001, [{ code: 'document.hasFocus() && !/^i?frame$/u.test(document.activeElement?.localName ?? "")' }]).catch(() => false);
+      if (focused === true) return routeTarget({}, { sessionId, api: { sendCommand: (m, p) => debuggerApi.sendCommand(m, p, sessionId) } });
     }
-    return feed.keyTarget = {};
+    return {};
   }
-  for (const event of events) {
-    if (tab.holder !== "user") return { status: "refused", reason: "live_not_held" };
-    const point = { x: Math.round(event.x * width), y: Math.round(event.y * height) };
-    switch (event.t) {
-      case "down":
-        feed.keyTarget = null;
-        await send({ type: "mouseMove", ...point });
-        if (tab.holder !== "user") return { status: "refused", reason: "live_not_held" };
-        await send({ type: "mouseDown", ...point, button: "left", clickCount: 1 });
-        break;
-      case "move":
-        await send({ type: "mouseMove", ...point, modifiers: ["leftButtonDown"] });
-        break;
-      case "up":
-        await send({ type: "mouseUp", ...point, button: "left", clickCount: 1 });
-        break;
-      case "wheel":
-        await send({ type: "mouseWheel", ...point, deltaX: event.dx * width, deltaY: event.dy * height });
-        break;
-      case "text":
-      case "key": {
-        if (event.t === "key" && !KEYS.has(event.key)) return { status: "refused", reason: "live_unavailable" };
-        const target = await keyTarget();
-        if (tab.holder !== "user") return { status: "refused", reason: "live_not_held" };
-        if (event.t === "text") await insertText(tab, target, event.value);
-        else await sendChord(tab, parseChord(event.key), target);
-        break;
+  let target = null;
+  let heldPoint = null;
+  batch: {
+    for (const event of events) {
+      if (tab.holder !== "user") break batch;
+      const point = { x: Math.round(event.x * width), y: Math.round(event.y * height) };
+      switch (event.t) {
+        case "down":
+          target = null;
+          await send({ type: "mouseMove", ...point });
+          if (heldPoint) heldPoint = point;
+          if (tab.holder !== "user") break batch;
+          await send({ type: "mouseDown", ...point, button: "left", clickCount: 1 });
+          heldPoint = point;
+          break;
+        case "move":
+          await send({ type: "mouseMove", ...point, modifiers: ["leftButtonDown"] });
+          if (heldPoint) heldPoint = point;
+          break;
+        case "up":
+          await send({ type: "mouseUp", ...point, button: "left", clickCount: 1 });
+          heldPoint = null;
+          break;
+        case "wheel":
+          await send({ type: "mouseWheel", ...point, deltaX: event.dx * width, deltaY: event.dy * height });
+          if (heldPoint) heldPoint = point;
+          break;
+        case "text":
+        case "key": {
+          if (event.t === "key" && !KEYS.has(event.key)) return { status: "refused", reason: "live_unavailable" };
+          target ??= await keyTarget();
+          if (tab.holder !== "user") break batch;
+          if (event.t === "text") await insertText(tab, target, event.value);
+          else {
+            await sendChord(tab, parseChord(event.key), target);
+            target = null;
+          }
+          break;
+        }
+        default:
+          return { status: "refused", reason: "live_unavailable" };
       }
-      default:
-        return { status: "refused", reason: "live_unavailable" };
     }
+    return { status: "ok" };
   }
-  return { status: "ok" };
+  if (heldPoint) await send({ type: "mouseUp", ...heldPoint, button: "left", clickCount: 1 });
+  return { status: "refused", reason: "live_not_held" };
 }

@@ -16,7 +16,7 @@ import { shortId } from "./ids.mjs";
 import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { attachNativeWorlds } from "./native-worlds.mjs";
+import { attachNativeWorlds, syncUserHeld } from "./native-worlds.mjs";
 import { PhoneLive } from "./phone-live.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
@@ -402,7 +402,7 @@ class UserBrowser {
     const previousOwner = tab.owner;
     if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; syncUserHeld(tab); if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
