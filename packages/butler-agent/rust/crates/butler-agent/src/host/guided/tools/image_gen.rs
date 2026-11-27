@@ -149,7 +149,15 @@ fn encode_view(bytes: &[u8]) -> Option<String> {
     let image = image::load_from_memory(bytes).ok()?;
     for limit in [768, 512] {
         let side = limit.min(image.width().max(image.height()));
-        let thumbnail = image.thumbnail(side, side).to_rgb8();
+        let thumbnail = image.thumbnail(side, side).into_rgba8();
+        let thumbnail = image::RgbImage::from_fn(thumbnail.width(), thumbnail.height(), |x, y| {
+            let [red, green, blue, alpha] = thumbnail.get_pixel(x, y).0;
+            let alpha = u16::from(alpha);
+            image::Rgb([red, green, blue].map(|channel| {
+                u8::try_from((u16::from(channel) * alpha + 255 * (255 - alpha)) / 255)
+                    .unwrap_or(u8::MAX)
+            }))
+        });
         let mut jpeg = Vec::new();
         image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 75)
             .encode_image(&thumbnail)
