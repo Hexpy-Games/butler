@@ -15,21 +15,36 @@ pub enum ToolParts {
 
 /// A message's text, optionally with its tool parts.
 pub fn text_for_message(message: &ConversationMessageWithParts, tools: ToolParts) -> String {
-    message
-        .parts
-        .iter()
-        .filter(|part| {
-            tools == ToolParts::Include
-                || !matches!(
-                    part.kind,
-                    ConversationPartKind::ToolCall | ConversationPartKind::ToolResult
-                )
-        })
-        .filter_map(text_for_part)
-        .map(|text| butler_core::public_text::trim_js_whitespace(&text).to_owned())
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut parts = Vec::new();
+    let mut attachments = Vec::new();
+    for part in &message.parts {
+        if tools == ToolParts::Exclude
+            && matches!(
+                part.kind,
+                ConversationPartKind::ToolCall | ConversationPartKind::ToolResult
+            )
+        {
+            continue;
+        }
+        let Some(text) = text_for_part(part) else {
+            continue;
+        };
+        let text = butler_core::public_text::trim_js_whitespace(&text);
+        if text.is_empty() {
+            continue;
+        }
+        if part.kind == ConversationPartKind::AttachmentRef {
+            attachments.push(text.to_owned());
+        } else {
+            parts.push(text.to_owned());
+        }
+    }
+    let mut text = parts.join(" ");
+    if !attachments.is_empty() {
+        text.push_str("\nattachments: ");
+        text.push_str(&attachments.join(" "));
+    }
+    text
 }
 
 /// A part's text, if it has any.
