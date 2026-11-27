@@ -34,12 +34,13 @@ export function QuestionCard({ request, sessionId, reload }: { request: PendingU
       return next;
     });
   };
-  const ready = draft.every(a => a.selected.length > 0 || a.text.trim() || a.other.trim());
+  const answers = answerWire(questions, draft);
+  const ready = answers.every(a => a.selected.length > 0 || a.custom);
   return <DecisionCard eyebrow={questions[0].eyebrow} title={questions[0].title}
     footnote={failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={<ButtonGroup>
       <Button label={labels.send} disabled={!!pending || !ready} loading={pending === "send"}
-        onPress={() => void submit({ status: "answered", answers: answerWire(questions, draft) }, "send")} />
+        onPress={() => void submit({ status: "answered", answers }, "send")} />
       <Button label={labels.skip} variant="secondary" disabled={!!pending} loading={pending === "skip"}
         onPress={() => void submit({ status: "answered", answers: answerWire(questions, []) }, "skip")} />
       {request.question_state === "pending" ? <Button label={labels.later} variant="secondary" disabled={!!pending} loading={pending === "later"}
@@ -56,17 +57,25 @@ export function QuestionCard({ request, sessionId, reload }: { request: PendingU
 function QuestionFields({ question, answer, disabled, update }: {
   question: UserQuestion; answer: QuestionDraft; disabled: boolean; update(patch: Partial<QuestionDraft>, send?: boolean): void;
 }) {
-  const labels = getAppCopy(useAppLocale()).interfaceDetails.questionPanel;
+  const copy = getAppCopy(useAppLocale()), labels = copy.interfaceDetails.questionPanel;
   const options = answerOptions(question);
   if (!options.length) return <TextField label={question.title} value={answer.text} disabled={disabled}
     onChangeText={text => update({ text, skipped: false })} />;
   return <ListGroup>
-    {options.map((option, index) => <ListRow key={option.id} title={option.label} description={option.description} titleLines={2} descriptionLines={3}
-      meta={option.recommended ? labels.recommended : undefined} selected={answer.selected.includes(index)} disabled={disabled}
-      selection={question.kind === "multi" ? "multi" : "single"}
-      onPress={() => update({ selected: question.kind === "multi"
-        ? answer.selected.includes(index) ? answer.selected.filter(i => i !== index) : [...answer.selected, index].sort((a, b) => a - b)
-        : [index], skipped: false, ...(question.kind === "single" ? { other: "" } : {}) }, question.kind === "single")} />)}
+    {options.map((option, index) => {
+      const desktopOnly = option.kind === "password_setup";
+      return <ListRow key={option.id} title={option.label} titleLines={2} descriptionLines={3}
+        description={desktopOnly ? copy.computers.passwordSheet.desktopOnly : option.description}
+        meta={option.recommended ? labels.recommended : undefined}
+        selected={!desktopOnly && answer.selected.includes(index)} disabled={disabled || desktopOnly}
+        selection={question.kind === "multi" ? "multi" : "single"}
+        onPress={() => {
+          if (desktopOnly) return;
+          update({ selected: question.kind === "multi"
+            ? answer.selected.includes(index) ? answer.selected.filter(i => i !== index) : [...answer.selected, index].sort((a, b) => a - b)
+            : [index], skipped: false, ...(question.kind === "single" ? { other: "" } : {}) }, question.kind === "single");
+        }} />;
+    })}
     {question.allow_custom || options.length < question.options.length ? <ListGroupItem>
       <TextField label={labels.other} value={answer.other} disabled={disabled}
         onChangeText={other => update({ other, skipped: false, ...(question.kind === "single" ? { selected: [] } : {}) })} />

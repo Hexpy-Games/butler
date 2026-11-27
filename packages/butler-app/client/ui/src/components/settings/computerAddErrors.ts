@@ -1,15 +1,25 @@
 import { appCopy } from "@/app/copy.ts";
 import type { HostTarget } from "./computersApi";
 
-export type ComputerField = "name" | "address" | "port" | "keyFile" | "folder" | "environment" | "environmentText";
+export type ComputerField = "name" | "address" | "port" | "keyFile" | "password" | "folder" | "environment" | "environmentText";
 export interface ComputerFieldError { field: ComputerField; message: string }
-export interface ComputerForm { name: string; address: string; port: string; keyFile: string; folder: string; environmentText: string }
+export interface ComputerForm {
+  name: string;
+  address: string;
+  auth: "password" | "keyFile";
+  password: string;
+  port: string;
+  keyFile: string;
+  folder: string;
+  environmentText: string;
+}
 
 export const COMPUTER_FIELD_IDS: Record<ComputerField, string> = {
   name: "computer-name",
   address: "computer-address",
   port: "computer-port",
   keyFile: "computer-key-file",
+  password: "computer-password",
   folder: "computer-folder",
   environment: "computer-environment",
   environmentText: "computer-environment-text",
@@ -29,6 +39,11 @@ export function addFailure(code: string | undefined, line?: number): ComputerFie
   }
   const fields = new Map<string, ComputerFieldError>([
     ["ssh_auth_failed", { field: "address", message: copy.keyLogin }],
+    ["ssh_password_wrong", { field: "password", message: copy.passwordWrong }],
+    ["ssh_password_not_allowed", { field: "password", message: copy.passwordNotAllowed }],
+    ["ssh_password_extra_step", { field: "password", message: copy.passwordExtraStep }],
+    ["computer_password_invalid", { field: "password", message: copy.passwordInvalid }],
+    ["ssh_key_install_failed", { field: "address", message: copy.keyInstallFailed }],
     ["ssh_unreachable", { field: "address", message: copy.unreachable }],
     ["ssh_client_missing", { field: "address", message: copy.unreachable }],
     ["host_key_changed", { field: "address", message: copy.fingerprintChanged }],
@@ -69,6 +84,6 @@ export function hostTarget(form: ComputerForm): HostTarget {
   return {
     address: form.address.trim(),
     port: form.port.trim() ? Number(form.port.trim()) : undefined,
-    key_file: form.keyFile.trim() || undefined,
+    key_file: form.auth === "keyFile" ? form.keyFile.trim() || undefined : undefined,
   };
 }

@@ -31,7 +31,10 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     const target = hostTarget(form);
     const environment = rows.map(({ id, name, value, saved }) =>
       saved && id === name && value === "" ? { name } : { name, value });
-    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText };
+    const input = {
+      ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText,
+      ...(form.auth === "password" && form.password ? { password: form.password, managed_key: true } : {}),
+    };
     try {
       if (editing) {
         setStep("adding");

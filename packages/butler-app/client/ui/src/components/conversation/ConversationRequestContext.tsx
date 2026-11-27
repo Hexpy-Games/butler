@@ -6,6 +6,7 @@ import { ComposerQuestionPanel, Stack } from "@/butler-ds";
 import { useComposerDecision } from "./hooks/useComposerDecision";
 import { ComposerAuthorityDecisionSurface } from "./ComposerAuthorityDecisionSurface";
 import { ComposerPlanDecisionSurface } from "./ComposerPlanDecisionSurface";
+import { ComputerPasswordSheet } from "./ComputerPasswordSheet";
 
 interface RequestSlot {
   active: boolean;
@@ -41,7 +42,10 @@ export function ConversationRequestPortal({ decision }: { decision: ReturnType<t
   const { authority, question, plan } = decision;
   const content = authority && !authority.composingMessage
     ? <ComposerAuthorityDecisionSurface decision={authority} placement="conversation" />
-    : !authority && question ? <ComposerQuestionPanel key={question.key} {...question.panel} placement="conversation" />
+    : !authority && question ? <>
+      <ComposerQuestionPanel key={question.key} {...question.panel} placement="conversation" />
+      {question.passwordSheet && <ComputerPasswordSheet key={question.key + ":password"} {...question.passwordSheet} />}
+    </>
     : !authority && plan && !plan.editingInstruction ? <ComposerPlanDecisionSurface decision={plan} placement="conversation" /> : null;
   return createPortal(content, slot.target);
 }

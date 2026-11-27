@@ -46,6 +46,8 @@ export function createComputersFake() {
     computers: [] as Computer[],
     mainModel: "key" as MainModelKind,
     startHold: undefined as Promise<void> | undefined,
+    addHold: undefined as Promise<void> | undefined,
+    keyRemoved: undefined as boolean | undefined,
     oauthStatus: "pending",
     oauthCancelStatus: "cancelled",
     failNext(step: ComputerStep, code: string, line?: number) { failures.set(step, { code, line }); },
@@ -72,7 +74,9 @@ export function createComputersFake() {
     if (path === "/credentials" && method === "GET") return ok(credentials);
     if (path === "/computers" && method === "GET") return ok({ computers: fake.computers, main_model: fake.mainModel });
     if (step === "host-key") return ok({ trusted: true });
+    if (path === "/computers/password" && method === "POST") return ok({ stored: true });
     if (step === "add") {
+      await fake.addHold;
       const { name, address, port, key_file, folder, model_source, environment_text } = body as Pick<Computer, "name" | "address" | "port" | "key_file" | "folder" | "model_source" | "environment_text">;
       const computer = { ...defaults, id: addedId, environment_text: environment_text ?? "", environment: ["API_TOKEN"], name, address, folder, port: port ?? null, key_file: key_file ?? null, ai_connected: false, model_source };
       fake.computers.push(computer);
@@ -92,7 +96,8 @@ export function createComputersFake() {
     }
     if (method === "DELETE" && !action) {
       fake.computers = fake.computers.filter((entry) => entry.id !== id);
-      return ok({ deleted: true, remote_cleaned: new URLSearchParams(search).get("force") !== "true" });
+      const keyRemoved = fake.keyRemoved === undefined ? {} : { key_removed: fake.keyRemoved };
+      return ok({ deleted: true, remote_cleaned: new URLSearchParams(search).get("force") !== "true", ...keyRemoved });
     }
     if (step === "start") {
       await fake.startHold;

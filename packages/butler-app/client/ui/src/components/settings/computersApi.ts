@@ -19,12 +19,18 @@ interface ComputerInput extends HostTarget {
   name: string;
   folder: string;
   model_source: ComputerModelSource;
+  managed_key?: boolean;
+  password?: string;
   environment?: Array<{ name: string; value?: string }>;
   environment_text?: string;
 }
 
 export function checkHostKey(target: HostTarget) {
   return api<HostKeyCheck>("/computers/host-key", { method: "POST", body: JSON.stringify(target) });
+}
+
+export function stashComputerPassword(input: { request_ref: string; password: string }) {
+  return api<{ stored: true }>("/computers/password", { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function addComputer(input: ComputerInput): Promise<Computer> {
@@ -41,7 +47,7 @@ export function startComputer(id: string) {
   return api<{ state: "ready" | "busy"; version: string }>(`/computers/${encodeURIComponent(id)}/start`, { method: "POST" });
 }
 
-export function deleteComputer(id: string, force = false): Promise<{ deleted: boolean; remote_cleaned: boolean }> {
+export function deleteComputer(id: string, force = false): Promise<{ deleted: boolean; remote_cleaned: boolean; key_removed?: boolean }> {
   return api(`/computers/${encodeURIComponent(id)}${force ? "?force=true" : ""}`, { method: "DELETE" });
 }
 

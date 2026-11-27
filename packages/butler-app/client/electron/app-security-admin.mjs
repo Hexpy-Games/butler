@@ -75,6 +75,7 @@ const SECURITY_ROUTES = Object.freeze({
   // Other computers: the SSH registry and its remote sign-in, local admin only.
   listComputers: { method: "GET", path: "/computers" },
   checkComputerHostKey: { method: "POST", path: "/computers/host-key", payload: true },
+  stashComputerPassword: { method: "POST", path: "/computers/password", payload: true },
   addComputer: { method: "POST", path: "/computers", payload: true },
   deleteComputer: { method: "DELETE", path: "/computers", entry: true },
   startComputer: { method: "POST", path: "/computers", entry: true, suffix: "/start" },

@@ -417,13 +417,13 @@ function scheduleTiming(value: NonNullable<ApprovalSummary["schedule"]>, appCopy
 export interface QuestionDraft { id: string; selected: number[]; text: string; other: string; skipped: boolean }
 
 export function answerOptions(q: UserQuestion) {
-  return q.kind === "text" ? [] : q.options.filter(o => !o.kind || o.kind === "answer");
+  return q.kind === "text" ? [] : q.options.filter(o => !o.kind || o.kind === "answer" || o.kind === "password_setup");
 }
 export function answerWire(questions: readonly UserQuestion[], answers: readonly QuestionDraft[]): UserQuestionAnswer[] {
   return questions.map(q => {
     const a = answers.find(a => a.id === q.id);
     const options = answerOptions(q);
-    return { id: q.id, selected: a?.selected.flatMap(i => options[i] ? [options[i].id] : []) ?? [],
+    return { id: q.id, selected: a?.selected.flatMap(i => options[i] && options[i].kind !== "password_setup" ? [options[i].id] : []) ?? [],
       custom: a?.other.trim() || a?.text.trim() || null, skipped: a?.skipped ?? true };
   });
 }
