@@ -9,6 +9,7 @@ publish.workspace = true
 # The only crate with operating-system specific code (see src/lib.rs). It is a
 # leaf: it depends on no other workspace crate, so every crate can use it.
 [dependencies]
+filedescriptor = "0.8.3"
 socket2 = "0.6.5"
 # Quotes paths inside macOS sandbox profiles.
 iana-time-zone.workspace = true
@@ -65,7 +66,6 @@ win32job.workspace = true
 same-file = "1.0.6"
 winapi-util = "=0.1.11"
 atomicwrites.workspace = true
-filedescriptor = "0.8.3"
 windows-permissions = "=0.2.4"
 
 [features]

@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { TextInput, View } from "react-native";
+import { Platform, TextInput, View } from "react-native";
 import { alpha, mix, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { BaseText } from "./internal/BaseText";
@@ -20,7 +20,8 @@ export interface TextFieldProps {
   autoFocus?: boolean;
   multiline?: boolean;
   keyboardType?: "default" | "url" | "number-pad";
-  autoComplete?: "off" | "url" | "one-time-code";
+  autoComplete?: "off" | "url" | "username" | "password" | "one-time-code";
+  secureTextEntry?: boolean;
   returnKeyType?: "done" | "go" | "next";
   onSubmitEditing?: () => void;
   maxLength?: number;
@@ -29,7 +30,7 @@ export interface TextFieldProps {
 
 export function TextField({
   label, value, onChangeText, placeholder, description, error, disabled, literal, numeric, autoFocus,
-  multiline, keyboardType, autoComplete, returnKeyType, onSubmitEditing, maxLength, testID,
+  multiline, keyboardType, autoComplete, secureTextEntry, returnKeyType, onSubmitEditing, maxLength, testID,
 }: TextFieldProps) {
   const t = useTokens();
   const [focusedNow, setFocusedNow] = useState(false);
@@ -39,6 +40,9 @@ export function TextField({
   const border = error
     ? t.color("--color-danger-border")
     : focused ? mix(t.color("--accent"), 0.52, line) : line;
+  const textContentType = Platform.OS === "ios" && autoComplete
+    ? ({ username: "username", password: "password", "one-time-code": "oneTimeCode", off: undefined, url: undefined } as const)[autoComplete]
+    : undefined;
   const fontVariant = [
     ...(numeric ? (["tabular-nums"] as const) : []),
     ...(literal ? (["no-common-ligatures", "no-contextual"] as const) : []),
@@ -58,7 +62,9 @@ export function TextField({
         multiline={multiline}
         textAlignVertical={multiline ? "top" : undefined}
         keyboardType={keyboardType}
-        autoComplete={autoComplete}
+        autoComplete={textContentType ? undefined : autoComplete}
+        textContentType={textContentType}
+        secureTextEntry={secureTextEntry}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
         maxLength={maxLength}

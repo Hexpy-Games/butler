@@ -97,6 +97,7 @@ pub fn release_platform_for(os: &str, arch: &str) -> Option<&'static str> {
         ("macos", "arm64") => Some("darwin-arm64"),
         ("linux", "x64") => Some("linux-x64"),
         ("linux", "arm64") => Some("linux-arm64"),
+        ("windows", "x64") => Some("windows-x64"),
         _ => None,
     }
 }

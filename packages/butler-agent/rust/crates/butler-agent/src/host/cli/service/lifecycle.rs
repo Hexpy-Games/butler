@@ -3,7 +3,7 @@
 use butler_platform::secure_fs::Canonical as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use butler_platform::{process_control, secure_fs, user_dirs};
@@ -375,7 +375,7 @@ fn spawn_service(
     installation: &ResolvedInstallation,
     data_root: &Path,
     remote: bool,
-) -> Result<Child, crate::host::HostError> {
+) -> Result<process_control::DetachedChild, crate::host::HostError> {
     validate_write_destinations(data_root, installation)?;
     let executable = butler_platform::process_names::current_exe()
         .map_err(|source| {
@@ -399,14 +399,13 @@ fn spawn_service(
     )?;
     let mut command = Command::new(executable);
     command
-        .env(super::supervisor::VARIABLE, "1")
         .arg("--installation-root")
         .arg(installation.root())
         .arg("--resource-root")
         .arg(installation.resources())
         .args(["service", "run", "--data"])
         .arg(data_root)
-        .arg("--detached")
+        .args(["--detached", super::supervisor::FLAG])
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -417,13 +416,24 @@ fn spawn_service(
         command.arg("--remote");
     }
     process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
-    process_control::detach(&mut command);
-    command.spawn().map_err(|source| {
-        crate::host::HostError::new("native_service_spawn_failed").with_source(source)
+    let spawned = if remote {
+        process_control::spawn_outliving_session(&mut command)
+    } else {
+        process_control::detach(&mut command)
+            .spawn()
+            .map(process_control::DetachedChild::from)
+    };
+    spawned.map_err(|source| {
+        let code = if remote && process_control::breakaway_denied(&source) {
+            "remote_service_breakaway_denied"
+        } else {
+            "native_service_spawn_failed"
+        };
+        crate::host::HostError::new(code).with_source(source)
     })
 }
 
-fn log_file(
+pub(super) fn log_file(
     path: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<std::fs::File, crate::host::HostError> {

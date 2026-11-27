@@ -8,7 +8,7 @@ import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import { SplitButton } from "../SplitButton";
 import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./ComposerDecisionPanel";
-import { BrowserApproval, BrowserHandoff, CommandScript } from "./ComposerDecisionPanel.showcaseParts";
+import { BrowserApproval, BrowserHandoff, CommandScript, SignInForm } from "./ComposerDecisionPanel.showcaseParts";
 
 export const meta: ShowcaseMeta = {
   title: "ComposerDecisionPanel",
@@ -151,4 +151,5 @@ function KeyboardDecision({ context }: { context: ShowcaseRenderContext }) {
       <Button type="button" size="sm" onClick={() => complete(() => setResult("Allowed"))}>{copy.once}</Button>
     </ButtonContainer>} /></ComposerCard>;
 }
+stories.push({ name: "Form · sign-in fields", widths: ["375", "app"], render: () => <SignInForm /> });
 stories.push({ name: "Keyboard · explicit confirmation", render: (context) => <KeyboardDecision context={context} /> });

@@ -541,9 +541,15 @@ export const koKrCopy: AppCopy = {
       codeInvalid: "8자리 코드를 입력하십시오.",
       updateApp: "이 링크를 쓰려면 앱을 업데이트하십시오.",
       linkInvalid: "링크가 불완전합니다. 직접 입력하십시오.",
+      matchLabel: "확인 번호",
+      waitHint: "컴퓨터에서 이 번호를 고르십시오.",
+      cancel: "취소",
     },
     problems: {
       invalidCode: "코드가 틀렸거나 만료되었습니다. 새 코드를 받으십시오.",
+      rejected: "컴퓨터에서 거절했습니다.",
+      expired: "컴퓨터에서 응답이 없습니다. 다시 시도하십시오.",
+      cancelled: "취소했습니다.",
       hostNotAllowed: "허용되지 않은 주소입니다. 컴퓨터의 설정 → 휴대폰 및 기기를 확인하십시오.",
       needsPairing: "이 휴대폰의 연결이 해제되었습니다.",
       versionMismatch: "버전이 맞지 않습니다. 버틀러와 앱을 업데이트하십시오.",
@@ -882,7 +888,7 @@ export const koKrCopy: AppCopy = {
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",
       payHandoff: "결제 확인 필요",
-      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", openTab: "열어서 확인", stop: "작업 중지", done: "입력 완료" },
+      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", openTab: "열어서 확인", stop: "작업 중지", done: "입력 완료", fields: { username: "아이디", password: "비밀번호", otp: "인증번호" }, submit: "입력", savePrompt: username => `${username} 로그인을 저장할까요?` },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
         const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란", focus: "현재 포커스에", document: "페이지에", wait: "" };
@@ -2479,6 +2485,10 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       pairDevice: "기기 연결",
       createCode: "코드 만들기",
       pairingQr: "연결용 QR코드",
+      pairRequest: "연결 요청",
+      pickHint: "기기에 보이는 번호를 고르십시오.",
+      decline: "거절",
+      rejected: "요청을 거절했습니다",
       scanWithPhone: "휴대폰의 버틀러 앱으로 스캔하십시오.",
       expiresIn: (seconds) => `${seconds}초 남음`,
       invalidated: "실패가 반복돼 새 코드를 발급했어요",

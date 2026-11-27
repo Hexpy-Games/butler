@@ -84,7 +84,11 @@ pub(super) fn spawn_local(
         let result = axum::serve(listener, service)
             .with_graceful_shutdown(closed.cancelled_owned())
             .await;
-        tokio::fs::remove_file(socket.path).await?;
+        if let Err(error) = tokio::fs::remove_file(socket.path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error);
+        }
         result
     })
 }

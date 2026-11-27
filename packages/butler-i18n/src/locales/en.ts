@@ -543,9 +543,15 @@ export const enUsCopy: AppCopy = {
       codeInvalid: "Enter the 8-digit code.",
       updateApp: "Update the app to use this link.",
       linkInvalid: "This link is incomplete. Enter the details.",
+      matchLabel: "Confirmation number",
+      waitHint: "Pick this number on your computer.",
+      cancel: "Cancel",
     },
     problems: {
       invalidCode: "Wrong or expired code. Get a new one.",
+      rejected: "Declined on the computer.",
+      expired: "No answer from the computer. Try again.",
+      cancelled: "Cancelled.",
       hostNotAllowed: "This address isn't allowed. Check Settings → Phone & devices on your computer.",
       needsPairing: "This phone was unpaired.",
       versionMismatch: "Versions don't match. Update Butler and the app.",
@@ -884,7 +890,7 @@ export const enUsCopy: AppCopy = {
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",
       payHandoff: "Payment needs you",
-      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", openTab: "Open to check", stop: "Stop task", done: "Done" },
+      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", openTab: "Open to check", stop: "Stop task", done: "Done", fields: { username: "Username", password: "Password", otp: "Code" }, submit: "Enter", savePrompt: username => `Save the sign-in for ${username}?` },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
         const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;
@@ -2475,6 +2481,10 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       pairDevice: "Pair device",
       createCode: "Create code",
       pairingQr: "Pairing QR code",
+      pairRequest: "Connection request",
+      pickHint: "Pick the number shown on the device.",
+      decline: "Decline",
+      rejected: "Request declined",
       scanWithPhone: "Scan with the Butler app on your phone.",
       expiresIn: (seconds) => `${seconds}s remaining`,
       invalidated: "Repeated failures issued a new code",

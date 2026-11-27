@@ -47,7 +47,7 @@ pub(crate) async fn connect(
         .post(format!("{}/connect", gw.base))
         .header("origin", &gw.base)
         .header("sec-fetch-site", "same-origin")
-        .form(&[("code", code)])
+        .form(&[("code", code), ("match_code", "47")])
         .send()
         .await?)
 }

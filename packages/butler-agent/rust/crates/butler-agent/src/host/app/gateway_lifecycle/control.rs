@@ -155,7 +155,11 @@ impl GatewayControlServer {
         if let Some(socket) = self.socket {
             let removed = tokio::fs::remove_file(socket).await;
             result?;
-            removed.map_err(crate::host::HostError::from_error)
+            match removed {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                result => result,
+            }
+            .map_err(crate::host::HostError::from_error)
         } else {
             result
         }

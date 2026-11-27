@@ -30,7 +30,7 @@ export function detectSource(markers) {
   const named=e=>/username|email/u.test(e.autocomplete||'')||e.type==='email'||/user|login|email|account|identifier|아이디|이메일/u.test(label(e));
   const username=password?(near.find(named)??near.at(-1)):text.filter(named).length===1&&text.length<=2?text.find(named):undefined;
   const passkey=!password&&inputs.some(e=>/webauthn/u.test(e.autocomplete||''));
-  return {password:password?keep(password):null,username:username?keep(username):null,otp:Boolean(otp),captcha,keypad,passkey,inputs:inputs.length,
+  return {password:password?keep(password):null,username:username?keep(username):null,otp:otp?keep(otp):null,captcha,keypad,passkey,inputs:inputs.length,
     origin:location.origin};})()`;
 }
 const focusSource = (id, password) => `(()=>{const e=globalThis.__butlerSignIn?.get(${JSON.stringify(id)})?.deref();
@@ -43,7 +43,7 @@ export async function evaluate(tab, code, frame) {
   if (frame) return nativeWorldOf(tab, frame)?.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]).catch(() => null) ?? null;
   return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]);
 }
-async function settled(tab, maxMs) {
+export async function settled(tab, maxMs) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   await pause(150);
   while (contents.isLoading() && Date.now() < deadline) await pause(100);

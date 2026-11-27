@@ -114,6 +114,9 @@ interface ButlerAppBridge extends PendingAsksBridge {
   getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
   allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   handBackAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  authorityInputFields?: (input?: unknown) => Promise<unknown>;
+  authorityInput?: (input?: unknown) => Promise<unknown>;
+  authorityInputSave?: (input?: unknown) => Promise<unknown>;
   revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
   denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   answerUserQuestions?: (input?: unknown) => Promise<unknown>;
@@ -606,6 +609,9 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const action = method === "POST" ? "issuePairingCode" : "getPairingStatus";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
+  if (method === "POST" && url.pathname === "/security/pairing/decision") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "decidePairing", parseBody(options.body)));
+  }
   if (url.pathname === "/security/devices" && (method === "GET" || method === "DELETE")) {
     const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
@@ -888,6 +894,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "handBackAuthorityRequest", {
       sessionId: url.searchParams.get("session_id") ?? undefined,
       requestRef: decodeURIComponent(authorityHandBackMatch[1] ?? ""),
+    });
+  }
+  const authorityInputMatch = url.pathname.match(/^\/authority-requests\/([^/]+)\/(input|input-save)$/u);
+  if (authorityInputMatch && (method === "POST" || method === "GET" && authorityInputMatch[2] === "input")) {
+    const action = method === "GET" ? "authorityInputFields" : authorityInputMatch[2] === "input" ? "authorityInput" : "authorityInputSave";
+    return await callBridge<T>(bridge, action, {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityInputMatch[1] ?? ""),
+      body: options.body,
     });
   }
   const authorityRevokeMatch = url.pathname.match(/^\/authority-permissions\/([^/]+)$/u);

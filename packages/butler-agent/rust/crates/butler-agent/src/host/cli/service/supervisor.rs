@@ -8,13 +8,18 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 
-pub(super) const VARIABLE: &str = "BUTLER_CLI_SUPERVISOR";
+/// The internal `service run` argument that makes the process the CLI
+/// supervisor; the service it starts does not get it.
+pub(super) const FLAG: &str = "--supervisor";
 
 pub(super) async fn run(
     installation: &crate::host::ResolvedInstallation,
     data: Option<&str>,
 ) -> Result<ExitCode, crate::host::HostError> {
     let root = super::lifecycle::resolve_data_root(data, installation)?;
+    if std::env::args_os().any(|arg| arg == "--remote") {
+        redirect_logs(&root, installation).await?;
+    }
     let _lease = lease(&root)?.ok_or("native_service_supervisor_already_running")?;
     let version = crate::host::service::diagnostics::version(installation);
     let mut crashes = std::collections::VecDeque::new();
@@ -78,6 +83,23 @@ pub(super) async fn run(
     }
 }
 
+/// A remote service inherits no handles (Windows), so its supervisor opens
+/// the service logs itself; on Unix it reopens the files it already writes.
+async fn redirect_logs(
+    root: &std::path::Path,
+    installation: &crate::host::ResolvedInstallation,
+) -> Result<(), crate::host::HostError> {
+    let (root, installation) = (root.to_path_buf(), installation.clone());
+    tokio::task::spawn_blocking(move || {
+        let log = |name: &str| super::lifecycle::log_file(&root.join(name), &installation);
+        let stdout = log(butler_platform::service_registration::STDOUT_LOG)?;
+        let stderr = log(butler_platform::service_registration::STDERR_LOG)?;
+        butler_platform::process_control::redirect_stdio(&stdout, &stderr).map_err(io)
+    })
+    .await
+    .map_err(crate::host::HostError::from_error)?
+}
+
 async fn stop_child(
     child: &mut tokio::process::Child,
     owner: Option<tokio::process::ChildStdin>,
@@ -128,8 +150,7 @@ fn spawn() -> Result<(tokio::process::Child, Relay, Relay, String), crate::host:
     let nonce = uuid::Uuid::new_v4().to_string();
     let mut command = tokio::process::Command::new(executable);
     command
-        .args(std::env::args_os().skip(1))
-        .env_remove(VARIABLE)
+        .args(std::env::args_os().skip(1).filter(|arg| arg != FLAG))
         .env("BUTLER_CLI_SUPERVISOR_PID", std::process::id().to_string())
         .env(CLI_SUPERVISOR_NONCE, &nonce)
         .stdin(Stdio::piped())

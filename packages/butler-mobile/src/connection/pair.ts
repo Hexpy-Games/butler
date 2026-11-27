@@ -1,4 +1,4 @@
-import { createGatewayClient, type FetchLike } from "../../../butler-protocol/src/client/index.ts";
+import { createGatewayClient, type AbortSignalLike, type FetchLike } from "../../../butler-protocol/src/client/index.ts";
 import { isStorableId, noiseKeyName, stringField, type Pairing } from "./pairings";
 import { problemFrom, type Problem } from "./problems";
 
@@ -8,11 +8,13 @@ export interface PairInput {
   origin: string;            // LAN origin, or the relay address when fetch is the relay FetchLike
   addresses: string[];       // what the saved pairing stores
   code: string;
+  matchCode: string;
   device: { name: string; platform: PairPlatform };
   fetch: FetchLike;
   noiseStatic?: string;      // phone public key, base64url; sent whenever the QR had k (LAN and relay)
   tunnel?: { tunnelId: string; desktopStatic: string };
   timeoutMs?: number;
+  signal?: AbortSignalLike;
 }
 
 function pairingFrom(input: PairInput, data: unknown): Pairing | null {
@@ -28,12 +30,16 @@ function pairingFrom(input: PairInput, data: unknown): Pairing | null {
 }
 
 export async function pairDevice(input: PairInput): Promise<PairOutcome> {
-  const { origin, code, device, fetch } = input;
+  const { origin, code, matchCode, device, fetch } = input;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 10000);
+  const signal = input.signal instanceof AbortSignal ? input.signal : undefined;
+  const abort = () => controller.abort();
+  if (input.signal?.aborted) abort();
+  signal?.addEventListener("abort", abort);
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 75000);
   try {
     const data = await createGatewayClient({ origin, fetch }).request<unknown>("/devices/pair", {
-      body: { code, device_name: device.name, platform: device.platform, ...(input.noiseStatic ? { noise_static: input.noiseStatic } : {}) },
+      body: { code, match_code: matchCode, device_name: device.name, platform: device.platform, ...(input.noiseStatic ? { noise_static: input.noiseStatic } : {}) },
       signal: controller.signal,
     });
     const pairing = pairingFrom(input, data);
@@ -42,6 +48,7 @@ export async function pairDevice(input: PairInput): Promise<PairOutcome> {
     return { ok: false, problem: problemFrom(error) };
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
 }
 

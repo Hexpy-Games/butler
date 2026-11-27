@@ -1,10 +1,10 @@
 //! Startup readiness and bounded shutdown helpers.
 
 use std::path::Path;
-use std::process::Child;
 use std::time::{Duration, Instant};
 
 use butler_platform::instance::{StopError, request_stop};
+use butler_platform::process_control::DetachedChild;
 use serde::Deserialize;
 
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
@@ -20,7 +20,7 @@ use crate::host::service::instance::{
 
 pub(super) async fn wait_until_ready(
     config: &ServiceConfiguration,
-    mut child: Option<&mut Child>,
+    mut child: Option<&mut DetachedChild>,
     expected_nonce: Option<String>,
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let mut deadline = Instant::now() + START_TIMEOUT;
@@ -89,7 +89,7 @@ pub(super) async fn wait_until_ready(
 
 pub(super) async fn wait_until_registered(
     data_root: &Path,
-    child: &mut Child,
+    child: &mut DetachedChild,
 ) -> Result<InstanceRecord, crate::host::HostError> {
     let deadline = Instant::now() + INSTANCE_PUBLISH_TIMEOUT;
     loop {
@@ -283,7 +283,7 @@ pub(super) async fn wait_for_stop(
 
 /// Stops a child whose start failed: a stop request first (SIGTERM), then,
 /// after 5 s or where the host has no stop request (Windows), a kill.
-pub(super) async fn cleanup_spawned(mut child: Child) {
+pub(super) async fn cleanup_spawned(mut child: DetachedChild) {
     let pid = child.id();
     if child.try_wait().ok().flatten().is_some() {
         return;
@@ -298,8 +298,8 @@ pub(super) async fn cleanup_spawned(mut child: Child) {
             }
         }
     }
-    // Child::try_wait keeps a live direct child unreaped, so the PID cannot be
-    // recycled between this final identity check and Child::kill.
+    // DetachedChild keeps the PID from being reused (unreaped on Unix, its
+    // handle open on Windows) between this final check and kill.
     if child.try_wait().ok().flatten().is_none() {
         let _ = child.kill();
         let _ = child.wait();

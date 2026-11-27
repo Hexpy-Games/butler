@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import type { MobileCopy } from "../../../butler-i18n/src/index.ts";
 import { showToast } from "@/ds";
@@ -13,7 +13,9 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
   const [addressError, setAddressError] = useState<string>();
   const [codeError, setCodeError] = useState<string>();
   const [connecting, setConnecting] = useState(false);
+  const [match, setMatch] = useState<string>();
   const [explainer, setExplainer] = useState(false);
+  const attempt = useRef<AbortController | null>(null);
   const submit = useCallback(async (typedAddress: string, typedCode: string) => {
     const origin = butlerOrigin(typedAddress);
     const valid = /^\d{8}$/.test(typedCode);
@@ -21,10 +23,14 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
     setCodeError(valid ? undefined : copy.pair.codeInvalid);
     if (!origin || !valid) return;
     setConnecting(true);
-    const problem = await pairAndOpenHome(origin, typedCode);
+    attempt.current = new AbortController();
+    const problem = await pairAndOpenHome(origin, typedCode, setMatch, attempt.current.signal);
     if (!problem) return;
     setConnecting(false);
+    setMatch(undefined);
+    if (problem === "cancelled") return;
     if (problem === "invalidCode") setCodeError(copy.problems.invalidCode);
+    else if (problem === "rejected" || problem === "expired") showToast({ message: copy.problems[problem], tone: "error" });
     else {
       setAddressError(copy.problems[problem]);
       if (explainLocalNetwork(problem, origin)) setExplainer(true);
@@ -45,13 +51,16 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
       setAddressError(undefined);
       setCodeError(undefined);
       setConnecting(true);
-      void pairAnyAndOpenHome(link).then(failure => {
+      attempt.current = new AbortController();
+      void pairAnyAndOpenHome(link, setMatch, attempt.current.signal).then(failure => {
         if (!failure) return;
         const { origin, problem, relay } = failure;
         setConnecting(false);
+        setMatch(undefined);
+        if (problem === "cancelled") return;
         setAddress(origin);
         if (problem === "invalidCode") setCodeError(copy.problems.invalidCode);
-        else if (relay) showToast({ message: copy.problems[problem], tone: "error" });
+        else if (relay || problem === "rejected" || problem === "expired") showToast({ message: copy.problems[problem], tone: "error" });
         else {
           setAddressError(copy.problems[problem]);
           if (explainLocalNetwork(problem, origin)) setExplainer(true);
@@ -63,10 +72,11 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
     showToast({ message: copy.pair.linkInvalid, tone: "warning" });
   }, [v, a, c, k, t, u, copy]);
   return {
-    address, code, addressError, codeError, connecting, explainer,
+    address, code, addressError, codeError, connecting, match, explainer,
     setAddress(t: string) { setAddress(t); setAddressError(undefined); },
     setCode(t: string) { setCode(codeDigits(t)); setCodeError(undefined); },
     connect() { void submit(address, code); },
+    cancel() { attempt.current?.abort(); },
     retry() { setExplainer(false); return submit(address, code); },
     closeExplainer() { setExplainer(false); },
   };

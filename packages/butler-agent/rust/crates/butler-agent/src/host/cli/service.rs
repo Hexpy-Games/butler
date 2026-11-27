@@ -27,6 +27,8 @@ struct Options {
     detached: bool,
     /// `--if-absent`: `service run` exits 0 when an instance owns DATA already.
     if_absent: bool,
+    /// `--supervisor`: `service run` supervises the service (CLI start).
+    supervisor: bool,
     /// `--files-only`: `startup enable` and `disable` write or remove the
     /// definition without asking the service manager to act.
     files_only: bool,
@@ -184,10 +186,10 @@ fn misplaced_option(options: &Options, action: Action) -> Option<(&'static str, 
             "service run",
             "--dry-run is not supported for internal service execution",
         ))
-    } else if (options.detached || options.if_absent) && !run {
+    } else if (options.detached || options.if_absent || options.supervisor) && !run {
         Some((
             "service",
-            "--detached and --if-absent are internal service flags",
+            "--detached, --if-absent and --supervisor are internal service flags",
         ))
     } else if options.files_only
         && !matches!(action, Action::RegisterLogin | Action::UnregisterLogin)
@@ -207,7 +209,7 @@ async fn run_service(
     data: Option<String>,
     options: &Options,
 ) -> ExitCode {
-    if std::env::var(supervisor::VARIABLE).as_deref() == Ok("1") {
+    if options.supervisor {
         return match supervisor::run(&installation, data.as_deref()).await {
             Ok(code) => code,
             Err(error) => report_error("service supervisor", options.json, error.message()),
@@ -330,6 +332,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
             "--verbose" | "--yes" | "--non-interactive" | "--safe-mode" | "--remote" => {}
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
+            supervisor::FLAG => options.supervisor = true,
             "--if-absent" => options.if_absent = true,
             "--files-only" => options.files_only = true,
             value if value.starts_with('-') => {

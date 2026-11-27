@@ -222,11 +222,15 @@ impl GatewaySecurity {
     /// navigation. Fetch/XHR requests continue to receive JSON errors.
     pub(super) fn connect_error_response(error: &HttpError) -> Response {
         let status = error.status();
-        let page = match status {
-            StatusCode::UNAUTHORIZED => ConnectPage::Rejected,
-            StatusCode::FORBIDDEN => ConnectPage::RequestDenied,
-            StatusCode::TOO_MANY_REQUESTS => ConnectPage::RateLimited,
-            _ => ConnectPage::Failed,
+        let page = match error {
+            HttpError::Public { code, .. } if code == "pairing_rejected" => ConnectPage::Declined,
+            HttpError::Public { code, .. } if code == "pairing_expired" => ConnectPage::Expired,
+            _ => match status {
+                StatusCode::UNAUTHORIZED => ConnectPage::Rejected,
+                StatusCode::FORBIDDEN => ConnectPage::RequestDenied,
+                StatusCode::TOO_MANY_REQUESTS => ConnectPage::RateLimited,
+                _ => ConnectPage::Failed,
+            },
         };
         let mut response = page.response_with_status(status);
         if let HttpError::RateLimited { retry_after } = error {

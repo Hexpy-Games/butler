@@ -250,10 +250,13 @@ async fn lan_device_token_gets_content_view() -> Result<(), HarnessError> {
     butler_e2e::skip_unless!(lan.is_some(), "no LAN listener");
     let address: std::net::SocketAddr = lan.unwrap().parse().unwrap();
     let pin = super::gateway_pairing::support::helpers::issue(&app).await?;
-    let paired: serde_json::Value = super::gateway_pairing::support::helpers::browser()
+    let pair = super::gateway_pairing::support::helpers::browser()
         .post(format!("http://{address}/devices/pair"))
-        .json(&json!({"code": pin["code"], "device_name": "Test phone", "platform": "ios", "public_key": "later"}))
-        .send().await?.json().await?;
+        .json(&json!({"code": pin["code"], "device_name": "Test phone", "platform": "ios", "public_key": "later", "match_code": "47"}))
+        .send();
+    let (paired, answer) = tokio::join!(pair, app.answer_pairing(Some("47")));
+    answer?;
+    let paired: serde_json::Value = paired?.json().await?;
     let token = paired["data"]["device_token"].as_str().unwrap();
     assert!(token.starts_with("bdt_"));
     let phone = Gateway::new(format!("http://{address}"), token.to_owned());
