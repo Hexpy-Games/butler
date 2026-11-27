@@ -1,4 +1,4 @@
-//! Source-compatible cutover of a truly empty native memory root.
+//! The first generation of a memory root: empty, with earlier conversations excluded.
 
 pub(super) mod durable;
 mod empty;
@@ -127,7 +127,45 @@ fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, code.as_str())
 }
 
-/// A fresh-only writer reservation captured before source producers start.
+/// Creates the reserved generation's graph and records every conversation
+/// turn and message already in the store as excluded from it.
+fn exclude_earlier_conversations(
+    data_root: &std::path::Path,
+    memory_root: &std::path::Path,
+    generation_id: &str,
+    now: &str,
+) -> CognitionResult<()> {
+    let root = memory_root.join("generations").join(generation_id);
+    durable::create_dir(&root)?;
+    let graph = root.join("graph.sqlite");
+    let recorded = (|| {
+        GraphRepository::create_fresh(&graph, now)?;
+        let mut db = butler_platform::sqlite::open(&graph).map_err(graph_error)?;
+        let tx = db.transaction().map_err(graph_error)?;
+        crate::coordination::capture_admission_floor(
+            data_root,
+            &tx,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .map_err(durable::io_error)?;
+        tx.commit().map_err(graph_error)?;
+        db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .map_err(graph_error)?;
+        drop(db);
+        butler_platform::secure_fs::sync_path(&graph).map_err(durable::io_error)
+    })();
+    if recorded.is_err() {
+        // Nothing refers to this directory yet; the next start reserves anew.
+        let _ = butler_platform::secure_fs::remove_tree(&root);
+    }
+    recorded
+}
+
+fn graph_error(source: rusqlite::Error) -> CognitionError {
+    error(CognitionCode::MemoryInitializationIoError).with_source(source)
+}
+
+/// The writer reservation of a folder's first generation, captured before source producers start.
 /// Materialization belongs to the memory consumer, outside service readiness.
 pub struct FreshMemoryGeneration {
     data_root: PathBuf,
@@ -138,8 +176,8 @@ pub struct FreshMemoryGeneration {
     icu_version: String,
 }
 
-/// Inspect eligibility without row scans or writes on existing folders.
-/// A fresh folder reserves its writer gate until background publication.
+/// Reserves the first generation of a folder that has none. A folder that already holds
+/// conversations gets them excluded here, before producers start; publication stays in the background.
 pub async fn prepare_fresh_memory_generation(
     data_root: PathBuf,
     environment: CognitionPathEnvironment,
@@ -168,12 +206,23 @@ pub async fn prepare_fresh_memory_generation(
         .await
         .map_err(CognitionError::from)?
         .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
-    let memory_root = environment.memory_root(&data_root);
-    let intent = tokio::task::spawn_blocking(move || intent::reserve(&memory_root, &now_iso()))
-        .await
-        .map_err(|source| {
-            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
-        })??;
+    let (root, memory_root) = (data_root.clone(), environment.memory_root(&data_root));
+    let reserved =
+        tokio::task::spawn_blocking(move || intent::reserve(&root, &memory_root, &now_iso()))
+            .await
+            .map_err(|source| {
+                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+            })?;
+    let intent = match reserved {
+        Ok(intent) => intent,
+        Err(failure) => {
+            // No reservation was written. Memory stays off for this run and the
+            // next start tries again; a start does not fail on it.
+            butler_core::diagnostic!("[native-memory-bootstrap] {}", failure.code());
+            lease.release(false).map_err(CognitionError::from)?;
+            return Ok(None);
+        }
+    };
     Ok(Some(FreshMemoryGeneration {
         data_root,
         environment,
