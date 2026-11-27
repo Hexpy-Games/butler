@@ -23,7 +23,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "6367ee7467274769337aeb0a5644bec29e35e83127ede969b4e9b66ad5277501",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "fca0236786ba838046db9c8b28be296b3540373d4fb843131ec44d0bfb9e1e54",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "e027f7d61fb944b98404b5b433fff7c56c376ea225f320cf7d41c5ae4835f740",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "c11bf595617ff037807742ff86900d6f3d813df267d83aadcbaf2195683cf25d",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "531abd531ef87b82656139147704b4dbb2cfffbc70d234345731d065165baa7b",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -17451,7 +17451,10 @@
       "license": "MIT",
       "source": "https://github.com/wezterm/wezterm/tree/4c619a44dc07ad611d28a8af0416f25462d6b3ad",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "191c46fcf52061382b1c51a70311eb9081381cc158e5899f3739473a9432185b"
