@@ -50,6 +50,8 @@ pub enum OptionKind {
     /// A concrete answer.
     #[default]
     Answer,
+    /// Set up a computer's SSH key with a password.
+    PasswordSetup,
     /// Skip or answer later; the card's Skip covers it.
     Skip,
     /// "Type my own"; the card's free input covers it.
@@ -136,7 +138,8 @@ impl UserQuestions {
             if q.options.iter().any(|o| o.kind == OptionKind::Input) {
                 q.allow_custom = true;
             }
-            q.options.retain(|o| o.kind == OptionKind::Answer);
+            q.options
+                .retain(|o| matches!(o.kind, OptionKind::Answer | OptionKind::PasswordSetup));
             if q.kind == QuestionKind::Text || q.options.is_empty() {
                 q.kind = QuestionKind::Text;
                 q.options.clear();

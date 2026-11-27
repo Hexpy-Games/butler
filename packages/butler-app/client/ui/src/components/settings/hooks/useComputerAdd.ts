@@ -9,7 +9,7 @@ import { addComputer, checkHostKey, editComputer, startComputer, type Computer }
 
 type AddStep = "form" | "checking" | "adding" | "starting";
 
-export function useComputerAdd(onAdded: (computer: Computer, failure?: string) => void) {
+export function useComputerAdd(onAdded: (computer: Computer, failure?: string) => void, clearPassword: () => void) {
   const [step, setStep] = useState<AddStep>("form");
   const [error, setError] = useState<ComputerFieldError | null>(null);
   const running = useRef(false);
@@ -24,25 +24,36 @@ export function useComputerAdd(onAdded: (computer: Computer, failure?: string) =
     if (running.current) return;
     const validation = validateComputerForm(form);
     setError(validation);
-    if (validation) return;
+    if (validation) {
+      clearPassword();
+      return;
+    }
 
     running.current = true;
     const copy = appCopy.computers;
     const target = hostTarget(form);
     const environment = rows.map(({ id, name, value, saved }) =>
       saved && id === name && value === "" ? { name } : { name, value });
-    const input = { ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText };
     try {
-      if (editing) {
+      let computer: Computer;
+      try {
+        if (!editing) {
+          setStep("checking");
+          await checkHostKey(target);
+        }
+        const input = {
+          ...target, name: form.name.trim(), folder: form.folder.trim(), model_source: modelSource, environment, environment_text: form.environmentText,
+          ...(form.auth === "password" && form.password ? { password: form.password, managed_key: true } : {}),
+        };
         setStep("adding");
-        const computer = await editComputer(editing.id, input);
+        computer = await (editing ? editComputer(editing.id, input) : addComputer(input));
+      } finally {
+        clearPassword();
+      }
+      if (editing) {
         onAdded(computer);
         return;
       }
-      setStep("checking");
-      await checkHostKey(target);
-      setStep("adding");
-      const computer = await addComputer(input);
       setStep("starting");
       let failure: string | undefined;
       try {

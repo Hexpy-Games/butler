@@ -20,6 +20,7 @@ const variables = (dialog: Locator) => dialog.locator("#computer-environment-tex
 const section = (page: Page) => page.locator('[data-settings-section-id="computers"]');
 const button = (scope: Page | Locator, name: string) => scope.getByRole("button", { name, exact: true });
 const addDialog = (page: Page) => page.locator('[data-test-class="computer-add-dialog"]');
+const selectKeyFile = (dialog: Locator) => dialog.getByRole("radio", { name: appCopy.computers.form.authKeyFile, exact: true }).click();
 const aiDialog = (page: Page) => page.locator('[data-test-class="computer-ai-dialog"]');
 const row = (page: Page, name: string) => section(page).locator('[data-test-class="computer-row"]').filter({ hasText: name });
 const lastCall = (method: string, path: string) => fake.calls.findLast((call) => call.method === method && call.path === path);
@@ -76,6 +77,7 @@ async function captureStates(page: Page, output: string, variant: string) {
   await dialog.locator("#computer-address").fill(copy.form.addressPlaceholder);
   await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
   await dialog.locator("#computer-port").fill("22");
+  await selectKeyFile(dialog);
   await dialog.locator("#computer-key-file").fill(copy.form.keyFilePlaceholder);
   await variables(dialog).fill(environmentText);
   let release!: () => void;
@@ -132,6 +134,7 @@ async function captureStates(page: Page, output: string, variant: string) {
   await dialog.locator("#computer-name").fill(name);
   await dialog.locator("#computer-address").fill(copy.form.addressPlaceholder);
   await dialog.locator("#computer-folder").fill(copy.form.folderPlaceholder);
+  await selectKeyFile(dialog);
   for (const [state, step, code, message] of [
     ["A6-key-login", "add", "ssh_auth_failed", copy.errors.keyLogin],
     ["A6b-unreachable", "host-key", "ssh_unreachable", copy.errors.unreachable],
@@ -238,6 +241,7 @@ try {
   await dialog.locator("#computer-name").fill(name);
   await dialog.locator("#computer-address").fill(address);
   await dialog.locator("#computer-folder").fill("~");
+  await selectKeyFile(dialog);
   await submit.click();
   await assertVisible(dialog, copy.errors.homeFolder);
   assert.equal(await page.evaluate(() => document.activeElement?.id), "computer-folder");
@@ -326,6 +330,7 @@ try {
   await dialog.locator("#computer-name").fill(name);
   await dialog.locator("#computer-address").fill(address);
   await dialog.locator("#computer-folder").fill(folder);
+  await selectKeyFile(dialog);
   for (const [step, code, message] of [
     ["add", "ssh_auth_failed", copy.errors.keyLogin],
     ["host-key", "ssh_unreachable", copy.errors.unreachable],

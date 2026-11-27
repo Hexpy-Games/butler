@@ -3,6 +3,7 @@ use super::*;
 use crate::gateway::remote_computers::{
     self, AddInput, Computer, HostInput, ModelInput, ModelSource,
 };
+use zeroize::Zeroizing;
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -34,6 +35,7 @@ pub(super) async fn route(
                 remote_computers::host_key(root, input, state.shutdown.clone()).await?,
             )
         }
+        (Method::POST, "/computers/password") => stash_password(request).await?,
         (Method::POST, "/computers") => add(&state, request, root).await?,
         (Method::PUT, p) if p.starts_with("/computers/") => edit(&state, request, root, p).await?,
         (_, p) if p.starts_with("/computers/") && p.contains("/oauth/") => {
@@ -68,6 +70,65 @@ pub(super) async fn route(
     )
 }
 
+async fn password_body(
+    request: Request<Body>,
+    limit: usize,
+) -> Result<(serde_json::Value, Option<Zeroizing<String>>), HttpError> {
+    let bytes = Zeroizing::new(Vec::from(
+        read_body_with_limit(request.into_body(), limit).await?,
+    ));
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let object = value.as_object_mut().ok_or_else(HttpError::invalid_json)?;
+    let password = object
+        .remove("password")
+        .map(|value| match value {
+            serde_json::Value::String(password) => {
+                let password = Zeroizing::new(password);
+                if (1..=1024).contains(&password.chars().count())
+                    && !password.chars().any(char::is_control)
+                {
+                    Ok(password)
+                } else {
+                    Err(invalid_password())
+                }
+            }
+            _ => Err(invalid_password()),
+        })
+        .transpose()?;
+    Ok((value, password))
+}
+
+fn invalid_password() -> HttpError {
+    HttpError::public(400, "computer_password_invalid", "Check the password.")
+}
+
+async fn stash_password(
+    request: Request<Body>,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        request_ref: String,
+    }
+
+    let (value, password) = password_body(request, 16 * 1024).await?;
+    let input: Input = serde_json::from_value(value).map_err(|_| HttpError::invalid_json())?;
+    if !(1..=256).contains(&input.request_ref.chars().count())
+        || input
+            .request_ref
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err(HttpError::invalid_json());
+    }
+    remote_computers::password_stash::insert(
+        input.request_ref,
+        password.ok_or_else(invalid_password)?,
+    );
+    Ok((StatusCode::OK, serde_json::json!({"stored": true})))
+}
+
 async fn publish_changed(state: &HttpState, id: &str, sign_in: bool) -> Result<(), HttpError> {
     let payload = serde_json::Map::from_iter([
         ("computer_id".into(), serde_json::json!(id)),
@@ -85,13 +146,14 @@ async fn add(
     request: Request<Body>,
     root: &std::path::Path,
 ) -> Result<(StatusCode, serde_json::Value), HttpError> {
-    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
-    let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let (value, password) = password_body(request, 1024 * 1024).await?;
+    let input: AddInput = serde_json::from_value(value).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
     let computer = remote_computers::add(
         &state.application.setup()?,
         root,
         input,
+        password,
         state.shutdown.clone(),
     )
     .await?;
@@ -160,8 +222,8 @@ async fn edit(
         .strip_prefix("/computers/")
         .filter(|id| !id.is_empty() && !id.contains('/'))
         .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
-    let bytes = read_body_with_limit(request.into_body(), 1024 * 1024).await?;
-    let input: AddInput = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let (value, password) = password_body(request, 1024 * 1024).await?;
+    let input: AddInput = serde_json::from_value(value).map_err(|_| HttpError::invalid_json())?;
     let open = input.open_sign_in;
     let (computer, target_changed) = remote_computers::edit(
         &state.application.setup()?,
@@ -169,6 +231,7 @@ async fn edit(
         id,
         &state.agent_version,
         input,
+        password,
         state.shutdown.clone(),
     )
     .await?;

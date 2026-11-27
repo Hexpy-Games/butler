@@ -32,8 +32,8 @@ use butler_gateway::gateway::{
     butler_account_disabled,
 };
 use butler_models::models::{
-    ComputerModel, CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe,
-    ModelConfiguration, detect_local_servers,
+    ComputerModel, CredentialList, DeletedCredential, DeviceSshKey, LocalServerKind,
+    LocalServerProbe, ModelConfiguration, detect_local_servers,
 };
 use butler_runtime::operations::ServiceReadiness;
 
@@ -263,6 +263,13 @@ impl AppSetupPort for AppSetup {
             let root = this.validated_root()?;
             credentials::computer_key(&this.configuration, &id, &root).await
         })
+    }
+
+    fn device_ssh_key(
+        &self,
+        create: Option<DeviceSshKey>,
+    ) -> ApplicationFuture<Option<DeviceSshKey>> {
+        Box::pin(credentials::device_ssh_key(self.0.clone(), create))
     }
 
     fn computer_environment(&self, id: String) -> ApplicationFuture<BTreeMap<String, SecretText>> {

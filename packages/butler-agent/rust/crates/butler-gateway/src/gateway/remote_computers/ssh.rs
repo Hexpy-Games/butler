@@ -1,5 +1,5 @@
 use super::{
-    Computer, HostInput, HttpError, remote_error,
+    Computer, HostInput, HttpError, connection_error, remote_error,
     store::{KnownHosts, host_lines},
 };
 use butler_platform::{
@@ -7,6 +7,7 @@ use butler_platform::{
     remote_ssh,
 };
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -22,9 +23,18 @@ fn identity_args(target: &HostInput, home: Option<&Path>) -> Result<Vec<String>,
     if let Some(port) = target.port {
         args.extend(["-p".into(), port.to_string()]);
     }
-    if let Some(key) = &target.key_file {
-        let key =
-            butler_platform::tool_paths::expand_home(key, home).map_err(|_| HttpError::Internal)?;
+    let key = if let Some(path) = &target.identity {
+        Some(path.to_string_lossy().into_owned())
+    } else {
+        target
+            .key_file
+            .as_ref()
+            .map(|key| {
+                butler_platform::tool_paths::expand_home(key, home).map_err(|_| HttpError::Internal)
+            })
+            .transpose()?
+    };
+    if let Some(key) = key {
         args.extend(["-i".into(), key, "-o".into(), "IdentitiesOnly=yes".into()]);
     }
     Ok(args)
@@ -40,10 +50,20 @@ pub(super) fn arguments(
 ) -> Result<Vec<String>, HttpError> {
     let mut args = vec![remote_ssh::PROGRAM.into()];
     args.extend(remote_ssh::settings_config_args());
+    args.extend(["-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0"].map(str::to_owned));
+    args.extend(hardening(known_hosts, mode));
+    args.extend(identity_args(target, home)?);
+    for option in extra {
+        args.extend(["-o".into(), (*option).into()]);
+    }
+    args.extend(["--".into(), target.address.clone(), command.into()]);
+    Ok(args)
+}
+
+pub(super) fn hardening(known_hosts: &Path, mode: &str) -> Vec<String> {
+    let mut args = Vec::new();
     for option in [
-        "BatchMode=yes",
         "ConnectTimeout=10",
-        "NumberOfPasswordPrompts=0",
         "ForwardAgent=no",
         "ForwardX11=no",
         "ClearAllForwardings=yes",
@@ -63,12 +83,7 @@ pub(super) fn arguments(
         "-o".into(),
         format!("StrictHostKeyChecking={mode}"),
     ]);
-    args.extend(identity_args(target, home)?);
-    for option in extra {
-        args.extend(["-o".into(), (*option).into()]);
-    }
-    args.extend(["--".into(), target.address.clone(), command.into()]);
-    Ok(args)
+    args
 }
 
 pub(super) async fn run(
@@ -76,6 +91,16 @@ pub(super) async fn run(
     stdin: Stdin,
     timeout: Duration,
     cancel: CancellationToken,
+) -> Result<HookOutput, HttpError> {
+    run_with_env(args, stdin, timeout, cancel, remote_ssh::environment()).await
+}
+
+pub(super) async fn run_with_env(
+    args: Vec<String>,
+    stdin: Stdin,
+    timeout: Duration,
+    cancel: CancellationToken,
+    environment: HashMap<String, String>,
 ) -> Result<HookOutput, HttpError> {
     let (stdin, stdin_file) = match stdin {
         Stdin::Bytes(bytes) => (bytes, None),
@@ -85,7 +110,7 @@ pub(super) async fn run(
         HookProcess {
             command: None,
             args: Some(args),
-            environment: remote_ssh::environment(),
+            environment,
             cwd: std::env::temp_dir(),
             stdin,
             stdin_file,
@@ -118,11 +143,17 @@ pub(super) async fn spawn(args: Vec<String>) -> Result<StreamingProcess, HttpErr
     .map_err(spawn_error)
 }
 
+pub(super) struct HostCheck {
+    pub lines: Vec<String>,
+    pub methods: Vec<String>,
+    pub proxied: bool,
+}
+
 pub(super) async fn host_key(
     target: &HostInput,
     records: &[Computer],
     cancel: CancellationToken,
-) -> Result<Vec<String>, HttpError> {
+) -> Result<HostCheck, HttpError> {
     let before = host_lines(records);
     let known_hosts = KnownHosts::write(before.clone()).await?;
     let home = butler_platform::user_dirs::non_empty_home_dir();
@@ -130,7 +161,7 @@ pub(super) async fn host_key(
         target,
         &known_hosts.0,
         "accept-new",
-        &["PreferredAuthentications=none"],
+        &["PreferredAuthentications=none", "LogLevel=ERROR"],
         "true",
         home.as_deref(),
     )?;
@@ -180,12 +211,29 @@ pub(super) async fn host_key(
             "This computer's host key changed.",
         ));
     }
-    lookup(&settings.lookup, &known_hosts, cancel).await
+    let methods = output
+        .stderr
+        .split_once("Permission denied (")
+        .and_then(|(_, rest)| rest.split_once(")."))
+        .map_or_else(Vec::new, |(methods, _)| {
+            methods
+                .split(',')
+                .map(str::trim)
+                .filter(|method| !method.is_empty())
+                .map(str::to_owned)
+                .collect()
+        });
+    Ok(HostCheck {
+        lines: lookup(&settings.lookup, &known_hosts, cancel).await?,
+        methods,
+        proxied: settings.proxied,
+    })
 }
 
 struct Settings {
     lookup: String,
     files: Vec<String>,
+    proxied: bool,
 }
 
 async fn settings(
@@ -209,12 +257,14 @@ async fn settings(
     let mut port = "22";
     let mut alias = "";
     let mut files = Vec::new();
+    let mut proxied = false;
     for line in config.stdout.lines() {
         if let Some((key, value)) = line.split_once(' ') {
             match key {
                 "hostname" => hostname = value.trim(),
                 "port" => port = value.trim(),
                 "hostkeyalias" => alias = value.trim(),
+                "proxyjump" | "proxycommand" => proxied |= !matches!(value.trim(), "" | "none"),
                 "userknownhostsfile" | "globalknownhostsfile" => {
                     for file in value.split_whitespace().filter(|file| *file != "none") {
                         if !Path::new(file).is_absolute() {
@@ -234,7 +284,11 @@ async fn settings(
     } else {
         format!("[{hostname}]:{port}")
     };
-    Ok(Settings { lookup, files })
+    Ok(Settings {
+        lookup,
+        files,
+        proxied,
+    })
 }
 
 async fn lookup(
@@ -366,10 +420,8 @@ if cd -- {folder} 2>/dev/null; then echo folder=ok; else echo folder=missing; fi
     if output.exit_code == Some(255) {
         return Err(if output.stderr.contains("Permission denied") {
             remote_error("ssh_auth_failed", "SSH key login failed.")
-        } else if output.stderr.contains("Host key verification failed") {
-            remote_error("host_key_changed", "This computer's host key changed.")
         } else {
-            remote_error("ssh_unreachable", "Could not reach this computer.")
+            connection_error(&output.stderr)
         });
     }
     let platform = platform(&output.stdout).map_err(|raw| {
@@ -390,7 +442,7 @@ if cd -- {folder} 2>/dev/null; then echo folder=ok; else echo folder=missing; fi
     Ok(platform)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Platform {
     pub os: String,
     pub arch: String,

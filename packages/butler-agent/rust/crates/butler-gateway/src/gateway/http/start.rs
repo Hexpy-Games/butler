@@ -68,6 +68,11 @@ pub(in crate::gateway) async fn prepare(
         import_dependencies: config.browser_import,
         agent_imports: super::agent_import::AgentImports::default(),
     });
+    if let Some(root) = &state.output_data
+        && let Ok(setup) = state.application.setup()
+    {
+        crate::gateway::remote_computers::register_ssh_key(setup, root).await;
+    }
     // Publish the saved exposure before loopback admission: a successful
     // health probe must not race initialization of Settings → Security.
     state.remote.apply(&state, exposure);

@@ -80,6 +80,7 @@ mod computer_chat;
 mod computer_chat_retry;
 mod computer_environment;
 mod computer_model_sync;
+mod computer_ssh_key;
 mod computers;
 mod connectors;
 mod context_telemetry;

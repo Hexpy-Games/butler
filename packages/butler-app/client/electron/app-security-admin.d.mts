@@ -18,6 +18,7 @@ export type SecurityBridgeRoute =
   | "deleteConnectorRule"
   | "listComputers"
   | "checkComputerHostKey"
+  | "stashComputerPassword"
   | "addComputer"
   | "deleteComputer"
   | "startComputer"

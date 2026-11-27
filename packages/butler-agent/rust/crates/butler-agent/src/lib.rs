@@ -17,6 +17,7 @@
 mod host;
 
 pub use host::cli::command::{Command, main, run};
+pub use host::cli::ssh_askpass::run as ssh_askpass;
 
 // The historical butler_agent API remains in the provenance-free butler-host package.
 pub use host::build_info::BuildInfo;

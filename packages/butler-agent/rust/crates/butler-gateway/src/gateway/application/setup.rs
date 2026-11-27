@@ -23,7 +23,7 @@ use tokio::{sync::watch, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 use butler_models::models::{
-    CredentialList, CredentialView, DeletedCredential, DetectedLocalServer,
+    CredentialList, CredentialView, DeletedCredential, DetectedLocalServer, DeviceSshKey,
 };
 
 use super::{AppIdentityClock, AppStorage, EventSubscribers, events};
@@ -284,6 +284,10 @@ pub trait AppSetupPort: Send + Sync + 'static {
         Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
     fn computer_key(&self, id: String) -> ApplicationFuture<SecretText>;
+    fn device_ssh_key(
+        &self,
+        create: Option<DeviceSshKey>,
+    ) -> ApplicationFuture<Option<DeviceSshKey>>;
     fn computer_environment(&self, id: String) -> ApplicationFuture<BTreeMap<String, SecretText>>;
     fn save_computer_environment(
         &self,
