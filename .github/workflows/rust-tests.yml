@@ -235,6 +235,7 @@ jobs:
               smoke library-organize-electron
               ;;
             browser-shell)
+              smoke browser-live-handoff-electron
               smoke browser-wait-durable-electron
               smoke provider-signin-external-electron
               smoke browser-import-oneclick

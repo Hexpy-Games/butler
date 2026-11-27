@@ -6,6 +6,7 @@ ipcMain.on('butler-browser-world:ready',(event,name)=>{
   if(tab && /^butler-browser-[0-9a-f-]+$/u.test(name)) {
     for(const [key,frame] of tab.nativeFrames)if(frame.isDestroyed() || frame.detached)tab.nativeFrames.delete(key);
     tab.nativeFrames.set(name,event.senderFrame);
+    if (tab.holder === "user") syncUserHeld(tab, [event.senderFrame]);
   }
 });
 ipcMain.on('butler-browser-world:result',(event,id,ok,value)=>{
@@ -21,6 +22,10 @@ export function attachNativeWorlds(tab) {
     tabs.delete(contents.id);
     for(const [id,request] of pending) if(request.contentsId===contents.id){clearTimeout(request.timer);pending.delete(id);request.reject(new Error('frame_unavailable'));}
   });
+}
+export function syncUserHeld(tab, frames = tab.nativeFrames?.values() ?? []) {
+  const code = `globalThis.__butlerUserHeld=${tab.holder === "user"}`;
+  for (const frame of frames) void worldOf(tab, frame)?.executeJavaScriptInIsolatedWorld(9001, [{ code }]).catch(() => {});
 }
 export function nativeFrameWorld(tab,frameId) {
   // New/blank frames may have no preload IPC world. frameWorlds already owns

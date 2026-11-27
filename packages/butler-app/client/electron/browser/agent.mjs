@@ -1,7 +1,7 @@
 import { browserEvent, drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
 import { startUse, endUse, finishUse, tabInUse, bindUse, releaseHold, pauseHold, idleReadTab } from "./usage.mjs";
-import { noteNativeContext } from "./native-worlds.mjs";
+import { noteNativeContext, syncUserHeld } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose, resolveDialog } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
 import { guardUrl, installNavigationGuard } from "./guard.mjs";
@@ -29,6 +29,7 @@ export function controlTab(browser, tab, holder, sticky = false) {
   if (holder === "user") { if (tab.holder === "agent") pauseHold(browser, tab); releaseHold(browser, tab); hearTab(tab); } else tab.pausedTurns = null;
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
+  syncUserHeld(tab);
   if (holder === "agent") { tab.signinStep = null; tab.payStep = null; }
   browser.publish();
 }
@@ -50,12 +51,13 @@ export function wireAgentTab(browser, tab) {
   contents.on("did-frame-navigate", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   contents.on("did-navigate-in-page", () => { tab.epoch++; tab.observation = null; browser.publish(); });
   // A new top-level page holds no field Butler filled from a saved item.
-  contents.on("did-navigate", () => { tab.vaultFilled = false; emulation(tab); });
+  contents.on("did-navigate", () => { tab.vaultFilled = false; tab.userTyped = false; emulation(tab); });
   const takeover = input => {
     if (!tab.expectedInputs?.some(expected => expected.type === input.type && (expected.x === undefined || expected.x === input.x && expected.y === input.y)) && tab.holder === "agent" && ["mouseDown", "keyDown"].includes(input.type)) controlTab(browser, tab, "user");
   };
   contents.on("input-event", (_event, input) => takeover(input));
   contents.on("before-input-event", (event, input) => {
+    if (tab.holder === "user" && input.type === "keyDown") tab.userTyped = true;
     if (tab.holder === "agent" && (tab.busy || tabInUse(browser, tab)) && !tab.expectedInputs?.some(expected => expected.type === input.type)) event.preventDefault();
     else takeover(input);
   });
@@ -133,6 +135,7 @@ export function viewedTab(browser, tab, visible) {
   armExpiry(browser, tab);
 }
 export async function executeBrowser(browser, frame) {
+  if (frame.op?.startsWith("live.")) return browser.phoneLive.execute(frame);
   if (frame.op === "preview.closed") {
     for (const tab of [...browser.tabs.values()]) if (tab.owner === `conversation:${frame.session}` && tab.preview === frame.args.preview_id) browser.close(tab.id);
     return { status: "ok" };

@@ -17,6 +17,7 @@ import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachNativeWorlds } from "./native-worlds.mjs";
+import { PhoneLive } from "./phone-live.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
 import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
@@ -51,6 +52,7 @@ class UserBrowser {
     this.getWindow = getWindow;
     this.viewRecovery = createViewRecovery(this);
     this.live = new BrowserLiveFrames(this);
+    this.phoneLive = new PhoneLive(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
     this.signinSuggest = new SignInSuggest(this);
@@ -88,7 +90,7 @@ class UserBrowser {
       this.focusRequest = undefined;
     }
   }
-  resetUse() { resetUse(this); }
+  resetUse() { resetUse(this); this.phoneLive.reset(); }
   trip() {
     this.resetUse();
     for (const tab of [...this.tabs.values()]) {
@@ -451,6 +453,7 @@ class UserBrowser {
   }
   async dispose() {
     this.disposing = true;
+    this.phoneLive.reset();
     this.viewRecovery.dispose();
     await this.drainStills();
     await disposeMarkingHost();
