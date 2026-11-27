@@ -50,7 +50,12 @@ $t=if(Test-Path -LiteralPath $f){[IO.File]::ReadAllText($f)}else{''}
 if(@($t -split "`r?`n"|Where-Object{($_.Trim() -split '\s+') -ccontains $B}).Count -gt 0){'state=present';exit 0}
 $n=if($t.Length -gt 0 -and -not $t.EndsWith("`n")){"`r`n"}else{''}
 [IO.File]::AppendAllText($f,$n+$K+"`r`n",(New-Object Text.UTF8Encoding $false))
-if($admin -and (Run (Join-Path $env:SystemRoot 'System32\icacls.exe') ((Q $f)+' /inheritance:r /grant *S-1-5-32-544:F /grant *S-1-5-18:F')).Code -ne 0){exit 1}
+if($admin -and (Run (Join-Path $env:SystemRoot 'System32\icacls.exe') ((Q $f)+' /inheritance:r /grant *S-1-5-32-544:F /grant *S-1-5-18:F')).Code -ne 0){
+    $lines=[IO.File]::ReadAllLines($f)
+    $keep=@($lines|Where-Object{-not(($_.Trim() -split '\s+') -ccontains $B)})
+    if($keep.Count -ne $lines.Count){[IO.File]::WriteAllLines($f,[string[]]$keep,(New-Object Text.UTF8Encoding $false))}
+    exit 1
+}
 'state=added'
 "#;
 

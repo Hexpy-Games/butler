@@ -87,22 +87,38 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
 }
 
 /// Native facades have their own leaf and adapter dependencies.
-#[expect(
-    clippy::match_same_arms,
-    reason = "pure command text builders occupy a separate row from host facades"
-)]
 fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
         // butler-platform: the only OS-specific code. Independent facades; each
         // keeps its per-OS implementations as private children. The private
         // Windows process table serves instance identity and liveness.
         // SQLite owns host VFS selection and file synchronization; DB state and schema stay in callers.
-        "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
-        | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
-        | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" | "plugin_git"
-        | "shared_locks" | "host_file_behavior" | "startup_task" | "store_update"
-        | "remote_ssh" | "process_hardening" => &[],
-        "powershell_text" | "windows_command_line" => &[],
+        "data_paths"
+        | "cpu"
+        | "memory"
+        | "desktop"
+        | "launcher"
+        | "network"
+        | "process_table"
+        | "storage_size"
+        | "stdio"
+        | "time_zone"
+        | "user_auth"
+        | "user_dirs"
+        | "diagnostics"
+        | "account_dirs"
+        | "process_priority"
+        | "download_mark"
+        | "plugin_files"
+        | "plugin_git"
+        | "shared_locks"
+        | "powershell_text"
+        | "host_file_behavior"
+        | "startup_task"
+        | "store_update"
+        | "remote_ssh"
+        | "process_hardening"
+        | "windows_command_line" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
