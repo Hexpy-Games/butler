@@ -7,6 +7,7 @@ export interface Computer {
   address: string;
   port: number | null;
   key_file: string | null;
+  managed_key?: boolean;
   folder: string;
   os: string;
   arch: string;

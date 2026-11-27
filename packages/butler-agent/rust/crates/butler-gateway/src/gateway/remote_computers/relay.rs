@@ -1,5 +1,5 @@
 //! Relay a request to the computer's local socket over its pinned SSH connection.
-use super::{Computer, HostInput, HttpError, deploy, remote_error, ssh, store::KnownHosts};
+use super::{Computer, HttpError, deploy, remote_error, ssh, target::SshTarget};
 use butler_platform::secrets::SecretText;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -41,27 +41,14 @@ pub(super) async fn send(
     body: Vec<u8>,
     cancel: CancellationToken,
 ) -> Result<Sent, HttpError> {
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let target = SshTarget::of(computer).await?;
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
     let command = format!(
         r#""$HOME/.butler-remote/current/butler-agent" --remote-request "$HOME/.butler-remote/data" {} {}"#,
         quote(method),
         quote(path)
     );
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
-        "yes",
-        &[],
-        &command,
-        home.as_deref(),
-    )?;
+    let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(
         args,
         ssh::Stdin::Bytes(body),
@@ -144,27 +131,14 @@ pub(super) async fn loopback(
     head: Vec<u8>,
     cancel: CancellationToken,
 ) -> Result<String, HttpError> {
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let target = SshTarget::of(computer).await?;
     let command = match callback {
         super::forward::Callback::Port(port) =>
             format!(r#""$HOME/.butler-remote/current/butler-agent" --remote-loopback {port}"#),
         super::forward::Callback::Socket =>
             r#""$HOME/.butler-remote/current/butler-agent" --remote-callback "$HOME/.butler-remote/data""#.to_owned(),
     };
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
-        "yes",
-        &[],
-        &command,
-        home.as_deref(),
-    )?;
+    let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(
         args,
         ssh::Stdin::Bytes(head),

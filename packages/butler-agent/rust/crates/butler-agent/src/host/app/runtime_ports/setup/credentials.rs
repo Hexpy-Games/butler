@@ -6,14 +6,15 @@
 use butler_platform::secrets::SecretText;
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppProviderKeyInput, GatewayApplicationError,
     ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SavedProviderKey,
 };
 use butler_models::models::{
-    ComputerModel, CredentialError, CredentialList, DeletedCredential, ModelCatalogError,
-    ModelConfiguration, ProviderKeyCheckError, ProviderKeySaveError,
+    ComputerModel, CredentialError, CredentialList, DeletedCredential, DeviceSshKey,
+    ModelCatalogError, ModelConfiguration, ProviderKeyCheckError, ProviderKeySaveError,
 };
 
 /// Checks `input.api_key` with its provider; nothing is stored.
@@ -117,6 +118,30 @@ pub(super) async fn computer_key(
 ) -> Result<SecretText, GatewayApplicationError> {
     configuration
         .computer_identity(id, root, false)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn device_ssh_key(
+    setup: Arc<super::SetupInner>,
+    create: Option<DeviceSshKey>,
+) -> Result<Option<DeviceSshKey>, GatewayApplicationError> {
+    let configuration = setup.configuration.clone();
+    let root = tokio::task::spawn_blocking(move || {
+        let root = setup.validated_root()?;
+        let record = setup
+            .installation
+            .validate_data_root(&root.join("auth/device-ssh-key.json"))
+            .map_err(|source| super::unsafe_model_path().with_source(source))?;
+        if !record.starts_with(&root) {
+            return Err(super::unsafe_model_path());
+        }
+        Ok(root)
+    })
+    .await
+    .map_err(|_| GatewayApplicationError::internal())??;
+    configuration
+        .device_ssh_key(&root, create)
         .await
         .map_err(credential_error)
 }

@@ -46,6 +46,8 @@ use unix as sys;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
+pub(crate) use sys::quote_argument;
+#[cfg(windows)]
 use windows as sys;
 
 /// Whether a command started with [`isolate_group`] can be stopped together
@@ -192,6 +194,80 @@ pub fn target_liveness(target: i32) -> Liveness {
 /// without a console (`DETACHED_PROCESS`) on Windows.
 pub fn detach(command: &mut Command) -> &mut Command {
     sys::detach(command)
+}
+
+/// A child started detached: by [`spawn_outliving_session`], or by [`detach`]
+/// and `Command::spawn` (`From<Child>`). Holding it keeps the process id from
+/// being reused (unreaped on Unix, its handle open on Windows); dropping it
+/// leaves the child running.
+pub struct DetachedChild(sys::DetachedChild);
+
+impl DetachedChild {
+    /// The child's process id.
+    pub fn id(&self) -> u32 {
+        self.0.id()
+    }
+
+    /// The child's exit status if it has exited, without waiting.
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        self.0.try_wait()
+    }
+
+    /// Ends the child at once; a child that already exited is not an error.
+    pub fn kill(&mut self) -> io::Result<()> {
+        self.0.kill()
+    }
+
+    /// Waits until the child exits.
+    pub fn wait(&mut self) -> io::Result<ExitStatus> {
+        self.0.wait()
+    }
+}
+
+impl From<std::process::Child> for DetachedChild {
+    fn from(child: std::process::Child) -> Self {
+        Self(sys::detached(child))
+    }
+}
+
+/// Starts `command` detached so it outlives the login or SSH session that
+/// started it. Unix: [`detach`], then `Command::spawn`. Windows: the child
+/// leaves the caller's Job Object (an SSH session's), has no console and
+/// inherits no handle, so a session that waits for its handles to close is
+/// not held open; the stdio set on `command` is not used, and the child opens
+/// its own output ([`redirect_stdio`]). The child always gets this process's
+/// environment: `command` must set no variables (`InvalidInput` otherwise;
+/// winsafe 0.0.29 frees the environment block before `CreateProcessW` reads
+/// it), and `env_clear` is not supported. The program must be an absolute
+/// path.
+pub fn spawn_outliving_session(command: &mut Command) -> io::Result<DetachedChild> {
+    if command.get_envs().next().is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "environment changes are not supported here",
+        ));
+    }
+    sys::spawn_outliving_session(command).map(DetachedChild)
+}
+
+/// Points this process's stdout and stderr at `stdout` and `stderr` and closes
+/// what they were: for a process that opens its own logs.
+pub fn redirect_stdio(stdout: &std::fs::File, stderr: &std::fs::File) -> io::Result<()> {
+    use filedescriptor::{FileDescriptor, StdioDescriptor};
+    drop(
+        FileDescriptor::redirect_stdio(stdout, StdioDescriptor::Stdout)
+            .map_err(io::Error::other)?,
+    );
+    drop(
+        FileDescriptor::redirect_stdio(stderr, StdioDescriptor::Stderr)
+            .map_err(io::Error::other)?,
+    );
+    Ok(())
+}
+
+/// Whether [`spawn_outliving_session`] failed because the caller's Job Object forbids breakaway.
+pub fn breakaway_denied(error: &io::Error) -> bool {
+    sys::breakaway_denied(error)
 }
 
 /// Keep a detached child from retaining this controller's inherited output

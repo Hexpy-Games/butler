@@ -10,6 +10,7 @@ export function computerBridgeCall(method: string, path: string, body: unknown, 
   if (path === "/computers/host-key" && method === "POST") {
     return { action: "checkComputerHostKey", input: payload() };
   }
+  if (path === "/computers/password" && method === "POST") return { action: "stashComputerPassword", input: payload() };
   const entry = path.match(/^\/computers\/([0-9a-f-]{36})(\/.*)?$/u);
   if (!entry) return null;
   const [, id, suffix] = entry;

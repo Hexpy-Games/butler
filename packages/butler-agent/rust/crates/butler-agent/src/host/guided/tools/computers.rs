@@ -98,7 +98,7 @@ async fn write(
     };
     if execution.outcome == RequestOutcome::Applied {
         if tool == ToolName::ComputerAdd {
-            return retry::resume(owner, invocation, call_id, &execution).await;
+            return retry::resume(owner, invocation, call, call_id, &execution).await;
         }
         return already_applied();
     }
@@ -133,7 +133,7 @@ async fn write(
     if tool == ToolName::ComputerAdd
         && let Some(name) = name
     {
-        return retry::offer(owner, call, call_id, &name, result).await;
+        return retry::offer(owner, call, call_id, &name, 0, result).await;
     }
     Ok(result)
 }

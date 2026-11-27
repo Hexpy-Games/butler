@@ -37,6 +37,9 @@ pub fn reset_secret_keys(root: &Path) -> io::Result<Vec<(String, String)>> {
             ids.push(("computer_key".into(), id, backend));
         }
     }
+    if let Some((provider, id, backend)) = super::device_ssh_key::system_key(root)? {
+        ids.push((provider.into(), id.into(), backend));
+    }
     let mut keys = ids
         .into_iter()
         .map(|(provider, id, backend)| {

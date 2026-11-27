@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type Dispatch, type SetStateAction } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { SavedCredentialView } from "@/app/types";
 import {
   Button, ButtonContainer, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-  Input, ProgressMeter, ScrollArea, SettingsField, SettingsFieldGroup, SettingsFieldScopeProvider, Textarea, Tooltip, Typo,
+  Input, ProgressMeter, ScrollArea, SegmentedControl, SettingsField, SettingsFieldGroup, SettingsFieldScopeProvider, Textarea, Tooltip, Typo,
 } from "@/butler-ds";
 import { COMPUTER_FIELD_IDS, type ComputerField, type ComputerForm } from "./computerAddErrors";
 import { ComputerEnvironmentFields, type ComputerEnvironmentRow } from "./ComputerEnvironmentFields";
@@ -13,29 +13,42 @@ import type { Computer } from "./computersApi";
 import { useComputerAdd } from "./hooks/useComputerAdd";
 import { defaultSource, useComputerModelChoice } from "./hooks/useComputerModelChoice";
 
-const EMPTY_FORM: ComputerForm = { name: "", address: "", port: "", keyFile: "", folder: "", environmentText: "" };
+const EMPTY_FORM: ComputerForm = { name: "", address: "", auth: "password", password: "", port: "", keyFile: "", folder: "", environmentText: "" };
+interface ConnectionField {
+  field: Exclude<ComputerField, "environment" | "environmentText">;
+  description?: string;
+  placeholder?: string;
+  autoFocus?: boolean;
+  maxLength?: number;
+  type?: "password";
+  autoComplete?: "off";
+  inputMode?: "numeric";
+}
 
-export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys, editing }: {
+interface ComputerAddDialogProps {
   open: boolean;
   mainModel: MainModelKind;
   savedKeys: SavedCredentialView[];
   editing?: Computer | null;
   onOpenChange(open: boolean): void;
   onAdded(computer: Computer, failure?: string): void;
-}) {
+}
+
+export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys, editing }: ComputerAddDialogProps) {
   const formId = useId();
   const copy = appCopy.computers.form;
-  const add = useComputerAdd(onAdded);
   const model = useComputerModelChoice(defaultSource(mainModel));
   const [form, setForm] = useState(EMPTY_FORM);
+  const add = useComputerAdd(onAdded, () => setForm((current) => ({ ...current, password: "" })));
   const [environment, setEnvironment] = useState<ComputerEnvironmentRow[]>([]);
   const [lastEditing, setLastEditing] = useState<Computer | null>(null);
   useEffect(() => {
     if (open) {
       setLastEditing(editing ?? null);
-      setForm(editing ? {
+      setForm(editing ? { ...EMPTY_FORM,
         name: editing.name,
         address: editing.address,
+        auth: editing.managed_key ? "password" : "keyFile",
         port: editing.port?.toString() ?? "",
         keyFile: editing.key_file ?? "",
         folder: editing.folder,
@@ -49,18 +62,12 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
   useEffect(() => {
     if (add.error) document.getElementById(COMPUTER_FIELD_IDS[add.error.field])?.focus();
   }, [add.error]);
-  const required = !form.name.trim() || !form.address.trim() || !form.folder.trim();
   const isEditing = Boolean(open ? editing : lastEditing);
-  const busyLabel = isEditing ? appCopy.settings.security.working : copy.preparing;
-  const fields = [
-    { field: "name", placeholder: copy.namePlaceholder, autoFocus: true, maxLength: 80 },
-    { field: "address", placeholder: copy.addressPlaceholder, description: copy.addressHint },
-    { field: "port", placeholder: copy.portPlaceholder, inputMode: "numeric" },
-    { field: "keyFile", placeholder: copy.keyFilePlaceholder },
-    { field: "folder", placeholder: copy.folderPlaceholder, description: copy.folderHint },
-  ] as const satisfies ReadonlyArray<{
-    field: ComputerField; placeholder: string; description?: string; autoFocus?: boolean; maxLength?: number; inputMode?: "numeric";
-  }>;
+  const passwordRequired = form.auth === "password" && !(open ? editing : lastEditing)?.managed_key;
+  const required = !form.name.trim() || !form.address.trim() || !form.folder.trim() ||
+    (passwordRequired && !form.password);
+  const busyLabel = add.step === "adding" && form.auth === "password" && form.password ? copy.installingKey
+    : isEditing ? appCopy.settings.security.working : copy.preparing;
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!add.busy) onOpenChange(next); }}>
       <DialogContent layout="scroll-body" closeLabel={appCopy.common.close} showCloseButton={!add.busy} data-test-class="computer-add-dialog">
@@ -70,21 +77,12 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
         <ScrollArea fill>
           <form id={formId} onSubmit={(event) => {
             event.preventDefault();
+            if (add.busy || required || !model.ready) return;
             void add.submit(form, model.source, environment, editing ?? undefined);
           }}>
             <SettingsFieldScopeProvider>
               <SettingsFieldGroup>
-                {fields.map(({ field, ...input }) => {
-                  const { description, ...props } = input as typeof input & { description?: string };
-                  const id = COMPUTER_FIELD_IDS[field];
-                  return (
-                    <SettingsField key={field} id={id} label={copy[field]} description={description} controlWidth="full"
-                      error={add.error?.field === field ? add.error.message : undefined}
-                      control={<Input {...props} id={id} value={form[field]} disabled={add.busy}
-                        onChange={(event) => setForm({ ...form, [field]: event.target.value })} />}
-                    />
-                  );
-                })}
+                <ComputerConnectionFields form={form} setForm={setForm} add={add} busyLabel={busyLabel} />
                 <SettingsField id={COMPUTER_FIELD_IDS.environmentText} label={copy.environmentText} controlWidth="full"
                   error={add.error?.field === "environmentText" ? add.error.message : undefined}
                   control={<Textarea id={COMPUTER_FIELD_IDS.environmentText} placeholder="KEY=VALUE" rows={3}
@@ -111,5 +109,47 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ComputerConnectionFields({ form, setForm, add, busyLabel }: {
+  form: ComputerForm;
+  setForm: Dispatch<SetStateAction<ComputerForm>>;
+  add: ReturnType<typeof useComputerAdd>;
+  busyLabel: string;
+}) {
+  const copy = appCopy.computers.form;
+  const fields: ConnectionField[] = [
+    { field: "name", placeholder: copy.namePlaceholder, autoFocus: true, maxLength: 80 },
+    { field: "address", placeholder: copy.addressPlaceholder, description: copy.addressHint },
+    { field: "port", placeholder: copy.portPlaceholder, inputMode: "numeric" },
+    form.auth === "password"
+      ? { field: "password", description: copy.passwordHint, type: "password", autoComplete: "off" }
+      : { field: "keyFile", placeholder: copy.keyFilePlaceholder },
+    { field: "folder", placeholder: copy.folderPlaceholder, description: copy.folderHint },
+  ];
+  function renderField({ field, description, ...props }: ConnectionField) {
+    const id = COMPUTER_FIELD_IDS[field];
+    return (
+      <SettingsField key={field} id={id} label={copy[field]} description={description} controlWidth="full"
+        error={add.error?.field === field ? add.error.message : undefined}
+        control={<Input {...props} id={id} value={form[field]} disabled={add.busy}
+          onChange={(event) => setForm({ ...form, [field]: event.target.value })} />}
+      />
+    );
+  }
+  const options = [
+    { value: "password", label: copy.authPassword },
+    { value: "keyFile", label: copy.authKeyFile },
+  ].map((option) => ({ ...option, disabled: add.busy, disabledReason: add.busy ? busyLabel : undefined }));
+  return (
+    <>
+      {fields.slice(0, 3).map(renderField)}
+      <SettingsField label={copy.auth} controlWidth="full"
+        control={<SegmentedControl ariaLabel={copy.auth} options={options} value={form.auth}
+          onValueChange={(auth) => setForm({ ...form, auth: auth === "keyFile" ? "keyFile" : "password", password: "" })} />}
+      />
+      {fields.slice(3).map(renderField)}
+    </>
   );
 }

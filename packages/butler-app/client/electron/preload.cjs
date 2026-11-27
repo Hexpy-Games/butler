@@ -1488,6 +1488,7 @@ const butlerApp = Object.freeze({
   updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
   listComputers: () => requestSecurity("listComputers"),
   checkComputerHostKey: (payload) => requestSecurity("checkComputerHostKey", { payload }),
+  stashComputerPassword: (payload) => requestSecurity("stashComputerPassword", { payload }),
   addComputer: (payload) => requestSecurity("addComputer", { payload }),
   deleteComputer: ({ id, force } = {}) => requestSecurity("deleteComputer", { id, force }),
   startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),

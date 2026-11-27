@@ -35,6 +35,12 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
         fn computer_key(&self, _: String) -> ApplicationFuture<SecretText> {
             unsupported()
         }
+        fn device_ssh_key(
+            &self,
+            _: Option<DeviceSshKey>,
+        ) -> ApplicationFuture<Option<DeviceSshKey>> {
+            Box::pin(async { Ok(None) })
+        }
         fn computer_environment(
             &self,
             _: String,

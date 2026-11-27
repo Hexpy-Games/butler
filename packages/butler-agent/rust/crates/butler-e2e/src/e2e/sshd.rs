@@ -54,6 +54,25 @@ impl TestSshd {
         home: Option<&Path>,
         env: &[(&str, &str)],
     ) -> Result<Self, HarnessError> {
+        Self::start_configured(dir, authorized_pubkey, home, env, None)
+    }
+
+    pub fn start_with_user_keys(
+        dir: &Path,
+        admin_pub: &Path,
+        home: &Path,
+    ) -> Result<Self, HarnessError> {
+        let user_keys = home.join(".ssh/authorized_keys");
+        Self::start_configured(dir, admin_pub, Some(home), &[], Some(&user_keys))
+    }
+
+    fn start_configured(
+        dir: &Path,
+        authorized_pubkey: &Path,
+        home: Option<&Path>,
+        env: &[(&str, &str)],
+        user_keys: Option<&Path>,
+    ) -> Result<Self, HarnessError> {
         std::fs::create_dir_all(dir)?;
         let host_key = dir.join("host_key");
         let port = std::net::TcpListener::bind("127.0.0.1:0")?
@@ -66,15 +85,20 @@ impl TestSshd {
             children: Children(Vec::new()),
         };
         server.generate_host_key()?;
-        std::fs::copy(authorized_pubkey, dir.join("authorized_keys"))?;
+        let admin_keys = dir.join("authorized_keys");
+        std::fs::copy(authorized_pubkey, &admin_keys)?;
+        let mut authorized_keys = admin_keys.display().to_string();
+        if let Some(user_keys) = user_keys {
+            authorized_keys.push(' ');
+            authorized_keys.push_str(&user_keys.to_string_lossy());
+        }
         std::fs::write(
             dir.join("sshd_config"),
             format!(
-                "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {}\n\
+                "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {authorized_keys}\n\
              PasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\n\
              StrictModes no\nPidFile {}\n",
                 server.host_key.display(),
-                dir.join("authorized_keys").display(),
                 dir.join("sshd.pid").display(),
             ),
         )?;

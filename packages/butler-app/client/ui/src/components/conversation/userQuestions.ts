@@ -3,14 +3,16 @@ import type { ComposerQuestion, QuestionAnswer } from "@/butler-ds";
 
 /** Concrete answers only: the card has its own Skip and free input, so options of those kinds never show. */
 function answerOptions(q: UserQuestion) {
-  return q.kind === "text" ? [] : q.options.filter(o => !o.kind || o.kind === "answer");
+  return q.kind === "text" ? [] : q.options.filter(o => !o.kind || o.kind === "answer" || o.kind === "password_setup");
 }
 export function questionProps(questions: readonly UserQuestion[]): ComposerQuestion[] {
   return questions.map(q => {
     const options = answerOptions(q);
     // No concrete answer left: a free-text question, one input.
     if (!options.length) return { id: q.id, header: q.eyebrow, text: q.title, type: "text", options: [] };
-    return { id: q.id, header: q.eyebrow, text: q.title, type: q.kind, options, allowOther: q.allow_custom || options.length < q.options.length };
+    return { id: q.id, header: q.eyebrow, text: q.title, type: q.kind,
+      options: options.map(o => o.kind === "password_setup" ? { ...o, description: undefined } : o),
+      allowOther: q.allow_custom || options.length < q.options.length };
   });
 }
 export function answerProps(questions: readonly UserQuestion[], answers: readonly UserQuestionAnswer[]): QuestionAnswer[] {

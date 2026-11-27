@@ -287,7 +287,7 @@ export interface UserQuestion {
   /** `text`: a free-text answer with no options. */
   id: string; eyebrow: string; title: string; kind: "single" | "multi" | "text"; allow_custom: boolean;
   /** `skip` and `input` duplicate the card's own Skip and free input; the runtime drops them. */
-  options: { id: string; label: string; description?: string; recommended?: boolean; kind?: "answer" | "skip" | "input" }[];
+  options: { id: string; label: string; description?: string; recommended?: boolean; kind?: "answer" | "skip" | "input" | "password_setup" }[];
 }
 export interface PendingUserQuestions {
   request_ref: string; source_turn_id: string; source_session_id: string;

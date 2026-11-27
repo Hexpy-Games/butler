@@ -1,5 +1,5 @@
 //! Place the main's exact release and start the remote only when it is idle.
-use super::{Computer, HostInput, HttpError, remote_error, ssh, store::KnownHosts};
+use super::{Computer, HttpError, remote_error, ssh, target::SshTarget};
 use butler_platform::{hook_process::HookOutput, launcher::release_platform_for};
 use butler_runtime::operations::{fetch_verified, release_artifact};
 use std::{path::Path, time::Duration};
@@ -114,13 +114,7 @@ pub(super) async fn ensure_running(
             "Invalid release URL.",
         ));
     }
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let target = SshTarget::of(computer).await?;
     let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
     let command = format!(
         "sh -s -- {} {} {} {}",
@@ -129,14 +123,7 @@ pub(super) async fn ensure_running(
         quote(if loopback { "" } else { &url }),
         quote(&computer.folder)
     );
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
-        "yes",
-        &[],
-        &command,
-        home.as_deref(),
-    )?;
+    let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(
         args.clone(),
         ssh::Stdin::Bytes(SCRIPT.as_bytes().to_vec()),
@@ -253,20 +240,11 @@ pub(super) async fn installed(
     computer: &Computer,
     cancel: CancellationToken,
 ) -> Result<bool, HttpError> {
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
+    let target = SshTarget::of(computer).await?;
+    let args = target.arguments(
         "yes",
         &[],
         r#"test -x "$HOME/.butler-remote/current/butler-agent""#,
-        home.as_deref(),
     )?;
     let output = ssh::run(
         args,
@@ -286,21 +264,8 @@ pub(super) async fn remove(
     computer: &Computer,
     cancel: CancellationToken,
 ) -> Result<(), HttpError> {
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
-        "yes",
-        &[],
-        "sh -s",
-        home.as_deref(),
-    )?;
+    let target = SshTarget::of(computer).await?;
+    let args = target.arguments("yes", &[], "sh -s")?;
     let script = br#"set -eu
 umask 077
 R="$HOME/.butler-remote"

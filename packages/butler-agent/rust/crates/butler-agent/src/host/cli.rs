@@ -18,6 +18,7 @@ pub(super) mod schedule;
 pub(super) mod service;
 pub(super) mod settings;
 pub(super) mod skills;
+pub(crate) mod ssh_askpass;
 mod startup_task;
 pub(super) mod status;
 mod status_memory;

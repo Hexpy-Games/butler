@@ -25,6 +25,10 @@ use win32job::{ExtendedLimitInfo, Job};
 use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
 use crate::process_table::ProcessView;
 
+mod outliving;
+pub(crate) use outliving::quote_argument;
+pub(super) use outliving::{DetachedChild, detached, spawn_outliving_session};
+
 pub(super) const CONTAINS_PROCESS_TREES: bool = true;
 
 pub(super) const SIGNALS: bool = false;
@@ -176,6 +180,10 @@ pub(super) fn prepare_detached_spawn() -> io::Result<()> {
 
 pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+}
+
+pub(super) fn breakaway_denied(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(5)
 }
 
 /// The console control events that ask a console process to stop. A

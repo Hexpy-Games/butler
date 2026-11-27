@@ -3,8 +3,8 @@ use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::GuidedInvocation;
 use butler_turn::btcc::{
-    AuthorityAdmissionResult, AuthorityExecutionInput, ModelRoundToolCall, QuestionBinding,
-    ToolExecutionError, UserQuestions,
+    AuthorityAdmissionResult, AuthorityExecutionInput, ModelRoundToolCall, OptionKind,
+    QuestionBinding, ToolExecutionError, UserQuestions,
 };
 use serde_json::json;
 
@@ -100,6 +100,14 @@ fn parse(call: &ModelRoundToolCall) -> Result<(UserQuestions, bool), String> {
     };
     let questions =
         serde_json::from_value::<UserQuestions>(json!(arguments)).map_err(|_| SHAPE.to_owned())?;
+    if questions
+        .questions
+        .iter()
+        .flat_map(|q| &q.options)
+        .any(|option| option.kind == OptionKind::PasswordSetup)
+    {
+        return Err("password_setup options are reserved".into());
+    }
     if questions
         .questions
         .iter()
