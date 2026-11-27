@@ -20,6 +20,7 @@ export function BrowserHandoffSection({ state }: { state?: string }) {
     {shown("typed") ? <Sample name="typed" fields={["username", "password"]} initial={{ username: "me@example.com", password: "correct-horse-42" }} /> : null}
     {shown("save") ? <Sample name="save" fields={[]} offer={{ username: "me@example.com", host }} /> : null}
     {shown("plain") ? <Sample name="plain" fields={[]} /> : null}
+    {shown("live") ? <Sample name="live" fields={[]} /> : null}
   </>;
 }
 
@@ -41,6 +42,9 @@ function Sample({ name, fields, initial = {}, offer }: {
         host={form ? host : undefined} details={form ? [] : [site, labels.onDesktop]}
         fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
         onSubmit={noop} offer={offer} onSave={noop} />
+      {name === "live" ? <ButtonGroup>
+        <Button variant="secondary" label={labels.openScreen} onPress={noop} />
+      </ButtonGroup> : null}
     </DecisionCard>
   </View>;
 }

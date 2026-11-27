@@ -30,7 +30,7 @@ export class PhoneLive {
     const unavailable = { status: "refused", reason: "live_unavailable" };
     if (tab.holder !== "user" || !contents || contents.isDestroyed() || !tab.debuggerReady || !viewport) return unavailable;
     if (this.feeds.get(tab.id)?.sub === sub) return { status: "ok" };
-    const stopped = this.stop(tab.id);
+    const stopped = this.stop(tab.id, true);
     const feed = { sub, contents, lastAck: -Infinity, pending: Promise.resolve() };
     feed.destroyed = () => { void this.stop(tab.id); };
     feed.message = (_event, method, params, sessionId) => {
@@ -68,12 +68,12 @@ export class PhoneLive {
     }
   }
 
-  async stop(id) {
+  async stop(id, keepViewport = false) {
     const feed = this.feeds.get(id);
     if (!feed) return;
     this.feeds.delete(id);
     const tab = this.browser.tabs.get(id);
-    if (tab) setPhoneViewport(this.browser, tab, null);
+    if (tab && !keepViewport) setPhoneViewport(this.browser, tab, null);
     const { contents } = feed;
     contents.removeListener("destroyed", feed.destroyed);
     if (contents.isDestroyed()) return;

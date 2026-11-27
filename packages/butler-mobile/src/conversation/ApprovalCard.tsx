@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { AuthorityDecisionResult, SessionView } from "../../../butler-protocol/src/index.ts";
 import { Button, ButtonGroup, CodeBlock, DecisionCard, Text, TextField, showToast } from "@/ds";
@@ -64,6 +65,7 @@ interface HandoffInput {
 export function BrowserHandoffCard({ card, view, reload }: {
   card: AuthorityApprovalCard; view: SessionView; reload(): void;
 }) {
+  const router = useRouter();
   const copy = getAppCopy(useAppLocale()), browser = copy.browser;
   const { client, secureClient } = useConversation();
   const [pending, setPending] = useState<HandoffPending>();
@@ -115,6 +117,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
     }
   };
   const host = currentInput?.origin && URL.canParse(currentInput.origin) ? new URL(currentInput.origin).host : undefined;
+  const tabId = card.approval?.operation?.browser_tab;
   return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={fillFailed ? browser.signinFillFailed : failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={offer && !fields.length ? <SaveButtons labels={{ saveSignIn: browser.saveSignIn, later: browser.later }} pending={pending} onSave={save => void act(save)} /> : <ButtonGroup layout="pair">
@@ -132,6 +135,10 @@ export function BrowserHandoffCard({ card, view, reload }: {
       host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details}
       fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
       onSubmit={() => void act()} pending={pending} offer={offer ?? undefined} onSave={save => void act(save)} />
+    {input?.live === true && !input.fields.length && typeof tabId === "string" && tabId.length > 0 ? <ButtonGroup>
+      <Button variant="secondary" label={labels.openScreen} disabled={!!pending}
+        onPress={() => router.push({ pathname: "/browser-live/[tabId]", params: { tabId, session: sessionId, request: card.requestRef } })} />
+    </ButtonGroup> : null}
   </DecisionCard>;
 }
 

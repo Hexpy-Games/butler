@@ -340,7 +340,7 @@ class UserBrowser {
     if (op === "bounds") {
       if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width < 0 || value.height < 0) throw new Error("invalid_bounds");
       // The slot alone decides where the page shows; a hidden agent page is placed in its own viewport.
-      tab.slot = value; if (!tab.agent) tab.bounds = value;
+      tab.slot = value; if (!tab.agent) tab.bounds = pageBounds(tab, value);
       this.sync(tab); return;
     }
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }

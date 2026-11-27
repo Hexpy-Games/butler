@@ -57,6 +57,7 @@ export async function applyEvents(browser, tab, events) {
           break;
         }
         case "viewport":
+          if (!browser.phoneLive.feeds.has(tab.id)) break batch;
           setPhoneViewport(browser, tab, { width: event.width, height: event.height, dpr: event.dpr });
           ({ width, height } = tab.view.getBounds());
           if (!width || !height) return { status: "refused", reason: "live_unavailable" };
