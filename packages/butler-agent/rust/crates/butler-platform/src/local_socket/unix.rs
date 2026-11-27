@@ -1,5 +1,12 @@
 use std::{io, path::Path};
 
+#[cfg(target_os = "macos")]
+const MAX_PATH_BYTES: usize = 103;
+#[cfg(not(target_os = "macos"))]
+const MAX_PATH_BYTES: usize = 107;
+
+pub(super) const PATH_LIMIT: Option<usize> = Some(MAX_PATH_BYTES);
+
 /// A local socket listener.
 pub type LocalListener = tokio::net::UnixListener;
 /// An accepted local socket connection.
@@ -10,10 +17,6 @@ pub(super) fn bind(path: &Path) -> io::Result<LocalListener> {
     use std::fs::{self, Permissions};
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 
-    #[cfg(target_os = "macos")]
-    const MAX_PATH_BYTES: usize = 103;
-    #[cfg(not(target_os = "macos"))]
-    const MAX_PATH_BYTES: usize = 107;
     if path.as_os_str().len() > MAX_PATH_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

@@ -13,6 +13,10 @@ use windows as sys;
 
 pub use sys::{LocalListener, LocalStream};
 
+/// The longest socket path [`bind`] accepts, in bytes; `None` where any
+/// path works.
+pub const PATH_LIMIT: Option<usize> = sys::PATH_LIMIT;
+
 /// Bind a socket in a private directory, replacing only an existing socket.
 pub fn bind(path: &Path) -> io::Result<LocalListener> {
     sys::bind(path)

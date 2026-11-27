@@ -131,8 +131,14 @@ pub(super) fn detach(command: &mut Command) -> &mut Command {
     command.process_group(0)
 }
 
-pub(super) fn detach_outliving_session(command: &mut Command) -> &mut Command {
-    detach(command)
+pub(super) type DetachedChild = std::process::Child;
+
+pub(super) fn detached(child: DetachedChild) -> DetachedChild {
+    child
+}
+
+pub(super) fn spawn_outliving_session(command: &mut Command) -> io::Result<DetachedChild> {
+    detach(command).spawn()
 }
 
 pub(super) fn breakaway_denied(_error: &io::Error) -> bool {

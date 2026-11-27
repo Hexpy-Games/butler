@@ -12,6 +12,9 @@ use tokio::net::windows::named_pipe::{
 };
 use tokio::sync::Mutex;
 
+/// Pipe names hash the path, so any path length works.
+pub(super) const PATH_LIMIT: Option<usize> = None;
+
 /// An owner-only named pipe listener.
 pub struct LocalListener {
     name: String,
@@ -35,7 +38,7 @@ fn pipe_name(path: &Path) -> io::Result<String> {
         .to_lowercase();
     let digest = Sha256::digest(key.as_bytes());
     let mut name = String::from(r"\\.\pipe\butler-");
-    for byte in &digest[..16] {
+    for byte in digest.iter().take(16) {
         write!(name, "{byte:02x}").map_err(io::Error::other)?;
     }
     Ok(name)
