@@ -27,6 +27,18 @@ pub(in crate::btcc) fn rule_verdict_table() {
         ("/bin/rm x", RuleVerdict::Deny),
         ("\"rm\" x", RuleVerdict::Deny),
         ("x=$(y); rm -rf z", RuleVerdict::Deny),
+        (r#"cmd /c "rm x""#, RuleVerdict::Deny),
+        ("cmd /c cmd /c rm x", RuleVerdict::Deny),
+        ("rm,x", RuleVerdict::Deny),
+        (r"C:\Windows\System32\cmd.exe /c rm x", RuleVerdict::Deny),
+        (
+            r#""C:\Windows\System32\cmd.exe" /c rm x"#,
+            RuleVerdict::Deny,
+        ),
+        ("r^m x", RuleVerdict::Deny),
+        ("rm/x", RuleVerdict::Deny),
+        ("cmd /c dir", RuleVerdict::NoRule),
+        (r#"git commit -m "rm old""#, RuleVerdict::NoRule),
     ] {
         assert_eq!(rule_verdict(line, &rules), expected, "{line}");
     }
