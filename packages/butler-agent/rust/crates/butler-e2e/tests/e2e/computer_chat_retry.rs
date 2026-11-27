@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-async fn next_card(
+pub(super) async fn next_card(
     s: &Scenario,
     turn: &str,
     previous_ref: &str,

@@ -125,6 +125,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/remote/memory/pending/ack", Handler::RemoteAccount),
     ("/computers", Handler::Computers),
     ("/computers/host-key", Handler::Computers),
+    ("/computers/password", Handler::Computers),
     ("/computers/{id}", Handler::Computers),
     ("/computers/{id}/start", Handler::Computers),
     ("/computers/{id}/oauth/start", Handler::Computers),

@@ -37,9 +37,9 @@ interface ComputerAddDialogProps {
 export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, savedKeys, editing }: ComputerAddDialogProps) {
   const formId = useId();
   const copy = appCopy.computers.form;
-  const add = useComputerAdd(onAdded);
   const model = useComputerModelChoice(defaultSource(mainModel));
   const [form, setForm] = useState(EMPTY_FORM);
+  const add = useComputerAdd(onAdded, () => setForm((current) => ({ ...current, password: "" })));
   const [environment, setEnvironment] = useState<ComputerEnvironmentRow[]>([]);
   const [lastEditing, setLastEditing] = useState<Computer | null>(null);
   useEffect(() => {
@@ -48,7 +48,7 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
       setForm(editing ? { ...EMPTY_FORM,
         name: editing.name,
         address: editing.address,
-        auth: editing.key_file ? "keyFile" : "password",
+        auth: editing.managed_key ? "password" : "keyFile",
         port: editing.port?.toString() ?? "",
         keyFile: editing.key_file ?? "",
         folder: editing.folder,
@@ -63,9 +63,10 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
     if (add.error) document.getElementById(COMPUTER_FIELD_IDS[add.error.field])?.focus();
   }, [add.error]);
   const isEditing = Boolean(open ? editing : lastEditing);
+  const passwordRequired = form.auth === "password" && !(open ? editing : lastEditing)?.managed_key;
   const required = !form.name.trim() || !form.address.trim() || !form.folder.trim() ||
-    (!isEditing && form.auth === "password" && !form.password);
-  const busyLabel = add.step === "adding" && form.auth === "password" ? copy.installingKey
+    (passwordRequired && !form.password);
+  const busyLabel = add.step === "adding" && form.auth === "password" && form.password ? copy.installingKey
     : isEditing ? appCopy.settings.security.working : copy.preparing;
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!add.busy) onOpenChange(next); }}>
@@ -77,9 +78,7 @@ export function ComputerAddDialog({ open, onOpenChange, onAdded, mainModel, save
           <form id={formId} onSubmit={(event) => {
             event.preventDefault();
             if (add.busy || required || !model.ready) return;
-            void add.submit(form, model.source, environment, editing ?? undefined).finally(() => {
-              setForm((current) => ({ ...current, password: "" }));
-            });
+            void add.submit(form, model.source, environment, editing ?? undefined);
           }}>
             <SettingsFieldScopeProvider>
               <SettingsFieldGroup>

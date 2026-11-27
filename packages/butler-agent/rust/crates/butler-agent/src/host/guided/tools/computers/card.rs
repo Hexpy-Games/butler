@@ -13,6 +13,11 @@ const KO: Copy = Copy {
     connection_labels: ["포트", "키 파일"],
     unreachable: "연결할 수 없습니다",
     key_login: "키로 로그인할 수 없습니다",
+    password_setup: "비밀번호로 연결 설정",
+    password_wrong: "비밀번호가 맞지 않습니다",
+    password_not_allowed: "비밀번호 로그인을 받지 않습니다",
+    password_extra_step: "추가 인증이 필요합니다",
+    key_install_failed: "키를 설치하지 못했습니다",
     name: "컴퓨터 이름",
     address: "SSH 주소 (~/.ssh/config 별칭 사용 가능)",
     folder: "작업 폴더",
@@ -30,6 +35,11 @@ const EN: Copy = Copy {
     connection_labels: ["Port", "Key file"],
     unreachable: "Can't connect",
     key_login: "Can't sign in with a key",
+    password_setup: "Set up with password",
+    password_wrong: "Wrong password",
+    password_not_allowed: "Password sign-in isn't accepted",
+    password_extra_step: "Another sign-in step is needed",
+    key_install_failed: "Couldn't install the key",
     name: "Computer name",
     address: "SSH address (~/.ssh/config aliases work)",
     folder: "Work folder",
@@ -48,6 +58,11 @@ struct Copy {
     connection_labels: [&'static str; 2],
     unreachable: &'static str,
     key_login: &'static str,
+    password_setup: &'static str,
+    password_wrong: &'static str,
+    password_not_allowed: &'static str,
+    password_extra_step: &'static str,
+    key_install_failed: &'static str,
     name: &'static str,
     address: &'static str,
     folder: &'static str,
@@ -180,10 +195,13 @@ pub(super) fn connection(
     args: &Map<String, Value>,
 ) -> UserQuestions {
     let copy = copy(owner);
-    let reason = if code == "ssh_unreachable" {
-        copy.unreachable
-    } else {
-        copy.key_login
+    let (reason, password_setup) = match code {
+        "ssh_auth_failed" => (copy.key_login, true),
+        "ssh_password_wrong" => (copy.password_wrong, true),
+        "ssh_password_not_allowed" => (copy.password_not_allowed, true),
+        "ssh_password_extra_step" => (copy.password_extra_step, true),
+        "ssh_key_install_failed" => (copy.key_install_failed, true),
+        _ => (copy.unreachable, false),
     };
     let proposals = [
         args.get("port")
@@ -202,6 +220,12 @@ pub(super) fn connection(
             let mut options = Vec::new();
             if let Some(proposal) = proposal {
                 options.push(option("proposed", &proposal, None, true));
+            }
+            if field == "key_file" && password_setup {
+                options.push(QuestionOption {
+                    kind: OptionKind::PasswordSetup,
+                    ..option("password_setup", copy.password_setup, Some(name), false)
+                });
             }
             options.push(option("none", copy.none, None, false));
             UserQuestion {

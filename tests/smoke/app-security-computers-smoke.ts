@@ -8,7 +8,6 @@ import { createNativeAppServer, type NativeAppServerHandle } from "../support/na
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { checkComputerSignInEvent } from "../support/computer-sign-in-event.ts";
 import { captureRemovedComputer } from "../support/removed-computer-smoke.ts";
-import { captureSshKeySetup } from "../support/computer-ssh-key-smoke.ts";
 
 const language = process.env.COMPUTERS_SMOKE_LANGUAGE ?? "ko";
 setAppCopyLanguage(language);
@@ -464,8 +463,6 @@ try {
         await captureServer.stop();
       }
     }
-    captures += await captureSshKeySetup(browser, join(output, "ssh-key"));
-    setAppCopyLanguage(language);
     console.log(JSON.stringify({ captures }));
   }
 } catch (error) {

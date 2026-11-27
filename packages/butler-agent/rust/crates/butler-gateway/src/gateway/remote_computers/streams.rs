@@ -1,7 +1,6 @@
 //! Stream a response from the computer's local socket over a pinned SSH connection.
 use super::{
-    Computer, HostInput, HttpError, deploy, relay::unavailable, remote_error, ssh,
-    store::KnownHosts,
+    Computer, HttpError, deploy, relay::unavailable, remote_error, ssh, target::SshTarget,
 };
 use axum::body::{Body, Bytes};
 use butler_platform::hook_process::StreamingProcess;
@@ -14,7 +13,7 @@ pub(in crate::gateway) struct RemoteStream {
     pub status: u16,
     pub headers: BTreeMap<String, String>,
     pub(super) body: BufReader<StreamingProcess>,
-    _known_hosts: KnownHosts,
+    _target: SshTarget,
 }
 
 pub(super) enum Opened {
@@ -34,25 +33,12 @@ pub(super) async fn open(
     path: &str,
     cancel: CancellationToken,
 ) -> Result<Opened, HttpError> {
-    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
-    let target = HostInput {
-        address: computer.address.clone(),
-        port: computer.port.map(i64::from),
-        key_file: computer.key_file.clone(),
-    };
-    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let target = SshTarget::of(computer).await?;
     let command = format!(
         r#""$HOME/.butler-remote/current/butler-agent" --remote-stream "$HOME/.butler-remote/data" '{}'"#,
         path.replace('\'', "'\\''")
     );
-    let args = ssh::arguments(
-        &target,
-        &known_hosts.0,
-        "yes",
-        &[],
-        &command,
-        home.as_deref(),
-    )?;
+    let args = target.arguments("yes", &[], &command)?;
     let mut body = BufReader::with_capacity(65_536, ssh::spawn(args).await?);
     let mut line = Vec::new();
     let mut limited = (&mut body).take(65_536);
@@ -88,15 +74,20 @@ pub(super) async fn open(
         status,
         headers,
         body,
-        _known_hosts: known_hosts,
+        _target: target,
     })))
 }
 
 impl RemoteStream {
     pub(in crate::gateway) fn into_body(self) -> Body {
+        let Self {
+            body,
+            _target: target,
+            ..
+        } = self;
         Body::from_stream(futures_util::stream::try_unfold(
-            self.body,
-            |mut body| async move {
+            (body, target),
+            |(mut body, target)| async move {
                 let mut bytes = vec![0; 65_536];
                 let count = body.read(&mut bytes).await?;
                 if count == 0 {
@@ -109,7 +100,7 @@ impl RemoteStream {
                     };
                 }
                 bytes.truncate(count);
-                Ok(Some((Bytes::from(bytes), body)))
+                Ok(Some((Bytes::from(bytes), (body, target))))
             },
         ))
     }

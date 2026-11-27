@@ -18,13 +18,20 @@ pub(in crate::gateway) use pending::{
     decide as decide_pending, get as get_pending, list as list_pending,
 };
 mod relay;
+mod remove;
 mod sessions;
 pub(super) use relay::{Reply, data};
 pub(super) use sessions::{Link, create_session, forward, open_stream};
+mod askpass;
+pub(super) mod password_stash;
 mod session_state;
 mod ssh;
+mod ssh_key;
+mod ssh_password;
+pub(super) use ssh_key::register as register_ssh_key;
 mod store;
 mod streams;
+mod target;
 mod transcripts;
 pub(super) use session_state::{SessionStateCache, SessionStateRow, session_state_path};
 pub(super) use streams::RemoteStream;
@@ -33,11 +40,16 @@ use super::{AppSetupPort, http::HttpError};
 use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroizing;
 
 #[derive(Clone, Deserialize, Serialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent persisted computer flags"
+)]
 pub(super) struct Computer {
     id: String,
     name: String,
@@ -61,6 +73,10 @@ pub(super) struct Computer {
     environment_text: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     sent_environment: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    managed_key: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    key_added: bool,
     host_keys: Vec<String>,
     added_at: String,
 }
@@ -82,6 +98,7 @@ impl Computer {
         let mut value = serde_json::to_value(self).map_err(|_| HttpError::Internal)?;
         if let Some(object) = value.as_object_mut() {
             object.remove("host_keys");
+            object.remove("key_added");
             object.remove("sent_credential");
             object.remove("sent_environment");
             object
@@ -92,9 +109,11 @@ impl Computer {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct HostInput {
+    #[serde(skip)]
+    identity: Option<PathBuf>,
     address: String,
     port: Option<i64>,
     key_file: Option<String>,
@@ -141,6 +160,10 @@ impl HostInput {
 pub(super) struct AddInput {
     #[serde(default)]
     pub(super) open_sign_in: bool,
+    #[serde(default)]
+    managed_key: bool,
+    #[serde(default)]
+    password_ref: Option<String>,
     name: String,
     address: String,
     port: Option<i64>,
@@ -154,7 +177,14 @@ pub(super) struct AddInput {
 }
 
 impl AddInput {
-    fn validate(&self) -> Result<(String, String), HttpError> {
+    fn validate(&self, has_password: bool) -> Result<(String, String), HttpError> {
+        if (self.managed_key || has_password) && self.key_file.is_some() {
+            return Err(HttpError::public(
+                400,
+                "computer_key_file_invalid",
+                "Enter a valid key file.",
+            ));
+        }
         let name = self.name.trim().to_owned();
         if name.is_empty() {
             return Err(HttpError::public(
@@ -201,13 +231,17 @@ pub(super) async fn add(
     setup: &Arc<dyn AppSetupPort>,
     data: &Path,
     input: AddInput,
+    password: Option<Zeroizing<String>>,
     cancel: CancellationToken,
 ) -> Result<Computer, HttpError> {
-    let (name, folder) = input.validate()?;
+    let password =
+        password.or_else(|| input.password_ref.as_deref().and_then(password_stash::take));
+    let (name, folder) = input.validate(password.is_some())?;
     let mut target = HostInput {
         address: input.address,
         port: input.port,
         key_file: input.key_file,
+        identity: None,
     };
     target.validate()?;
     let mut environment_text = input.environment_text.unwrap_or_default();
@@ -216,36 +250,56 @@ pub(super) async fn add(
     normalize_environment_text(&mut environment_text);
     let records = list(data).await?;
     store::unique_name(&records, &name)?;
-    let host_keys = ssh::host_key(&target, &records, cancel.clone()).await?;
-    let platform = ssh::probe(&target, &folder, &records, &host_keys, cancel).await?;
-    let computer = Computer {
-        id: uuid::Uuid::new_v4().to_string(),
-        name,
-        address: target.address,
-        port: target.port.and_then(|port| u16::try_from(port).ok()),
-        key_file: target.key_file,
-        folder,
-        os: platform.os,
-        arch: platform.arch,
-        glibc: platform.glibc,
-        stops_on_logout: platform.stops_on_logout,
-        ai_connected: false,
-        model_source: input.model_source,
-        sent_credential: None,
-        environment: values.keys().cloned().collect(),
-        environment_text,
-        sent_environment: false,
-        host_keys,
-        added_at: chrono::Utc::now().to_rfc3339(),
-    };
-    let id = computer.id.clone();
-    let has_secrets = !values.is_empty();
-    if has_secrets {
-        setup.save_computer_environment(id.clone(), values).await?;
+    let managed_key = input.managed_key || password.is_some();
+    let check = ssh::host_key(&target, &records, cancel.clone()).await?;
+    let install = ssh_password::Install::start(&target, &check, password, cancel.clone()).await?;
+    let saved = async {
+        let platform = install
+            .probe(
+                &target,
+                &folder,
+                &records,
+                &check.lines,
+                managed_key,
+                cancel,
+            )
+            .await?;
+        let computer = Computer {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            address: target.address.clone(),
+            port: target.port.and_then(|port| u16::try_from(port).ok()),
+            key_file: target.key_file.clone(),
+            folder,
+            os: platform.os,
+            arch: platform.arch,
+            glibc: platform.glibc,
+            stops_on_logout: platform.stops_on_logout,
+            ai_connected: false,
+            model_source: input.model_source,
+            sent_credential: None,
+            environment: values.keys().cloned().collect(),
+            environment_text,
+            sent_environment: false,
+            managed_key,
+            key_added: install.added(),
+            host_keys: check.lines.clone(),
+            added_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let id = computer.id.clone();
+        let has_secrets = !values.is_empty();
+        if has_secrets {
+            setup.save_computer_environment(id.clone(), values).await?;
+        }
+        let saved = store::add(data.join("config/computers.json"), computer).await;
+        if saved.is_err() && has_secrets {
+            setup.delete_computer_key(id).await?;
+        }
+        saved
     }
-    let saved = store::add(data.join("config/computers.json"), computer).await;
-    if saved.is_err() && has_secrets {
-        setup.delete_computer_key(id).await?;
+    .await;
+    if saved.is_err() {
+        install.rollback(&target, &check).await;
     }
     saved
 }
@@ -256,85 +310,16 @@ fn normalize_environment_text(text: &mut String) {
     }
 }
 
-pub(super) async fn delete(
-    setup: &Arc<dyn AppSetupPort>,
-    data: &Path,
-    computer: &Computer,
-    version: &str,
-    force: bool,
-    cancel: CancellationToken,
-) -> Result<bool, HttpError> {
-    let reach = async {
-        let installed = deploy::installed(computer, cancel.clone()).await?;
-        if !installed {
-            return Ok(None);
-        }
-        deploy::ensure_running((data, version), computer, cancel.clone()).await?;
-        let identity = setup.computer_key(computer.id.clone()).await?;
-        relay::unlock(computer, &identity, cancel.clone()).await?;
-        session_state::request(computer, cancel.clone())
-            .await
-            .map(Some)
-    }
-    .await;
-    let reachable = match reach {
-        Ok(sessions) => {
-            if let Some(sessions) = sessions {
-                if sessions.iter().any(SessionStateRow::has_active_turn) {
-                    return Err(HttpError::public(
-                        409,
-                        "computer_busy",
-                        "A conversation is still running on this computer.",
-                    ));
-                }
-                let link = Link {
-                    setup: setup.clone(),
-                    root: data.to_path_buf(),
-                    version: version.to_owned(),
-                    cancel: cancel.clone(),
-                    relays: None,
-                };
-                transcripts::final_pull(&link, computer)
-                    .await
-                    .map_err(|reason| {
-                        butler_core::diagnostic!(
-                            "[remote-transcripts] final pull failed computer={} reason={reason}",
-                            computer.id
-                        );
-                        HttpError::public(
-                            409,
-                            "computer_not_synced",
-                            "Couldn't bring back this computer's conversations. Try again.",
-                        )
-                    })?;
-            }
-            true
-        }
-        Err(_) if force => false,
-        Err(_) => {
-            return Err(HttpError::public(
-                409,
-                "computer_unreachable",
-                "Couldn't reach Butler on this computer.",
-            ));
-        }
-    };
-    setup
-        .save_computer_environment(computer.id.clone(), Default::default())
-        .await?;
-    let cleaned = reachable && deploy::remove(computer, cancel).await.is_ok();
-    store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
-    setup.delete_computer_key(computer.id.clone()).await?;
-    if let Err(error) = tokio::fs::remove_file(session_state_path(data, &computer.id)).await
-        && error.kind() != std::io::ErrorKind::NotFound
-    {
-        tracing::warn!(computer_id = %computer.id, %error, "Remote computer session state was not removed");
-    }
-    Ok(cleaned)
-}
-
 fn remote_error(code: &str, message: &str) -> HttpError {
     HttpError::public(422, code, message)
+}
+
+fn connection_error(stderr: &str) -> HttpError {
+    if stderr.contains("Host key verification failed") {
+        remote_error("host_key_changed", "This computer's host key changed.")
+    } else {
+        remote_error("ssh_unreachable", "Could not reach this computer.")
+    }
 }
 
 pub(super) async fn change(
@@ -364,8 +349,7 @@ pub(super) async fn change(
             serde_json::json!({"state": if remote.started { "ready" } else { "busy" }, "version": remote.version}),
         )
     } else {
-        let cleaned = delete(setup, root, &computer, version, force, cancel).await?;
-        Ok(serde_json::json!({"deleted": true, "remote_cleaned": cleaned}))
+        remove::delete(setup, root, &computer, version, force, cancel).await
     }
 }
 

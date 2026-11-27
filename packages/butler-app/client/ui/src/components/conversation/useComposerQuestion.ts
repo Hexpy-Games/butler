@@ -59,13 +59,13 @@ export function useComposerQuestion(): {
   const passwordSheet = setup?.key === key ? {
     name: setup.name, busy: Boolean(setup.busy), error: setup.error,
     onCancel: () => { if (!stashInFlight.current.has(key)) setSetup(undefined); },
-    async onSubmit(password: string) {
+    async onSubmit(password: string, clearPassword: () => void) {
       if (stashInFlight.current.has(key)) return;
       stashInFlight.current.add(key);
       const submitting = { ...setup, busy: true, error: undefined };
       setSetup(submitting);
       try {
-        await stashComputerPassword({ request_ref: setup.requestRef, password });
+        await stashComputerPassword({ request_ref: setup.requestRef, password }).finally(clearPassword);
         await submit({ status: "answered", answers: answerWire(questions, setup.answers) });
         setSetup(current => current === submitting ? undefined : current);
       } catch {

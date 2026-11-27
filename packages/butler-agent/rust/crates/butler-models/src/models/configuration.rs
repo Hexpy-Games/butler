@@ -16,6 +16,8 @@ mod catalog_cache;
 pub mod chatgpt;
 mod computer_environment_store;
 mod computer_keys;
+mod device_ssh_key;
+pub use device_ssh_key::DeviceSshKey;
 mod credential_admin;
 mod credential_migration;
 mod credential_vault;

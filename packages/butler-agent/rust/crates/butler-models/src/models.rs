@@ -105,8 +105,8 @@ pub use configuration::sealed;
 pub use configuration::{
     ComputerModel, CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
-    CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
-    SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
+    CredentialStorePolicy, CredentialStoreView, DeletedCredential, DeviceSshKey, FileOverride,
+    SecretBackend, SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
     credential_store_policy, fallback_file, reset_secret_keys, vault_legacy_items,
     vault_uses_system_store,
 };

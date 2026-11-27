@@ -9,7 +9,7 @@ export interface ComputerPasswordSheetProps {
   name: string;
   busy: boolean;
   error?: string;
-  onSubmit(password: string): Promise<void>;
+  onSubmit(password: string, clearPassword: () => void): Promise<void>;
   onCancel(): void;
 }
 
@@ -31,7 +31,7 @@ export function ComputerPasswordSheet({ name, busy, error, onSubmit, onCancel }:
         <form id={formId} onSubmit={(event) => {
           event.preventDefault();
           if (busy || !password) return;
-          void onSubmit(password).finally(() => setPassword(""));
+          void onSubmit(password, () => setPassword(""));
         }}>
           <Field data-invalid={error ? "true" : undefined}>
             <FieldLabel htmlFor={fieldId}>{copy.form.password}</FieldLabel>

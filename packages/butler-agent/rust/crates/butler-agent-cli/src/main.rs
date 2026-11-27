@@ -1,6 +1,11 @@
 //! The `butler-agent` executable. Runtime and argument handling live in the host.
 
+use butler_platform::remote_ssh;
+
 fn main() -> std::process::ExitCode {
+    if let Some(channel) = std::env::var_os(remote_ssh::ASKPASS_VARIABLE) {
+        return butler_agent::ssh_askpass(channel);
+    }
     if let Err(error) = butler_platform::process_names::name_current() {
         eprintln!("process_name_unavailable: {error}");
         return std::process::ExitCode::FAILURE;

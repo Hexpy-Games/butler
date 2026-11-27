@@ -1,8 +1,11 @@
 //! The owner's OpenSSH client and its minimal inherited environment.
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 /// Resolve the owner's OpenSSH client from PATH.
 pub const PROGRAM: &str = "ssh";
+
+/// The loopback channel passed from OpenSSH to the askpass helper.
+pub const ASKPASS_VARIABLE: &str = "BUTLER_SSH_ASKPASS";
 
 /// Names an OpenSSH config file that `ssh -G` reads instead of the account's own
 /// (OpenSSH finds `~/.ssh` from the account database, not `HOME`). Honored only in test-support builds.
@@ -36,5 +39,18 @@ pub fn environment() -> HashMap<String, String> {
         .filter_map(|name| std::env::var(name).ok().map(|value| (name.into(), value)))
         .collect();
     environment.insert("LC_ALL".into(), "C".into());
+    environment
+}
+
+/// Extend the OpenSSH environment to invoke the helper for password prompts.
+pub fn askpass_environment(helper: &Path, channel: &str) -> HashMap<String, String> {
+    let mut environment = environment();
+    environment.insert("SSH_ASKPASS".into(), helper.to_string_lossy().into_owned());
+    environment.insert("SSH_ASKPASS_REQUIRE".into(), "force".into());
+    environment.insert(
+        "DISPLAY".into(),
+        std::env::var("DISPLAY").unwrap_or_else(|_| "butler".into()),
+    );
+    environment.insert(ASKPASS_VARIABLE.into(), channel.into());
     environment
 }
