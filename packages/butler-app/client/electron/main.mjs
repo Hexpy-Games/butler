@@ -2020,6 +2020,7 @@ async function openMainWindow() {
     userBrowser.history = browserHost.history;
     userBrowser.onState = () => browserHost.changed();
     userBrowser.pullCredential = (token, origin) => browserHost.credential(token, origin);
+    userBrowser.pullInput = (token, origin) => browserHost.input(token, origin);
     userBrowser.pullVault = (token, origin, frameOrigins) => browserHost.vault(token, origin, frameOrigins);
     const signInRoute = (input) => requestSecurityRoute(input, {
       ensureReady: ensureServer, fetch, serverUrl, authHeaders: appLocalAuthHeaders,

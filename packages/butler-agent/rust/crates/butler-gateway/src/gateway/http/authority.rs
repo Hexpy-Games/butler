@@ -7,6 +7,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 
+use super::browser_host::{input, read_json};
 use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_with_limit};
 use crate::gateway::{
     AppAuthorityDecisionInput,
@@ -46,11 +47,22 @@ pub(super) async fn route(
     {
         return revoke_grant(&state, owner, grant).await;
     }
+    if let Some((reference, action)) = request_action(path) {
+        match (&method, action) {
+            (&Method::GET, "input") => {
+                return input_response(
+                    input::fields(&state, owner, &decode_component(reference)?).await?,
+                );
+            }
+            (&Method::POST, "input" | "input-save") => {
+                return input_post(&state, owner, reference, action, request).await;
+            }
+            _ => {}
+        }
+    }
     if method == Method::POST
-        && let Some(rest) = path.strip_prefix("/authority-requests/")
-        && let Some((reference, action)) = rest.rsplit_once('/')
-        && matches!(action, "allow" | "deny" | "modify" | "answer" | "hand-back")
-        && !reference.contains('/')
+        && let Some((reference, action @ ("allow" | "deny" | "modify" | "answer" | "hand-back"))) =
+            request_action(path)
     {
         let request_ref = decode_component(reference)?;
         if action == "hand-back" {
@@ -82,6 +94,40 @@ pub(super) async fn route(
         }));
     }
     Err(HttpError::public(404, "not_found", "Route not found."))
+}
+
+pub(super) fn request_action(path: &str) -> Option<(&str, &str)> {
+    let (reference, action) = path
+        .strip_prefix("/authority-requests/")?
+        .rsplit_once('/')?;
+    (!reference.contains('/')).then_some((reference, action))
+}
+
+async fn input_post(
+    state: &Arc<HttpState>,
+    owner: String,
+    reference: &str,
+    action: &str,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let request_ref = decode_component(reference)?;
+    let body = read_json(request).await?;
+    let result = if action == "input" {
+        input::fill(state, owner, &request_ref, body).await?
+    } else {
+        input::save(state, owner, &request_ref, &body).await?
+    };
+    input_response(result)
+}
+
+fn input_response(data: Value) -> Result<Response, HttpError> {
+    json(
+        StatusCode::OK,
+        ApiEnvelope {
+            protocol_version: APP_PROTOCOL_VERSION,
+            data,
+        },
+    )
 }
 
 fn accepted(data: Value) -> Result<Response, HttpError> {

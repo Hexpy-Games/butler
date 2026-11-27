@@ -1176,6 +1176,18 @@ const butlerApp = Object.freeze({
       { method: "POST" },
     );
   },
+  authorityInputFields: ({ sessionId, requestRef } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests/${encodeURIComponent(requestRef ?? "")}/input?${params.toString()}`);
+  },
+  authorityInput: ({ sessionId, requestRef, body } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests/${encodeURIComponent(requestRef ?? "")}/input?${params.toString()}`, { method: "POST", body });
+  },
+  authorityInputSave: ({ sessionId, requestRef, body } = {}) => {
+    const params = new URLSearchParams({ session_id: sessionId ?? "general" });
+    return requestJson(`/authority-requests/${encodeURIComponent(requestRef ?? "")}/input-save?${params.toString()}`, { method: "POST", body });
+  },
   revokeConversationPermission: ({ sessionId, grantRef } = {}) => {
     const params = new URLSearchParams({ session_id: sessionId ?? "general" });
     return requestJson(`/authority-permissions/${encodeURIComponent(grantRef ?? "")}?${params.toString()}`, { method: "DELETE" });
