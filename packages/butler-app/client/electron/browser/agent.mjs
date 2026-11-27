@@ -103,11 +103,12 @@ export function connectDebugger(browser, tab) {
     .then(() => contents.debugger.sendCommand("Runtime.enable"));
   void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
-/** Where the page lies in its view's box: the whole box, or while a phone views the tab its viewport fitted at the box's top-left, at that fit's emulation scale. */
+/** Where the page lies in its view's box: the whole box, or while a phone views the tab its viewport fitted at the box's
+ * top-left, zoomed no further than the box itself is (1 unless the App lays the slot out at that viewport). */
 export function pageBounds(tab, box) {
   const phone = tab.phoneViewport;
   if (!phone) return box;
-  const scale = Math.min(1, box.width / phone.width, box.height / phone.height);
+  const scale = Math.min(Math.max(1, box.scale ?? 1), box.width / phone.width, box.height / phone.height);
   return { ...box, width: Math.round(phone.width * scale), height: Math.round(phone.height * scale), scale };
 }
 export function emulation(tab) {
@@ -127,6 +128,7 @@ export function setPhoneViewport(browser, tab, viewport) {
   if (!tab.view || tab.view.webContents.isDestroyed() || tab.closing || browser.disposing) return;
   if (!viewport && !tab.agent) tab.view.webContents.disableDeviceEmulation();
   browser.sync(tab);
+  browser.publish();
 }
 export function backgroundTab(browser, tab) {
   if (tab.agent) viewedTab(browser, tab, false);

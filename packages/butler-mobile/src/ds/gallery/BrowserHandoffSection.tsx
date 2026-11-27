@@ -39,7 +39,7 @@ function Sample({ name, fields, initial = {}, offer, live }: {
         <Button label={fields.length ? labels.submit : labels.done} onPress={noop} />
       </ButtonGroup>}>
       <BrowserHandoffForm labels={{ fields: labels.fields, savePrompt: labels.savePrompt, saveSignIn: copy.browser.saveSignIn, later: copy.browser.later }}
-        host={form ? host : undefined} details={form ? [] : [site, labels.onDesktop]}
+        host={form ? host : undefined} details={form ? [] : live === undefined ? [site, labels.onDesktop] : [site]}
         fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
         onSubmit={noop} offer={offer} onSave={noop} />
       {live !== undefined ? <ButtonGroup>

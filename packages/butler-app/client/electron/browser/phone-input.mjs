@@ -5,17 +5,35 @@ import { setPhoneViewport } from "./agent.mjs";
 
 const KEYS = new Set(["Backspace", "Delete", "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Space"]);
 
+const FOCUSED = 'document.hasFocus() && !/^i?frame$/u.test(document.activeElement?.localName ?? "")';
+const REVEAL = `(() => { let el = document.activeElement; while (el?.contentDocument?.activeElement) el = el.contentDocument.activeElement;
+  if (el?.isContentEditable || /^(input|textarea)$/u.test(el?.localName ?? "")) el.scrollIntoView({ block: "center", inline: "nearest" }); return true; })()`;
+
+/** The out-of-process frame that has keyboard focus (its CDP session and preload world), or null: the page's own process. */
+async function focusedFrame(tab) {
+  for (const [frameId, sessionId] of tab.frameSessions) {
+    const world = nativeFrameWorld(tab, frameId);
+    if (await world?.executeJavaScriptInIsolatedWorld(9001, [{ code: FOCUSED }]).catch(() => false) === true) return { sessionId, world };
+  }
+  return null;
+}
+
+/** Once the page has taken a shorter viewport (≤ 500 ms), scrolls the focused text field to its middle: the phone keyboard opened over the rest. */
+async function revealFocus(tab, height) {
+  const page = tab.view.webContents;
+  await page.executeJavaScriptInIsolatedWorld(9001, [{ code: `innerHeight === ${Number(height)} || new Promise(done => { addEventListener("resize", () => done(true), { once: true }); setTimeout(() => done(false), 500); })` }]);
+  const frame = await focusedFrame(tab);
+  await (frame?.world ?? page).executeJavaScriptInIsolatedWorld(9001, [{ code: REVEAL }]);
+}
+
 export async function applyEvents(browser, tab, events) {
   let { width, height } = tab.view.getBounds();
   if (!width || !height) return { status: "refused", reason: "live_unavailable" };
   const send = cdpMouse(tab);
   const debuggerApi = tab.view.webContents.debugger;
   async function keyTarget() {
-    for (const [frameId, sessionId] of tab.frameSessions) {
-      const focused = await nativeFrameWorld(tab, frameId)?.executeJavaScriptInIsolatedWorld(9001, [{ code: 'document.hasFocus() && !/^i?frame$/u.test(document.activeElement?.localName ?? "")' }]).catch(() => false);
-      if (focused === true) return routeTarget({}, { sessionId, api: { sendCommand: (m, p) => debuggerApi.sendCommand(m, p, sessionId) } });
-    }
-    return {};
+    const frame = await focusedFrame(tab);
+    return frame ? routeTarget({}, { sessionId: frame.sessionId, api: { sendCommand: (m, p) => debuggerApi.sendCommand(m, p, frame.sessionId) } }) : {};
   }
   let target = null;
   let heldPoint = null;
@@ -56,12 +74,15 @@ export async function applyEvents(browser, tab, events) {
           }
           break;
         }
-        case "viewport":
+        case "viewport": {
           if (!browser.phoneLive.feeds.has(tab.id)) break batch;
+          const previous = tab.phoneViewport;
           setPhoneViewport(browser, tab, { width: event.width, height: event.height, dpr: event.dpr });
           ({ width, height } = tab.view.getBounds());
           if (!width || !height) return { status: "refused", reason: "live_unavailable" };
+          if (previous?.width === event.width && event.height < previous.height) void revealFocus(tab, event.height).catch(() => {});
           break;
+        }
         default:
           return { status: "refused", reason: "live_unavailable" };
       }

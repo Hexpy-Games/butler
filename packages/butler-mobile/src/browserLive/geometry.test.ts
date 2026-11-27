@@ -2,10 +2,11 @@
 import { expect, test } from "bun:test";
 import { fit, pageViewport, toFrame } from "./geometry";
 
-test("page viewport rounds and clamps the stage and keeps its height while typing", () => {
+test("page viewport is the stage in whole CSS px within what the gateway accepts", () => {
   const viewport = pageViewport({ width: 0, height: 0 }, { width: 390.4, height: 843.6 });
   expect(viewport).toEqual({ width: 390, height: 844 });
-  expect(pageViewport(viewport, { width: 390, height: 500 })).toBe(viewport);
+  expect(pageViewport(viewport, { width: 390.2, height: 843.8 })).toBe(viewport);
+  expect(pageViewport(viewport, { width: 390, height: 500 })).toEqual({ width: 390, height: 500 });
   expect(pageViewport(viewport, { width: 844, height: 390 })).toEqual({ width: 844, height: 390 });
   expect(pageViewport(viewport, { width: 150, height: 2200 })).toEqual({ width: 200, height: 2000 });
   expect(pageViewport(viewport, { width: 1400, height: 150 })).toEqual({ width: 1280, height: 200 });

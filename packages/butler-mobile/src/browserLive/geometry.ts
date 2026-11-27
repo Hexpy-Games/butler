@@ -3,13 +3,11 @@ type Point = { x: number; y: number };
 type Box = Size & Point;
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-/** The page viewport for a stage, in whole CSS px within what the gateway accepts. Only the soft
- * keyboard shortens the stage at an unchanged width, so the viewport keeps its tallest height then
- * and the page does not re-lay out while typing. */
+/** The page viewport for a stage, in whole CSS px within what the gateway accepts. The page lays out
+ * at exactly what the phone shows, so a soft keyboard shortens it and the frame stays at full size. */
 export function pageViewport(previous: Size, stage: Size): Size {
   const width = clamp(Math.round(stage.width), 200, 1280);
-  const tallest = clamp(Math.round(stage.height), 200, 2000);
-  const height = width === previous.width ? Math.max(tallest, previous.height) : tallest;
+  const height = clamp(Math.round(stage.height), 200, 2000);
   return width === previous.width && height === previous.height ? previous : { width, height };
 }
 

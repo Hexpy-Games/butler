@@ -118,6 +118,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
   };
   const host = currentInput?.origin && URL.canParse(currentInput.origin) ? new URL(currentInput.origin).host : undefined;
   const tabId = card.approval?.operation?.browser_tab;
+  const liveTab = input && !input.fields.length && typeof tabId === "string" && tabId.length > 0 ? tabId : undefined;
   return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={fillFailed ? browser.signinFillFailed : failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={offer && !fields.length ? <SaveButtons labels={{ saveSignIn: browser.saveSignIn, later: browser.later }} pending={pending} onSave={save => void act(save)} /> : <ButtonGroup layout="pair">
@@ -132,12 +133,12 @@ export function BrowserHandoffCard({ card, view, reload }: {
           onPress={() => void send("done", base + "/hand-back" + query, {})} />}
     </ButtonGroup>}>
     <BrowserHandoffForm labels={{ fields: labels.fields, savePrompt: labels.savePrompt, saveSignIn: browser.saveSignIn, later: browser.later }}
-      host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details}
+      host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details.filter(line => !liveTab || line !== labels.onDesktop)}
       fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
       onSubmit={() => void act()} pending={pending} offer={offer ?? undefined} onSave={save => void act(save)} />
-    {input && !input.fields.length && typeof tabId === "string" && tabId.length > 0 ? <ButtonGroup>
+    {liveTab ? <ButtonGroup>
       <Button variant="secondary" label={labels.openScreen} disabled={!!pending}
-        onPress={() => router.push({ pathname: "/browser-live/[tabId]", params: { tabId, session: sessionId, request: card.requestRef } })} />
+        onPress={() => router.push({ pathname: "/browser-live/[tabId]", params: { tabId: liveTab, session: sessionId, request: card.requestRef } })} />
     </ButtonGroup> : null}
   </DecisionCard>;
 }

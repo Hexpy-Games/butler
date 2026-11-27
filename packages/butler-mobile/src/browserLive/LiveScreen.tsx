@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { KeyboardAvoidingView, PixelRatio, View, type TextInput } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ButtonGroup, GlassBackdrop, showToast, Surface, Text } from "@/ds";
@@ -23,6 +24,7 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
   const closed = useRef(false);
   const handingBack = useRef(false);
   const dpr = Math.min(PixelRatio.get(), 2);
+  const insets = useSafeAreaInsets();
   const { size, uri, status } = useLiveFrames(route, pairing?.deviceToken, tabId, { ...viewport, dpr });
   const box = useMemo(() => size ? fit(stage, size) : null, [stage, size]);
   const queue = useMemo(() => client && new InputQueue(async batch => {
@@ -60,7 +62,8 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
     }
   };
 
-  return <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+  // The button bar keeps its bottom safe-area inset, which the keyboard covers: avoid only the rest of the keyboard.
+  return <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={-insets.bottom} style={{ flex: 1 }}>
     <GlassBackdrop overlay={
       <Surface padding="md" edges={["bottom", "left", "right"]}>
         <ButtonGroup layout="pair">

@@ -104,7 +104,17 @@ try {
   await post(1, [{ t: "down", ...point }, { t: "up", ...point }]);
   await post(2, [{ t: "text", value: "typed-7311" }]);
   assert.equal(await app.main(`${subject}.view.webContents.executeJavaScript("document.querySelector('input').value")`), "typed-7311");
-  await post(3, [{ t: "viewport", width: 844, height: 390, dpr: 2 }]);
+  const page = (code: string) => app.main<unknown>(`${subject}.view.webContents.executeJavaScript(${JSON.stringify(code)})`);
+  const below = await page(`document.body.insertAdjacentHTML("afterbegin", '<div style="height:500px"></div>');
+    document.body.insertAdjacentHTML("beforeend", '<div style="height:1200px"></div>');
+    scrollTo(0, 0); const input = document.querySelector("input"); input.focus(); input.getBoundingClientRect().bottom`) as number;
+  assert.ok(below > 400, `focused field bottom ${below} px lies under a 400 px keyboard viewport`);
+  await post(3, [{ t: "viewport", width: 390, height: 400, dpr: 2 }]);
+  await waitBrowser(async () => await page(`(() => { const input = document.querySelector("input"), r = input.getBoundingClientRect();
+    return innerWidth === 390 && innerHeight === 400 && document.activeElement === input && r.top >= 0 && r.bottom <= innerHeight; })()`) === true,
+    "focused field revealed above the keyboard");
+  assert.deepEqual(await app.main(`${browser}.snapshot().tabs.find(item => item.id === ${JSON.stringify(tab)}).phoneViewport`), { width: 390, height: 400 });
+  await post(4, [{ t: "viewport", width: 844, height: 390, dpr: 2 }]);
   await waitBrowser(async () => await app.main<number>(`${subject}.view.webContents.executeJavaScript("innerWidth")`) === 844, "rotated viewport");
   await app.gateway.api(`/authority-requests/${encodeURIComponent(requestRef)}/hand-back?session_id=general`, { method: "POST", body: "{}" });
   for (;;) {
@@ -114,6 +124,7 @@ try {
     assert.equal(JSON.parse(next.value.payload.toString()).reason, "handed_back");
     assert.deepEqual(await app.main(`${subject}.view.webContents.executeJavaScript("[innerWidth, screen.width, devicePixelRatio]")`), [before, 1280, 1]);
     assert.deepEqual(await app.main(`${subject}.view.getBounds()`), { x: 0, y: 0, width: 1280, height: 800 });
+    await waitBrowser(async () => await app.main(`${browser}.snapshot().tabs.find(item => item.id === ${JSON.stringify(tab)}).phoneViewport ?? null`) === null, "desktop page size published again");
     assert.equal((await reader.next()).done, true);
     break;
   }
