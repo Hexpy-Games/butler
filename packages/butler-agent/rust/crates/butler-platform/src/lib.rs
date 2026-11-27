@@ -45,7 +45,8 @@
 //! - [`stdio`]: this process's stdin and stdout as one async stream.
 //! - [`browser_profiles`]: other browsers' profiles and bookmark files, for import.
 //! - [`agent_homes`]: other AI agents' instruction and configuration files, for import.
-//! - [`powershell_text`]: PowerShell string literals for the scripts Butler starts.
+//! - [`powershell_text`]: PowerShell string literals, decoded values and encoded commands for the scripts Butler starts.
+//! - [`windows_command_line`]: MSVC-quoted arguments for Windows command lines Butler builds.
 //! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
 //!   Hello or the account password) before a secret is shown.
 //!
@@ -100,6 +101,7 @@ pub mod time_zone;
 pub mod tool_paths;
 pub mod user_auth;
 pub mod user_dirs;
+pub mod windows_command_line;
 
 #[cfg(windows)]
 mod process_table;

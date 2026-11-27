@@ -26,7 +26,6 @@ use super::{ExitSignal, GroupSignal, Liveness, ShutdownRequest, SignalError};
 use crate::process_table::ProcessView;
 
 mod outliving;
-pub(crate) use outliving::quote_argument;
 pub(super) use outliving::{DetachedChild, detached, spawn_outliving_session};
 
 pub(super) const CONTAINS_PROCESS_TREES: bool = true;

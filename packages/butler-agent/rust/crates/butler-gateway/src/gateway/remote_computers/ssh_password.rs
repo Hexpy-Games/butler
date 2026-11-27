@@ -1,17 +1,22 @@
 use super::{
     Computer, HostInput, HttpError,
     askpass::Askpass,
-    connection_error, remote_error,
-    ssh::{self, HostCheck, Platform},
+    connection_error,
+    probe::{self, Platform},
+    remote_command::{self, Remote, Shell},
+    remote_error,
+    ssh::{self, HostCheck},
     ssh_key,
     store::KnownHosts,
 };
-use butler_platform::{hook_process::HookOutput, process_names, remote_ssh};
+use butler_platform::{
+    hook_process::HookOutput, powershell_text::decoded, process_names, remote_ssh,
+};
 use std::{collections::BTreeSet, path::Path, time::Duration};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-pub(super) const INSTALL: &[u8] = br#"set -eu
+const INSTALL: &[u8] = br#"set -eu
 case "$(uname -s)" in Darwin|Linux) ;; *) exit 90 ;; esac
 umask 077
 d="$HOME/.ssh"; f="$d/authorized_keys"; b=$(printf '%s' "$1" | awk '{print $2}')
@@ -23,12 +28,67 @@ if awk -v b="$b" '{for(i=1;i<=NF;i++) if($i==b) f=1} END{exit !f}' "$f"; then ec
 if command -v restorecon >/dev/null 2>&1; then restorecon -F "$d" "$f" >/dev/null 2>&1 || true; fi
 "#;
 
-pub(super) const REMOVE: &[u8] = br#"set -eu
+const REMOVE: &[u8] = br#"set -eu
 f="$HOME/.ssh/authorized_keys"; [ -f "$f" ] || exit 0
 umask 077; t="$f.butler.$$"
 awk -v b="$1" '{for(i=1;i<=NF;i++) if($i==b) next; print}' "$f" > "$t"
 cat "$t" > "$f"; rm -f "$t"
 "#;
+
+/// The authorized_keys file sshd reads for this user: the shared admin file when the
+/// user is an administrator and sshd_config has an active `Match Group administrators`.
+const KEY_FILE_PS: &str = r"$f=Join-Path $env:USERPROFILE '.ssh\authorized_keys'
+$admin=$false
+$cfg=Join-Path $env:ProgramData 'ssh\sshd_config'
+if((New-Object Security.Principal.WindowsPrincipal ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.SecurityIdentifier]'S-1-5-32-544') -and (Test-Path -LiteralPath $cfg) -and (Select-String -LiteralPath $cfg -Pattern '^\s*Match\s+Group\s+administrators\s*$' -Quiet)){$admin=$true;$f=Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'}
+";
+
+const INSTALL_PS: &str = r#"$B=($K -split '\s+')[1]
+$d=Split-Path -Parent $f
+if(-not(Test-Path -LiteralPath $d)){New-Item -ItemType Directory -Path $d|Out-Null}
+$t=if(Test-Path -LiteralPath $f){[IO.File]::ReadAllText($f)}else{''}
+if(@($t -split "`r?`n"|Where-Object{($_.Trim() -split '\s+') -ccontains $B}).Count -gt 0){'state=present';exit 0}
+$n=if($t.Length -gt 0 -and -not $t.EndsWith("`n")){"`r`n"}else{''}
+[IO.File]::AppendAllText($f,$n+$K+"`r`n",(New-Object Text.UTF8Encoding $false))
+if($admin -and (Run (Join-Path $env:SystemRoot 'System32\icacls.exe') ((Q $f)+' /inheritance:r /grant *S-1-5-32-544:F /grant *S-1-5-18:F')).Code -ne 0){exit 1}
+'state=added'
+"#;
+
+const REMOVE_PS: &str = r"if(-not(Test-Path -LiteralPath $f)){exit 0}
+$lines=[IO.File]::ReadAllLines($f)
+$keep=@($lines|Where-Object{-not(($_.Trim() -split '\s+') -ccontains $B)})
+if($keep.Count -ne $lines.Count){[IO.File]::WriteAllLines($f,[string[]]$keep,(New-Object Text.UTF8Encoding $false))}
+";
+
+#[derive(Clone, Copy)]
+pub(super) enum Key {
+    Install,
+    Remove,
+}
+
+/// The key script for `shell`; `argument` is the public key line (install) or its blob (remove).
+pub(super) fn key_command(shell: Shell, key: Key, argument: &str) -> Remote {
+    match (shell, key) {
+        (Shell::Posix, Key::Install) => Remote {
+            command: command(argument),
+            stdin: INSTALL.to_vec(),
+        },
+        (Shell::Posix, Key::Remove) => Remote {
+            command: command(argument),
+            stdin: REMOVE.to_vec(),
+        },
+        (Shell::PowerShell, Key::Install) => remote_command::script(&format!(
+            "$K={}\n{}{}{KEY_FILE_PS}{INSTALL_PS}",
+            decoded(argument),
+            remote_command::QUOTE,
+            remote_command::RUN
+        )),
+        (Shell::PowerShell, Key::Remove) => remote_command::script(&format!(
+            "$B={}\n{KEY_FILE_PS}{REMOVE_PS}",
+            decoded(argument)
+        )),
+    }
+}
 
 fn arguments(target: &HostInput, known_hosts: &Path, method: &str, command: &str) -> Vec<String> {
     let mut args = vec![remote_ssh::PROGRAM.into()];
@@ -101,32 +161,70 @@ pub(super) fn install_failed() -> HttpError {
     remote_error("ssh_key_install_failed", "Couldn't install the SSH key.")
 }
 
-async fn run(
+async fn attempt(
     input: &HostInput,
     check: &HostCheck,
     method: &str,
     password: &Zeroizing<String>,
-    (script, argument): (&[u8], &str),
+    remote: Remote,
     cancel: CancellationToken,
-) -> Result<HookOutput, HttpError> {
+) -> Result<(HookOutput, usize), HttpError> {
     let known_hosts =
         KnownHosts::write(check.lines.iter().cloned().collect::<BTreeSet<_>>()).await?;
-    let command = command(argument);
     let helper = process_names::current_exe().map_err(|_| install_failed())?;
     let askpass = Askpass::start(password.clone()).await?;
     let output = ssh::run_with_env(
-        arguments(input, &known_hosts.0, method, &command),
-        ssh::Stdin::Bytes(script.to_vec()),
+        arguments(input, &known_hosts.0, method, &remote.command),
+        ssh::Stdin::Bytes(remote.stdin),
         Duration::from_secs(30),
         cancel,
         remote_ssh::askpass_environment(&helper, &askpass.channel),
     )
     .await?;
-    classify(&output, askpass.requests())?;
-    Ok(output)
+    Ok((output, askpass.requests()))
 }
 
-pub(super) fn command(argument: &str) -> String {
+/// The key script in `shell`, or when the shell is not known yet: in sh first,
+/// then in PowerShell when sh's result says Windows (`remote_command::try_windows`).
+async fn run(
+    input: &HostInput,
+    check: &HostCheck,
+    method: &str,
+    password: &Zeroizing<String>,
+    (key, argument): (Key, &str),
+    shell: Option<Shell>,
+    cancel: CancellationToken,
+) -> Result<(HookOutput, Shell), HttpError> {
+    let first = shell.unwrap_or(Shell::Posix);
+    let (output, requests) = attempt(
+        input,
+        check,
+        method,
+        password,
+        key_command(first, key, argument),
+        cancel.clone(),
+    )
+    .await?;
+    if shell.is_none() && remote_command::try_windows(&output) {
+        let (windows, requests) = attempt(
+            input,
+            check,
+            method,
+            password,
+            key_command(Shell::PowerShell, key, argument),
+            cancel,
+        )
+        .await?;
+        if windows.exit_code != Some(127) {
+            classify(&windows, requests)?;
+            return Ok((windows, Shell::PowerShell));
+        }
+    }
+    classify(&output, requests)?;
+    Ok((output, first))
+}
+
+fn command(argument: &str) -> String {
     format!("sh -s -- '{}'", argument.replace('\'', "'\\''"))
 }
 
@@ -139,14 +237,23 @@ pub(super) async fn install(
     check: &HostCheck,
     password: &Zeroizing<String>,
     cancel: CancellationToken,
-) -> Result<Option<String>, HttpError> {
+) -> Result<(Option<String>, Shell), HttpError> {
     let method = method(check)?;
     let public = ssh_key::ensure(cancel.clone()).await?;
-    let output = run(input, check, method, password, (INSTALL, &public), cancel).await?;
+    let (output, shell) = run(
+        input,
+        check,
+        method,
+        password,
+        (Key::Install, &public),
+        None,
+        cancel,
+    )
+    .await?;
     if output.stdout.lines().any(|line| line == "state=added") {
-        Ok(Some(public))
+        Ok((Some(public), shell))
     } else if output.stdout.lines().any(|line| line == "state=present") {
-        Ok(None)
+        Ok((None, shell))
     } else {
         Err(install_failed())
     }
@@ -157,16 +264,27 @@ pub(super) async fn remove(
     check: &HostCheck,
     password: &Zeroizing<String>,
     public: &str,
+    shell: Shell,
     cancel: CancellationToken,
 ) {
     if let (Ok(method), Ok(blob)) = (method(check), blob(public)) {
-        let _ = run(input, check, method, password, (REMOVE, blob), cancel).await;
+        let _ = run(
+            input,
+            check,
+            method,
+            password,
+            (Key::Remove, blob),
+            Some(shell),
+            cancel,
+        )
+        .await;
     }
 }
 
 pub(super) struct Install {
     password: Option<Zeroizing<String>>,
     added: Option<String>,
+    shell: Shell,
 }
 
 impl Install {
@@ -176,12 +294,16 @@ impl Install {
         password: Option<Zeroizing<String>>,
         cancel: CancellationToken,
     ) -> Result<Self, HttpError> {
-        let added = if let Some(password) = &password {
+        let (added, shell) = if let Some(password) = &password {
             install(input, check, password, cancel).await?
         } else {
-            None
+            (None, Shell::Posix)
         };
-        Ok(Self { password, added })
+        Ok(Self {
+            password,
+            added,
+            shell,
+        })
     }
 
     pub(super) fn added(&self) -> bool {
@@ -190,7 +312,15 @@ impl Install {
 
     pub(super) async fn rollback(&self, input: &HostInput, check: &HostCheck) {
         if let (Some(password), Some(public)) = (&self.password, &self.added) {
-            remove(input, check, password, public, CancellationToken::new()).await;
+            remove(
+                input,
+                check,
+                password,
+                public,
+                self.shell,
+                CancellationToken::new(),
+            )
+            .await;
         }
     }
 
@@ -210,7 +340,7 @@ impl Install {
             } else {
                 None
             };
-            ssh::probe(&target, folder, records, lines, cancel).await
+            probe::probe(&target, folder, records, lines, cancel).await
         }
         .await;
         match result {

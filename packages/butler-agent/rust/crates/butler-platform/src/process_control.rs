@@ -46,8 +46,6 @@ use unix as sys;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use sys::quote_argument;
-#[cfg(windows)]
 use windows as sys;
 
 /// Whether a command started with [`isolate_group`] can be stopped together

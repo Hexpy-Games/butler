@@ -87,6 +87,10 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
 }
 
 /// Native facades have their own leaf and adapter dependencies.
+#[expect(
+    clippy::match_same_arms,
+    reason = "pure command text builders occupy a separate row from host facades"
+)]
 fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
     Some(match domain {
         // butler-platform: the only OS-specific code. Independent facades; each
@@ -96,8 +100,9 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
         | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" | "plugin_git"
-        | "shared_locks" | "powershell_text" | "host_file_behavior" | "startup_task"
-        | "store_update" | "remote_ssh" | "process_hardening" => &[],
+        | "shared_locks" | "host_file_behavior" | "startup_task" | "store_update"
+        | "remote_ssh" | "process_hardening" => &[],
+        "powershell_text" | "windows_command_line" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
@@ -109,7 +114,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "tool_paths",
             "user_dirs",
         ],
-        "process_control" => &["process_table"],
+        "process_control" => &["process_table", "windows_command_line"],
         // The headless browser's DevTools pipe runs in a contained process tree.
         "browser_process" | "system_wake" => &["process_control"],
         // The installed App is found under the user's home; its windowless
@@ -127,6 +132,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "process_names",
             "secure_fs",
             "store_update",
+            "windows_command_line",
         ],
         // User-entered paths resolve the user's home.
         "tool_paths" => &["user_dirs"],

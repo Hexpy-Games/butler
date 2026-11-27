@@ -4,6 +4,7 @@
 //! SSH server waits for the handles of its session to close, so a service
 //! started that way holds the session open. `CreateProcess` here passes none.
 
+use crate::windows_command_line::quote_argument;
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::process::ExitStatusExt;
@@ -129,22 +130,4 @@ fn text(value: &OsStr) -> io::Result<&str> {
 
 fn os_error(error: co::ERROR) -> io::Error {
     io::Error::from_raw_os_error(i32::from_ne_bytes(error.raw().to_ne_bytes()))
-}
-
-/// One argument quoted for the MSVC command-line parser.
-pub(crate) fn quote_argument(value: &str) -> String {
-    let mut output = String::from("\"");
-    let mut slashes = 0;
-    for ch in value.chars() {
-        if ch == '\\' {
-            slashes += 1;
-            continue;
-        }
-        output.push_str(&"\\".repeat(if ch == '"' { slashes * 2 + 1 } else { slashes }));
-        slashes = 0;
-        output.push(ch);
-    }
-    output.push_str(&"\\".repeat(slashes * 2));
-    output.push('"');
-    output
 }
