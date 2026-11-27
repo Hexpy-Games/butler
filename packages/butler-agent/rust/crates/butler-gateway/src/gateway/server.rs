@@ -157,11 +157,16 @@ pub async fn serve_gateway(
         Some(address) => Some(bind_content(address, config.content_port).await?),
         None => None,
     };
-    let local_listener = config
-        .remote_socket
-        .as_ref()
-        .map(|socket| local_socket::bind(&socket.path).map(|listener| (listener, socket.clone())))
-        .transpose()?;
+    let local_listener = match config.remote_socket.clone() {
+        Some(socket) => {
+            let path = socket.path.clone();
+            let listener = tokio::task::spawn_blocking(move || local_socket::bind(&path))
+                .await
+                .map_err(std::io::Error::other)??;
+            Some((listener, socket))
+        }
+        None => None,
+    };
     let content_addr = content_listener
         .as_ref()
         .map(TcpListener::local_addr)

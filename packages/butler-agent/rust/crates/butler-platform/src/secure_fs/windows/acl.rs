@@ -2,6 +2,7 @@
 //! is cached; paths, owners, access rules and inheritance are always re-read.
 use std::fs::{File, OpenOptions};
 use std::io;
+use std::os::windows::io::AsRawHandle;
 use std::os::windows::{fs::OpenOptionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,6 +21,36 @@ fn current_sid() -> io::Result<LocalBox<Sid>> {
         .as_ref()
         .map_err(|message| io::Error::other(message.clone()))?
         .parse()
+}
+
+/// Owner = this user; protected DACL with one ACE granting this user full access.
+pub(crate) fn protect_kernel_object<H: AsRawHandle>(handle: &mut H) -> io::Result<()> {
+    let sid = current_sid()?;
+    let sid_text = sid.to_string();
+    let descriptor: LocalBox<SecurityDescriptor> =
+        format!("O:{sid_text}D:P(A;;FA;;;{sid_text})").parse()?;
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| io::Error::other("Private DACL is missing"))?;
+    wrappers::SetSecurityInfo(
+        handle,
+        SeObjectType::SE_KERNEL_OBJECT,
+        SecurityInformation::Owner | SecurityInformation::Dacl | SecurityInformation::ProtectedDacl,
+        Some(&*sid),
+        None,
+        Some(dacl),
+        None,
+    )
+}
+
+/// Whether this user owns the kernel object behind `handle`.
+pub(crate) fn owned_by_current_user<H: AsRawHandle>(handle: &H) -> io::Result<bool> {
+    let descriptor = wrappers::GetSecurityInfo(
+        handle,
+        SeObjectType::SE_KERNEL_OBJECT,
+        SecurityInformation::Owner,
+    )?;
+    Ok(descriptor.owner() == Some(&*current_sid()?))
 }
 
 fn process_sid() -> io::Result<String> {

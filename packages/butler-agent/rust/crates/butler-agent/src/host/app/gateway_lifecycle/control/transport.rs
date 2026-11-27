@@ -131,16 +131,13 @@ pub(super) async fn write_frame<T: Serialize>(
     if bytes.is_empty() || bytes.len() > MAX_FRAME_BYTES {
         return Err("gateway_control_response_invalid".into());
     }
-    stream
-        .write_u32(u32::try_from(bytes.len()).unwrap_or(u32::MAX))
-        .await
-        .map_err(|source| {
-            crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-        })?;
-    stream.write_all(&bytes).await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-    })?;
-    stream.flush().await.map_err(|source| {
-        crate::host::HostError::new("gateway_control_response_failed").with_source(source)
-    })
+    // One write: a named pipe holds one pending write, and a stop right after
+    // the reply must not leave half a frame unwritten.
+    let failed =
+        |source| crate::host::HostError::new("gateway_control_response_failed").with_source(source);
+    let mut frame = Vec::with_capacity(4 + bytes.len());
+    frame.extend_from_slice(&u32::try_from(bytes.len()).unwrap_or(u32::MAX).to_be_bytes());
+    frame.extend_from_slice(&bytes);
+    stream.write_all(&frame).await.map_err(failed)?;
+    stream.flush().await.map_err(failed)
 }
