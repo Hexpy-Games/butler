@@ -269,8 +269,12 @@ impl AppServiceConfiguration {
     }
 }
 
+pub(crate) fn remote_requested() -> bool {
+    env::args_os().any(|arg| arg == "--remote")
+}
+
 fn apply_remote(config: &mut AppServiceConfiguration, data_root: &Path) {
-    if !env::args_os().any(|arg| arg == "--remote") {
+    if !remote_requested() {
         return;
     }
     config.host = "127.0.0.1".to_owned();
@@ -280,11 +284,15 @@ fn apply_remote(config: &mut AppServiceConfiguration, data_root: &Path) {
     config.gateway.remote_socket = Some(remote_socket(data_root));
 }
 
+pub(crate) fn remote_socket_path(data_root: &Path) -> PathBuf {
+    data_root.join("remote/agent.sock")
+}
+
 fn remote_socket(data_root: &Path) -> RemoteSocket {
     static SOCKET: OnceLock<RemoteSocket> = OnceLock::new();
     SOCKET
         .get_or_init(|| RemoteSocket {
-            path: data_root.join("remote/agent.sock"),
+            path: remote_socket_path(data_root),
             activity: Arc::new(SocketActivity::default()),
             idle: idle_timeout(),
         })

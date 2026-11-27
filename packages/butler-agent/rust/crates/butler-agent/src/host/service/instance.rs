@@ -10,6 +10,7 @@ use butler_platform::secure_fs;
 use serde::{Deserialize, Serialize};
 
 use crate::host::installation::ResolvedInstallation;
+use crate::host::service::configuration::remote_requested;
 use crate::host::service::instance_identity::{
     executable_matches, process_executable, process_start_identity,
 };
@@ -61,6 +62,10 @@ pub(crate) use stop_intent::{
 };
 pub(crate) use stopping::{StoppingFrom, mark_stopping, revert_stopping};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent recorded facts about the instance"
+)]
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct InstanceRecord {
     schema: String,
@@ -87,6 +92,11 @@ pub(crate) struct InstanceRecord {
     /// secret, lease). Absent in records written before this field existed.
     #[serde(default)]
     pub(crate) app_supervised: bool,
+    /// Started with `--remote`: serves only its owner-only socket and exits
+    /// when idle. A restart starts the replacement in the same mode. Absent
+    /// in records written before this field existed.
+    #[serde(default)]
+    pub(crate) remote: bool,
 }
 
 /// This process's ownership of DATA: the exclusive instance lock, held until
@@ -384,6 +394,7 @@ fn starting_record(
         control_endpoint: None,
         control_token: None,
         app_supervised,
+        remote: remote_requested(),
     })
 }
 
