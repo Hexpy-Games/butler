@@ -27,8 +27,8 @@ function retryCard(locale: Locale, attempt: number) {
     id, eyebrow: c.labels[index], title: c.title(reason, c.name, c.labels[index]!), kind: "single", allow_custom: true,
     options: [
       { id: "proposed", label: proposals[index], recommended: true, kind: "answer" },
-      { id: "none", label: c.none, kind: "answer" },
       ...(id === "key_file" ? [{ id: "password_setup", label: appCopy.computers.passwordSheet.title, description: c.name, kind: "answer" }] : []),
+      { id: "none", label: c.none, kind: "answer" },
     ],
   })) };
 }
@@ -236,7 +236,7 @@ async function deleteToast(page: Page, server: NativeAppServerHandle, fake: Fake
     await row.getByRole("button", { name: copy.removeComputer(connected!.name), exact: true }).click();
     const dialog = page.locator('[data-test-class="computer-delete-dialog"]');
     await dialog.getByRole("button", { name: copy.removeDialog.confirm, exact: true }).click();
-    const toast = page.locator("[data-sonner-toast]").filter({ hasText: copy.removeDialog.keyNotRemoved });
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: copy.removeDialog.keyNotRemoved(connected!.name) });
     await toast.waitFor();
     await page.waitForTimeout(600);
     await shot("S9", toast, undefined, 16);

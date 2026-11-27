@@ -62,7 +62,7 @@ export function useComputers() {
     try {
       const result = await deleteComputer(computer.id, force);
       if (!result.remote_cleaned) notifyStatus(copy.remoteNotCleaned, { id: "computers", tone: "error" });
-      if (result.key_removed === false) notifyStatus(copy.keyNotRemoved, { id: "computers", tone: "error" });
+      if (result.key_removed === false) notifyStatus(copy.keyNotRemoved(computer.name), { id: "computers", tone: "error" });
       if (forget) {
         try {
           await forgetComputerMemory(computer.id);
