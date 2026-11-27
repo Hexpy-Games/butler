@@ -72,6 +72,9 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
+- **2026-11-25: Never skip git hooks.** Never commit or push with `--no-verify`. When a host lacks a tool a hook needs (WSL has no `zstd`), push from the mini or butler-win instead; never install packages on the Windows host. A commit already pushed without hooks must pass the real hook before it merges.
+  - What happened: #2518 was pushed from WSL with `--no-verify` after the pre-push hook failed there. The hook's cargo-target, cargo-units and runner-cache script tests need `zstd`, which WSL lacks.
+
 - **2026-11-25: Read live Butler data only through Butler/Canon APIs or a read-only `cp -c` clone; never print secrets.** Never `cat`, `grep` or otherwise open state, token or secret files under `~/.butler` directly, and never print a token, key or credential into output or a transcript.
   - What happened: an investigation agent read a live `~/.butler` state file directly and printed a control token.
 

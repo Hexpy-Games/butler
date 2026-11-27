@@ -5,12 +5,17 @@ import type { SessionSummary } from "../../../butler-protocol/src/index.ts";
 import { Badge, ButlerMark, icons, ListGroup, ListRow, Spinner, Text, UnreadDot, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { sessionMark } from "@/conversation/sessions";
+import { ListModeMenu } from "./ListModeMenu";
+import type { ListMode } from "./listMode";
 
-export function HomeShortcuts({ status, general }: { status?: string; general?: SessionSummary }) {
+/** Home rows are ungrouped ListRows: padX --space-sm, chevron ArrowRight01 at --icon-size-md whose ink ends at x 15.75 of 24 (path x 15 + half the 1.5 stroke). */
+const ROW_CHEVRON_INK_INSET = 8.25 / 24;
+
+export function HomeShortcuts({ status, general, mode, onModeChange }: { status?: string; general?: SessionSummary; mode: ListMode; onModeChange(mode: ListMode): void }) {
   const t = useTokens(), app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const mark = general ? sessionMark(general) : null;
   const title = app.space.general;
-  return <View style={{ gap: t.length("--space-4"), paddingTop: t.length("--space-6"), paddingBottom: t.length("--space-4") }}>
+  return <View style={{ gap: t.length("--space-4"), paddingTop: t.length("--space-6") }}>
     <ListGroup>
       <ListRow icon={icons.Archive} title={app.library.title} navigates onPress={() => router.push("/library")} />
       <ListRow icon={icons.Clock3} title={app.automations.title} navigates onPress={() => router.push("/automations")} />
@@ -23,5 +28,10 @@ export function HomeShortcuts({ status, general }: { status?: string; general?: 
         navigates onPress={() => router.push({ pathname: "/chat/[id]", params: { id: general.id, title } })} />
     </ListGroup> : null}
     {status ? <Text variant="caption" tone="tertiary">{status}</Text> : null}
+    <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: t.length("--space-sm") }}>
+      <View style={{ flex: 1 }}><Text variant="caption" tone="secondary" weight="medium" lines={1}>{app.space.conversationList}</Text></View>
+      <ListModeMenu value={mode} onChange={onModeChange} labels={{ all: app.space.all, recent: app.space.recent }} label={app.space.views}
+        endInset={t.length("--space-sm") + t.length("--icon-size-md") * ROW_CHEVRON_INK_INSET} />
+    </View>
   </View>;
 }
