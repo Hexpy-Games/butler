@@ -123,10 +123,10 @@ function ComputerConnectionFields({ form, setForm, add, busyLabel }: {
   const fields: ConnectionField[] = [
     { field: "name", placeholder: copy.namePlaceholder, autoFocus: true, maxLength: 80 },
     { field: "address", placeholder: copy.addressPlaceholder, description: copy.addressHint },
+    { field: "port", placeholder: copy.portPlaceholder, inputMode: "numeric" },
     form.auth === "password"
       ? { field: "password", description: copy.passwordHint, type: "password", autoComplete: "off" }
       : { field: "keyFile", placeholder: copy.keyFilePlaceholder },
-    { field: "port", placeholder: copy.portPlaceholder, inputMode: "numeric" },
     { field: "folder", placeholder: copy.folderPlaceholder, description: copy.folderHint },
   ];
   function renderField({ field, description, ...props }: ConnectionField) {
@@ -145,12 +145,12 @@ function ComputerConnectionFields({ form, setForm, add, busyLabel }: {
   ].map((option) => ({ ...option, disabled: add.busy, disabledReason: add.busy ? busyLabel : undefined }));
   return (
     <>
-      {fields.slice(0, 2).map(renderField)}
+      {fields.slice(0, 3).map(renderField)}
       <SettingsField label={copy.auth} controlWidth="full"
         control={<SegmentedControl ariaLabel={copy.auth} options={options} value={form.auth}
           onValueChange={(auth) => setForm({ ...form, auth: auth === "keyFile" ? "keyFile" : "password", password: "" })} />}
       />
-      {fields.slice(2).map(renderField)}
+      {fields.slice(3).map(renderField)}
     </>
   );
 }

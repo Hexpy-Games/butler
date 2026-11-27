@@ -80,13 +80,19 @@ export async function captureSshKeySetup(browser: Browser, output: string, optio
             const page = await context.newPage();
             await server.signIn(page);
             await configure(page, server, fake);
-            const shot = async (state: string, target: Locator, reveal?: Locator) => {
+            const shot = async (state: string, target: Locator, reveal?: Locator, margin = 0) => {
               if (state !== "S9") await dismissToasts(page);
               await target.scrollIntoViewIfNeeded({ timeout: 10_000 });
               await reveal?.scrollIntoViewIfNeeded({ timeout: 10_000 });
               await settle(page);
               const path = join(output, `${state}-${locale}-${theme}-${size}.png`);
-              await target.screenshot({ path, animations: "disabled", timeout: 10_000 });
+              const box = margin ? await target.boundingBox() : null;
+              if (box) {
+                const clip = { x: Math.max(0, box.x - margin), y: Math.max(0, box.y - margin), width: box.width + margin * 2, height: box.height + margin * 2 };
+                await page.screenshot({ path, clip, animations: "disabled", timeout: 10_000 });
+              } else {
+                await target.screenshot({ path, animations: "disabled", timeout: 10_000 });
+              }
               console.log(path);
               captures++;
             };
@@ -105,7 +111,7 @@ export async function captureSshKeySetup(browser: Browser, output: string, optio
   return captures;
 }
 
-type Shot = (state: string, target: Locator, reveal?: Locator) => Promise<void>;
+type Shot = (state: string, target: Locator, reveal?: Locator, margin?: number) => Promise<void>;
 type Fake = ReturnType<typeof createComputersFake>;
 
 function adminHeaders(server: NativeAppServerHandle) {
@@ -233,7 +239,7 @@ async function deleteToast(page: Page, server: NativeAppServerHandle, fake: Fake
     const toast = page.locator("[data-sonner-toast]").filter({ hasText: copy.removeDialog.keyNotRemoved });
     await toast.waitFor();
     await page.waitForTimeout(600);
-    await shot("S9", toast);
+    await shot("S9", toast, undefined, 16);
   } finally {
     fake.keyRemoved = undefined;
   }
