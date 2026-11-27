@@ -47,7 +47,7 @@ export class PhoneLive {
         if (tab.holder !== "user") { await this.stop(tab.id); return; }
         feed.lastAck = performance.now();
         await contents.debugger.sendCommand("Page.screencastFrameAck", { sessionId: params.sessionId });
-      }).catch(() => this.stop(tab.id));
+      }).catch(() => { if (this.feeds.get(tab.id) === feed) return this.stop(tab.id); });
     };
     this.feeds.set(tab.id, feed);
     contents.once("destroyed", feed.destroyed);
