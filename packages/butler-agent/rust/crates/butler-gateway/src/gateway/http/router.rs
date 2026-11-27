@@ -27,6 +27,7 @@ pub(super) enum Handler {
     PendingAsks,
     Automations,
     Browser,
+    BrowserLive,
     BrowserStills,
     Cancel,
     Controls,
