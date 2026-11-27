@@ -81,7 +81,7 @@ async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<
     s.finish().await
 }
 
-fn cassette() -> Result<Cassette, HarnessError> {
+pub(super) fn cassette() -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
