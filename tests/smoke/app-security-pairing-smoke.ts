@@ -39,8 +39,21 @@ async function connect(code: string) {
   return fetch(new URL("connect", server.url), {
     method: "POST", redirect: "manual",
     headers: { origin: new URL(server.url).origin, "sec-fetch-site": "same-origin" },
-    body: new URLSearchParams({ code, name: "Remote device · browser" }),
+    body: new URLSearchParams({ code, name: "Remote device · browser", match_code: "47" }),
   });
+}
+
+async function answerPairing(pick: string | null) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const status = await admin<{ id: string; status: string } | null>("/security/pairing");
+    if (status?.status === "pending") {
+      await admin("/security/pairing/decision", { method: "POST", body: JSON.stringify({ id: status.id, pick }) });
+      return;
+    }
+    await Bun.sleep(50);
+  }
+  throw new Error("no pending pairing request");
 }
 
 async function verifyLayouts(page: Page) {
@@ -78,7 +91,13 @@ try {
   for (let attempt = 0; attempt < 5; attempt++) assert.equal((await connect("wrong-code")).status, 401);
   code = await waitForNewCode(page, code);
   await page.getByText(copy.invalidated, { exact: true }).waitFor();
-  const response = await connect(code);
+  const pairing = section(page, "device-pairing");
+  const browserRequest = connect(code);
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).waitFor();
+  await pairing.getByText("Remote device · browser", { exact: true }).waitFor();
+  await verifyLayouts(page);
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).click();
+  const response = await browserRequest;
   assert.equal(response.status, 303, "UI code pairs a browser");
   const cookie = response.headers.get("set-cookie")!.split(";")[0]!;
   await page.getByText(copy.paired, { exact: true }).waitFor();
@@ -90,7 +109,8 @@ try {
   await page.getByText(copy.noDevices, { exact: true }).waitFor();
   assert.equal((await fetch(new URL("settings", server.url), { headers: { cookie } })).status, 401);
   const external = await admin<{ code: string }>("/security/pairing", { method: "POST" });
-  assert.equal((await connect(external.code)).status, 303);
+  const [externalResponse] = await Promise.all([connect(external.code), answerPairing("47")]);
+  assert.equal(externalResponse.status, 303);
   await page.getByText("Remote device · browser", { exact: true }).waitFor();
   await page.getByRole("button", { name: copy.revokeAll, exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: appCopy.common.cancel, exact: true }).click();
@@ -107,17 +127,32 @@ try {
   assert.equal(link.searchParams.get("v"), "1");
   assert.equal(link.searchParams.get("c"), await codeFromUi(page));
   assert.deepEqual(link.searchParams.getAll("a"), (await admin<{ lan_urls: string[] }>("/security")).lan_urls.slice(0, 4));
-  const phone = await fetch(new URL("devices/pair", server.url), {
+  const declinedRequest = fetch(new URL("devices/pair", server.url), {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code: link.searchParams.get("c"), device_name: "Smoke phone", platform: "ios" }),
+    body: JSON.stringify({ code: link.searchParams.get("c"), device_name: "Smoke phone", platform: "ios", match_code: "47" }),
   });
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).waitFor();
+  await pairing.getByText("Smoke phone", { exact: true }).waitFor();
+  await pairing.getByRole("button", { name: copy.decline, exact: true }).click();
+  const declined = await declinedRequest;
+  assert.equal(declined.status, 403);
+  assert.equal((await declined.json()).error.code, "pairing_rejected");
+  await page.getByText(copy.rejected, { exact: true }).waitFor();
+  await qr.waitFor();
+  const newLink = new URL((await page.locator('[data-test-class="pairing-qr"]').getAttribute("data-pairing-link"))!);
+  const phoneRequest = fetch(new URL("devices/pair", server.url), {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code: newLink.searchParams.get("c"), device_name: "Smoke phone", platform: "ios", match_code: "47" }),
+  });
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).click();
+  const phone = await phoneRequest;
   assert.equal(phone.status, 201);
   assert.ok((await phone.json()).data.device_token);
   await page.getByText(copy.paired, { exact: true }).waitFor();
   await page.getByText("Smoke phone", { exact: true }).waitFor();
   assert.deepEqual((await admin<{ name: string; kind: string }[]>("/security/devices")).map(({ name, kind }) => ({ name, kind })), [{ name: "Smoke phone", kind: "ios" }]);
   assert.equal(server.stubModelCalls.length, 0, "pairing needs no model calls");
-  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "stop", "event-refresh", "revoke", "confirm-all", "responsive", "qr"], widths: [320, 375, 390, 430, 768, 1440] }));
+  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "pick", "decline", "stop", "event-refresh", "revoke", "confirm-all", "responsive", "qr"], widths: [320, 375, 390, 430, 768, 1440] }));
 } catch (error) {
   const message = String(error).replaceAll(secret, "[redacted]").replaceAll(server.token, "[redacted]");
   console.error(message);

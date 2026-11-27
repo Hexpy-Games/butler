@@ -1463,6 +1463,7 @@ const butlerApp = Object.freeze({
   getSecurity: () => requestSecurity("getSecurity"),
   setTunnel: (request) => requestSecurity("setTunnel", { payload: request ?? {} }),
   issuePairingCode: () => requestSecurity("issuePairingCode"),
+  decidePairing: (request) => requestSecurity("decidePairing", { payload: request ?? {} }),
   getPairingStatus: () => requestSecurity("getPairingStatus"),
   listPairedDevices: () => requestSecurity("listPairedDevices"),
   revokePairedDevice: ({ deviceId } = {}) => requestSecurity("revokePairedDevice", { deviceId }),

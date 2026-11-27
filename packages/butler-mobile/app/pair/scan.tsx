@@ -5,11 +5,12 @@ import { router } from "expo-router";
 import { Button, ButtonGroup, Sheet, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
 import { explainLocalNetwork, pairAnyAndOpenHome } from "@/connection/connect";
 import { pairParamsFromUrl, parsePairLink, type PairLink } from "@/connection/pairLink";
+import { PairWaiting } from "@/connection/PairWaiting";
 import type { Problem } from "@/connection/problems";
 import { useMobileCopy } from "@/i18n";
 
 type PairScanLink = Extract<PairLink, { kind: "pair" }>;
-type Scan = { kind: "live" } | { kind: "connecting"; link: PairScanLink } | { kind: "failed"; link: PairScanLink; origin: string; code: string; problem: Problem };
+type Scan = { kind: "live" } | { kind: "connecting"; link: PairScanLink; match?: string } | { kind: "failed"; link: PairScanLink; origin: string; code: string; problem: Problem };
 
 export default function PairScan() {
   const copy = useMobileCopy();
@@ -18,6 +19,7 @@ export default function PairScan() {
   const [unavailable, setUnavailable] = useState(false);
   const [scan, setScan] = useState<Scan>({ kind: "live" });
   const [explainer, setExplainer] = useState(false);
+  const attempt = useRef<AbortController | null>(null);
   const asked = useRef(false);
   const busy = useRef(false); // a scan is being handled: ignore further callbacks (they fire per frame)
   const rejected = useRef<string | null>(null); // last rejected QR text: no repeat toast while it stays in view
@@ -29,8 +31,10 @@ export default function PairScan() {
   }, [permission, requestPermission]);
   const connect = async (link: PairScanLink) => {
     setScan({ kind: "connecting", link });
-    const failure = await pairAnyAndOpenHome(link);
+    attempt.current = new AbortController();
+    const failure = await pairAnyAndOpenHome(link, match => setScan({ kind: "connecting", link, match }), attempt.current.signal);
     if (!failure) return;
+    if (failure.problem === "cancelled") return rescan();
     setScan({ kind: "failed", link, origin: failure.origin, code: link.code, problem: failure.problem });
     if (explainLocalNetwork(failure.problem, failure.origin)) setExplainer(true);
   };
@@ -55,11 +59,11 @@ export default function PairScan() {
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <View style={{ flex: 1, gap: t.length("--space-4") }}>
         <Text variant="h1">{copy.pair.scan}</Text>
-        {blocked ? <Text tone="secondary">{copy.pair.cameraOff}</Text> : scan.kind === "connecting" ? (
+        {blocked ? <Text tone="secondary">{copy.pair.cameraOff}</Text> : scan.kind === "connecting" ? (scan.match ? <PairWaiting matchCode={scan.match} /> : (
           <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
             <Spinner label={copy.pair.connecting} /><Text tone="secondary">{copy.pair.connecting}</Text>
           </View>
-        ) : scan.kind === "failed" ? <Text tone="danger">{copy.problems[scan.problem]}</Text> : <Text tone="secondary">{copy.pair.scanHint}</Text>}
+        )) : scan.kind === "failed" ? <Text tone="danger">{copy.problems[scan.problem]}</Text> : <Text tone="secondary">{copy.pair.scanHint}</Text>}
         {blocked ? <View style={{ flex: 1 }} /> : (
           <View style={{ flex: 1, overflow: "hidden", borderRadius: t.length("--adaptive-composer-radius"), backgroundColor: t.color("--color-surface-raised-opaque") }}>
             {permission?.granted ? <CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
@@ -67,7 +71,9 @@ export default function PairScan() {
           </View>
         )}
         <ButtonGroup>
-          {blocked ? <>
+          {scan.kind === "connecting" && scan.match
+            ? <Button variant="secondary" label={copy.pair.cancel} onPress={() => attempt.current?.abort()} />
+            : blocked ? <>
             <Button label={copy.pair.manual} onPress={manual} />
             {permission && !permission.granted ? <Button variant="secondary" label={permission.canAskAgain ? copy.pair.allowCamera : copy.pair.openSettings} onPress={() => void (permission.canAskAgain ? requestPermission() : Linking.openSettings())} /> : null}
           </> : scan.kind === "failed" ? <>
