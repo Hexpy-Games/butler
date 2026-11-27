@@ -20,7 +20,7 @@ import { attachNativeWorlds, syncUserHeld } from "./native-worlds.mjs";
 import { PhoneLive } from "./phone-live.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
-import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
+import { backgroundTab, controlTab, emulation, hearTab, pageBounds, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
 import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
 import { popupHandler, allowPopup, syncPopup, closePopups, publishPopup } from "./popups.mjs";
 import { resolveDialog, requestClose } from "./dialogs.mjs";
@@ -135,7 +135,7 @@ class UserBrowser {
     // returns beneath it and stays on screen for the rest of the drag.
     const held = this.pointer.captures(tab.id) && this.pointer.attached === win;
     if (tab.attached !== win) this.detach(tab);
-    tab.bounds = tab.slot;
+    tab.bounds = pageBounds(tab, tab.slot);
     attachView(tab, win, held ? win.contentView.children.indexOf(this.pointer.view) : -1, () => {
       const { x, y, width, height } = tab.bounds;
       const left = Math.round(x), top = Math.round(y);
@@ -400,7 +400,7 @@ class UserBrowser {
       if(toGroupId==="mine" && peers.length>=USER_TABS) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
-    if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);
+    if (toGroupId !== tab.owner) { this.downloads.cancelTab(tabId); void this.phoneLive.stop(tabId); }
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
     if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; syncUserHeld(tab); if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);

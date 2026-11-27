@@ -31,16 +31,18 @@ try {
   const browser = "globalThis.browserAgentSubject";
   const subject = `${browser}.tabs.get(${JSON.stringify(tab)})`;
   assert.equal(await app.main(`${subject}.attached===${browser}.agentWindow && !${browser}.agentWindow.isVisible()`), true);
-  const point = await app.main<{ x: number; y: number }>(`${subject}.view.webContents.executeJavaScript(
-    "(()=>{const r=document.querySelector('input').getBoundingClientRect();return {x:(r.x+r.width/2)/innerWidth,y:(r.y+r.height/2)/innerHeight}})()")`);
+  const before = await app.main<number>(`${subject}.view.webContents.executeJavaScript("innerWidth")`);
+  assert.equal(before, 1280);
+  await app.main(`${subject}.view.webContents.executeJavaScript(${JSON.stringify(
+    `document.head.insertAdjacentHTML("beforeend", '<meta name="viewport" content="width=device-width">')`,
+  )})`);
   const path = `/browser/tabs/${encodeURIComponent(tab)}/live`;
   const client = crypto.randomUUID();
-  const tap = [{ t: "down", ...point }, { t: "up", ...point }];
   const post = (seq: number, events: unknown[]) => app.gateway.api(`${path}/input`, {
     method: "POST", body: JSON.stringify({ client, seq, events }), signal: AbortSignal.timeout(5000),
   });
   const started = performance.now();
-  const response = fetch(new URL(path, app.gateway.url), {
+  const response = fetch(new URL(`${path}?width=390&height=844&dpr=2`, app.gateway.url), {
     headers: { ...app.gateway.authHeaders, accept: "application/vnd.butler.browser-live" },
     signal: AbortSignal.any([stream.signal, AbortSignal.timeout(30_000)]),
   });
@@ -64,25 +66,38 @@ try {
   }
   const reader = records();
   const firstFrame = (async () => {
+    let meta: { width: number; height: number } | undefined;
     for (;;) {
       const next = await reader.next();
       assert.ok(!next.done, "stream ended before its first frame");
-      if (next.value.type === 2) return next.value.payload;
+      if (next.value.type === 1) meta ??= JSON.parse(next.value.payload.toString());
+      if (next.value.type === 2) {
+        assert.ok(meta, "first frame has metadata");
+        assert.ok(Math.abs(meta.width / meta.height - 390 / 844) < 0.01, `frame dimensions ${meta.width}×${meta.height}`);
+        return next.value.payload;
+      }
     }
   })();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), Math.max(0, 5000 - (performance.now() - started))); });
   const frame = await Promise.race([firstFrame, deadline]).finally(() => clearTimeout(timer));
   assert.ok(frame && frame[0] === 0xff && frame[1] === 0xd8, "JPEG frame within 5 s");
-  await post(1, tap);
+  assert.deepEqual(await app.main(`${subject}.view.webContents.executeJavaScript("[innerWidth, screen.width, devicePixelRatio]")`), [390, 390, 2]);
+  const point = await app.main<{ x: number; y: number }>(`${subject}.view.webContents.executeJavaScript(
+    "(()=>{const r=document.querySelector('input').getBoundingClientRect();return {x:(r.x+r.width/2)/innerWidth,y:(r.y+r.height/2)/innerHeight}})()")`);
+  await post(1, [{ t: "down", ...point }, { t: "up", ...point }]);
   await post(2, [{ t: "text", value: "typed-7311" }]);
   assert.equal(await app.main(`${subject}.view.webContents.executeJavaScript("document.querySelector('input').value")`), "typed-7311");
+  await post(3, [{ t: "viewport", width: 844, height: 390, dpr: 2 }]);
+  await waitBrowser(async () => await app.main<number>(`${subject}.view.webContents.executeJavaScript("innerWidth")`) === 844, "rotated viewport");
   await app.gateway.api(`/authority-requests/${encodeURIComponent(requestRef)}/hand-back?session_id=general`, { method: "POST", body: "{}" });
   for (;;) {
     const next = await reader.next();
     assert.ok(!next.done, "stream closed without an end record");
     if (next.value.type !== 4) continue;
     assert.equal(JSON.parse(next.value.payload.toString()).reason, "handed_back");
+    assert.deepEqual(await app.main(`${subject}.view.webContents.executeJavaScript("[innerWidth, screen.width, devicePixelRatio]")`), [before, 1280, 1]);
+    assert.deepEqual(await app.main(`${subject}.view.getBounds()`), { x: 0, y: 0, width: 1280, height: 800 });
     assert.equal((await reader.next()).done, true);
     break;
   }

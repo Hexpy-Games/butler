@@ -2,6 +2,17 @@ type Size = { width: number; height: number };
 type Point = { x: number; y: number };
 type Box = Size & Point;
 
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+/** The page viewport for a stage, in whole CSS px within what the gateway accepts. Only the soft
+ * keyboard shortens the stage at an unchanged width, so the viewport keeps its tallest height then
+ * and the page does not re-lay out while typing. */
+export function pageViewport(previous: Size, stage: Size): Size {
+  const width = clamp(Math.round(stage.width), 200, 1280);
+  const tallest = clamp(Math.round(stage.height), 200, 2000);
+  const height = width === previous.width ? Math.max(tallest, previous.height) : tallest;
+  return width === previous.width && height === previous.height ? previous : { width, height };
+}
+
 export function fit(stage: Size, frame: Size): Box {
   const scale = Math.min(stage.width / frame.width, stage.height / frame.height);
   const width = frame.width * scale;

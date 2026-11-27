@@ -80,7 +80,7 @@ pub(super) async fn attach(
     state: &Arc<HttpState>,
     tab: &str,
     session: &str,
-    width: u32,
+    viewport: &Value,
 ) -> Result<Viewer, HttpError> {
     let unavailable = || error(409, "live_unavailable");
     let (viewer, start) = {
@@ -107,7 +107,7 @@ pub(super) async fn attach(
             let (sender, receiver) = oneshot::channel();
             host.try_send(json!({
                 "id": id, "op": "live.start", "session": session, "tab": tab,
-                "args": {"sub": sub, "width": width}
+                "args": {"sub": sub, "viewport": viewport}
             }))
             .map_err(|_| unavailable())?;
             hub.pending.insert(id.clone(), sender.into());
@@ -261,6 +261,13 @@ pub(super) async fn input(
     }
 }
 
+/// A phone page viewport: whole CSS px and a device pixel ratio, within phone and tablet screens.
+pub(super) fn viewport(width: Option<u64>, height: Option<u64>, dpr: Option<f64>) -> Option<Value> {
+    let (width, height, dpr) = (width?, height?, dpr?);
+    ((200..=1280).contains(&width) && (200..=2000).contains(&height) && (1.0..=4.0).contains(&dpr))
+        .then(|| json!({"width": width, "height": height, "dpr": dpr}))
+}
+
 fn validate_events(body: &Value) -> Option<(Uuid, u64, &[Value])> {
     let client = Uuid::parse_str(body["client"].as_str()?).ok()?;
     let seq = body["seq"].as_u64()?;
@@ -309,6 +316,15 @@ fn validate_events(body: &Value) -> Option<(Uuid, u64, &[Value])> {
                                 | "Space"
                         )
                     )
+            }
+            "viewport" => {
+                len == 4
+                    && viewport(
+                        event["width"].as_u64(),
+                        event["height"].as_u64(),
+                        event["dpr"].as_f64(),
+                    )
+                    .is_some()
             }
             _ => false,
         };

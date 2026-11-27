@@ -5,7 +5,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ButtonGroup, GlassBackdrop, showToast, Surface, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { fit } from "./geometry";
+import { fit, pageViewport } from "./geometry";
 import { InputQueue } from "./input";
 import { LiveFrame } from "./LiveFrame";
 import { LiveKeyboard } from "./LiveKeyboard";
@@ -17,17 +17,23 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
   const labels = copy.mobile.browserLive;
   const { route, pairing, client } = useConversation();
   const [stage, setStage] = useState({ width: 0, height: 0 });
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [pending, setPending] = useState(false);
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const closed = useRef(false);
   const handingBack = useRef(false);
-  const width = Math.round(Math.max(stage.width, stage.height) * Math.min(PixelRatio.get(), 2));
-  const { size, uri, status } = useLiveFrames(route, pairing?.deviceToken, tabId, width);
+  const dpr = Math.min(PixelRatio.get(), 2);
+  const { size, uri, status } = useLiveFrames(route, pairing?.deviceToken, tabId, { ...viewport, dpr });
   const box = useMemo(() => size ? fit(stage, size) : null, [stage, size]);
   const queue = useMemo(() => client && new InputQueue(async batch => {
     await client.request(`/browser/tabs/${encodeURIComponent(tabId)}/live/input`, { body: batch });
   }), [client, tabId]);
   const pointer = usePagePointer(uri ? box : null, queue);
+
+  const live = Boolean(uri);
+  useEffect(() => {
+    if (live && queue && viewport.width) queue.push({ t: "viewport", width: viewport.width, height: viewport.height, dpr });
+  }, [live, queue, viewport.width, viewport.height, dpr]);
 
   useEffect(() => {
     if (status !== "ended" || closed.current) return;
@@ -69,7 +75,10 @@ export function LiveScreen({ tabId, session, request }: { tabId: string; session
     }>
       <Surface grow edges={["top", "left", "right"]}>
         <View {...pointer} accessibilityLabel={labels.screen}
-          onLayout={({ nativeEvent: { layout: { width, height } } }) => setStage({ width, height })}
+          onLayout={({ nativeEvent: { layout: { width, height } } }) => {
+            setStage({ width, height });
+            setViewport(previous => pageViewport(previous, { width, height }));
+          }}
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           {uri && box ? <LiveFrame uri={uri} box={box} /> : null}
           {status === "connecting" || status === "failed" ?

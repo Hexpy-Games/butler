@@ -5,7 +5,8 @@ export type InputEvent =
   | { t: "down" | "move" | "up"; x: number; y: number }
   | { t: "wheel"; x: number; y: number; dx: number; dy: number }
   | { t: "text"; value: string }
-  | { t: "key"; key: "Backspace" | "Enter" };
+  | { t: "key"; key: "Backspace" | "Enter" }
+  | { t: "viewport"; width: number; height: number; dpr: number };
 
 type InputBatch = { client: string; seq: number; events: InputEvent[] };
 

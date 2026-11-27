@@ -1,11 +1,12 @@
 import { cdpMouse, insertText, routeTarget } from "./frame-input.mjs";
 import { parseChord, sendChord } from "./keyboard.mjs";
 import { nativeFrameWorld } from "./native-worlds.mjs";
+import { setPhoneViewport } from "./agent.mjs";
 
 const KEYS = new Set(["Backspace", "Delete", "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown", "Space"]);
 
-export async function applyEvents(tab, events) {
-  const { width, height } = tab.view.getBounds();
+export async function applyEvents(browser, tab, events) {
+  let { width, height } = tab.view.getBounds();
   if (!width || !height) return { status: "refused", reason: "live_unavailable" };
   const send = cdpMouse(tab);
   const debuggerApi = tab.view.webContents.debugger;
@@ -55,6 +56,11 @@ export async function applyEvents(tab, events) {
           }
           break;
         }
+        case "viewport":
+          setPhoneViewport(browser, tab, { width: event.width, height: event.height, dpr: event.dpr });
+          ({ width, height } = tab.view.getBounds());
+          if (!width || !height) return { status: "refused", reason: "live_unavailable" };
+          break;
         default:
           return { status: "refused", reason: "live_unavailable" };
       }

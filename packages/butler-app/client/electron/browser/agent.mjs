@@ -30,6 +30,7 @@ export function controlTab(browser, tab, holder, sticky = false) {
   if (tab.dialog) void resolveDialog(browser, tab, { accept: false }, "control_changed");
   tab.holder = holder; tab.sticky = sticky; tab.epoch++; tab.observation = null; tab.waiting = Boolean(tab.dialog);
   syncUserHeld(tab);
+  if (holder !== "user") void browser.phoneLive.stop(tab.id);
   if (holder === "agent") { tab.signinStep = null; tab.payStep = null; }
   browser.publish();
 }
@@ -100,11 +101,30 @@ export function connectDebugger(browser, tab) {
     .then(() => contents.debugger.sendCommand("Runtime.enable"));
   void tab.debuggerReady.then(() => contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled",{enabled:true})).catch(()=>{});
 }
+/** Where the page lies in its view's box: the whole box, or while a phone views the tab its viewport fitted at the box's top-left, at that fit's emulation scale. */
+export function pageBounds(tab, box) {
+  const phone = tab.phoneViewport;
+  if (!phone) return box;
+  const scale = Math.min(1, box.width / phone.width, box.height / phone.height);
+  return { ...box, width: Math.round(phone.width * scale), height: Math.round(phone.height * scale), scale };
+}
 export function emulation(tab) {
-  if (!tab.agent || !tab.view || !tab.loaded) return;
-  const scale = tab.bounds?.scale ?? 1;
-  tab.view.webContents.enableDeviceEmulation({ screenPosition: "desktop", screenSize: { width: 1280, height: 800 },
-    viewSize: { width: 1280, height: 800 }, deviceScaleFactor: 1, viewPosition: { x: 0, y: 0 }, scale });
+  const phone = tab.phoneViewport;
+  if (!tab.view || !tab.loaded || !tab.agent && !phone) return;
+  const size = phone ?? { width: 1280, height: 800, dpr: 1 };
+  tab.view.webContents.enableDeviceEmulation({ screenPosition: phone ? "mobile" : "desktop",
+    screenSize: { width: size.width, height: size.height }, viewSize: { width: size.width, height: size.height },
+    deviceScaleFactor: size.dpr, viewPosition: { x: 0, y: 0 }, scale: tab.bounds?.scale ?? 1 });
+}
+/** Lays the tab out at a phone's page viewport, or (null) at its own metrics again. */
+export function setPhoneViewport(browser, tab, viewport) {
+  const current = tab.phoneViewport;
+  if (tab.popupWindow || !viewport && !current) return;
+  if (viewport && current && viewport.width === current.width && viewport.height === current.height && viewport.dpr === current.dpr) return;
+  tab.phoneViewport = viewport;
+  if (!tab.view || tab.view.webContents.isDestroyed() || tab.closing || browser.disposing) return;
+  if (!viewport && !tab.agent) tab.view.webContents.disableDeviceEmulation();
+  browser.sync(tab);
 }
 export function backgroundTab(browser, tab) {
   if (tab.agent) viewedTab(browser, tab, false);
@@ -114,9 +134,9 @@ export function backgroundTab(browser, tab) {
   }
   // Hidden agent pages use the full logical viewport, not the last pane's
   // scale (which can be zero while its slot unmounts). Tools and frames share it.
-  if (tab.agent) tab.bounds = { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false };
+  tab.bounds = pageBounds(tab, !tab.agent && tab.slot || { x: 0, y: 0, width: 1280, height: 800, scale: 1, visible: false });
   attachView(tab, browser.agentWindow, -1, () => {
-    tab.view.setBounds({ x: 0, y: 0, width: tab.agent ? 1280 : Math.round(tab.bounds?.width ?? 1280), height: tab.agent ? 800 : Math.round(tab.bounds?.height ?? 800) }); emulation(tab);
+    tab.view.setBounds({ x: 0, y: 0, width: Math.round(tab.bounds.width), height: Math.round(tab.bounds.height) }); emulation(tab);
   }, () => { if (browser.tabs.get(tab.id) === tab) browser.sync(tab); });
 }
 function armExpiry(browser, tab) {

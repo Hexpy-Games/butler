@@ -22,18 +22,18 @@ function frameUri(bytes: Uint8Array): string {
   return "data:image/jpeg;base64," + btoa(chunks.join(""));
 }
 
-export function useLiveFrames(route: Route | null, token: string | undefined, tab: string, width: number) {
+export function useLiveFrames(route: Route | null, token: string | undefined, tab: string, viewport: { width: number; height: number; dpr: number }) {
   const [state, setState] = useState<LiveState>(connecting);
-  const latestWidth = useRef(width);
-  latestWidth.current = width;
-  const ready = width > 0;
+  const latest = useRef(viewport);
+  latest.current = viewport;
+  const ready = viewport.width > 0;
 
   useFocusEffect(useCallback(() => {
     if (!route || !token || !tab || !ready) return;
     let stop: (() => void) | undefined;
     const sync = () => {
       if (AppState.currentState === "active") {
-        stop ??= connect(route, token, tab, latestWidth.current, setState);
+        stop ??= connect(route, token, tab, () => latest.current, setState);
       } else {
         stop?.();
         stop = undefined;
@@ -53,7 +53,7 @@ export function useLiveFrames(route: Route | null, token: string | undefined, ta
 }
 
 function connect(
-  route: Route, token: string, tab: string, width: number, update: Dispatch<SetStateAction<LiveState>>,
+  route: Route, token: string, tab: string, viewport: () => { width: number; height: number; dpr: number }, update: Dispatch<SetStateAction<LiveState>>,
 ) {
   let stopped = false;
   let failures = 0;
@@ -72,7 +72,7 @@ function connect(
     };
     resetDeadline();
     try {
-      const response = await openLiveFrames(route, token, tab, width, signal);
+      const response = await openLiveFrames(route, token, tab, viewport(), signal);
       if (response.status === 409) {
         const body = await response.json().catch(() => null) as { error?: { code?: string } } | null;
         if (!stopped && !signal.aborted) {
@@ -109,7 +109,7 @@ function connect(
         }
       }
     } catch {
-      // Transport and parse failures reconnect with the same subscription width.
+      // Transport and parse failures reconnect with the current viewport.
     } finally {
       clearTimeout(deadline);
       controller.abort();

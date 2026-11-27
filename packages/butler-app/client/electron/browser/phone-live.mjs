@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { applyEvents } from "./phone-input.mjs";
+import { setPhoneViewport } from "./agent.mjs";
 
 export class PhoneLive {
   feeds = new Map();
@@ -24,10 +25,10 @@ export class PhoneLive {
     return { status: "refused", reason: "live_unavailable" };
   }
 
-  async start(tab, { sub, width }, deliver) {
+  async start(tab, { sub, viewport }, deliver) {
     const contents = tab.view?.webContents;
     const unavailable = { status: "refused", reason: "live_unavailable" };
-    if (tab.holder !== "user" || !contents || contents.isDestroyed() || !tab.debuggerReady) return unavailable;
+    if (tab.holder !== "user" || !contents || contents.isDestroyed() || !tab.debuggerReady || !viewport) return unavailable;
     if (this.feeds.get(tab.id)?.sub === sub) return { status: "ok" };
     const stopped = this.stop(tab.id);
     const feed = { sub, contents, lastAck: -Infinity, pending: Promise.resolve() };
@@ -56,9 +57,10 @@ export class PhoneLive {
       await tab.debuggerReady;
       if (this.feeds.get(tab.id) !== feed) return unavailable;
       if (tab.holder !== "user") { await this.stop(tab.id); return unavailable; }
+      setPhoneViewport(this.browser, tab, viewport);
       contents.debugger.on("message", feed.message);
-      const w = Math.max(320, Math.min(1280, width));
-      await contents.debugger.sendCommand("Page.startScreencast", { format: "jpeg", quality: 60, maxWidth: w, maxHeight: 2 * w, everyNthFrame: 1 });
+      const long = Math.min(2560, Math.round(Math.max(viewport.width, viewport.height) * Math.min(viewport.dpr, 2)));
+      await contents.debugger.sendCommand("Page.startScreencast", { format: "jpeg", quality: 60, maxWidth: long, maxHeight: long, everyNthFrame: 1 });
       return this.feeds.get(tab.id) === feed ? { status: "ok" } : unavailable;
     } catch {
       if (this.feeds.get(tab.id) === feed) await this.stop(tab.id);
@@ -70,6 +72,8 @@ export class PhoneLive {
     const feed = this.feeds.get(id);
     if (!feed) return;
     this.feeds.delete(id);
+    const tab = this.browser.tabs.get(id);
+    if (tab) setPhoneViewport(this.browser, tab, null);
     const { contents } = feed;
     contents.removeListener("destroyed", feed.destroyed);
     if (contents.isDestroyed()) return;
@@ -85,6 +89,6 @@ export class PhoneLive {
     const feed = this.feeds.get(tab.id);
     if (tab.holder !== "user" || !feed || feed.sub !== sub) return { status: "refused", reason: "live_not_held" };
     if (events.some(event => event.t === "text" || event.t === "key")) tab.userTyped = true;
-    return applyEvents(tab, events);
+    return applyEvents(this.browser, tab, events);
   }
 }

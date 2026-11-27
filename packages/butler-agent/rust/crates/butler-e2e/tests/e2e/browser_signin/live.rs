@@ -11,6 +11,7 @@ use tokio::time::{Instant, sleep, timeout, timeout_at};
 const PAGE: &str = "https://www.fixture-shop.test/checkout";
 const ASK: &str = "Help me enter the card number";
 const LIVE: &str = "/browser/tabs/t1/live";
+const VIEW: &str = "?width=390&height=844&dpr=2";
 const WAIT: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
@@ -65,7 +66,7 @@ async fn live_stream_needs_open_hand_off_and_ends_on_hand_back() -> Result<(), H
     let client = Client::new();
     let get = || {
         client
-            .get(format!("{}{LIVE}?width=4000", s.gw.base))
+            .get(format!("{}{LIVE}{VIEW}", s.gw.base))
             .bearer_auth(&s.gw.token)
     };
     let refused = get().send().await?;
@@ -77,10 +78,26 @@ async fn live_stream_needs_open_hand_off_and_ends_on_hand_back() -> Result<(), H
 
     let turn = s.gw.say_turn("general", ASK).await?;
     waiting_card(&s, &turn).await?;
+    for query in ["?width=390&height=4000&dpr=2", "?width=390&height=844"] {
+        let invalid = client
+            .get(format!("{}{LIVE}{query}", s.gw.base))
+            .bearer_auth(&s.gw.token)
+            .send()
+            .await?;
+        assert_eq!(invalid.status(), 400);
+        assert_eq!(
+            invalid.json::<Value>().await?["error"]["code"],
+            "invalid_viewport"
+        );
+    }
+    assert!(host.last("live.start").is_none());
     let mut stream = get().send().await?;
     assert_eq!(stream.status(), 200);
     let start = host.last("live.start").unwrap();
-    assert_eq!(start["args"]["width"], 1280);
+    assert_eq!(
+        start["args"]["viewport"],
+        json!({"width":390,"height":844,"dpr":2.0})
+    );
     let sub = start["args"]["sub"].as_str().unwrap();
     let jpeg = [0xff, 0xd8, b'A'];
     let upload = admin
@@ -177,7 +194,7 @@ async fn last_viewer_drop_stops_capture() -> Result<(), HarnessError> {
     let client = Client::new();
     let get = || {
         client
-            .get(format!("{}{LIVE}", s.gw.base))
+            .get(format!("{}{LIVE}{VIEW}", s.gw.base))
             .bearer_auth(&s.gw.token)
             .send()
     };
@@ -251,7 +268,7 @@ async fn slow_viewer_gets_latest_frame() -> Result<(), HarnessError> {
     waiting_card(&s, &turn).await?;
 
     let mut stream = Client::new()
-        .get(format!("{}{LIVE}", s.gw.base))
+        .get(format!("{}{LIVE}{VIEW}", s.gw.base))
         .bearer_auth(&s.gw.token)
         .send()
         .await?;
@@ -351,7 +368,7 @@ async fn input_forwarded_only_while_user_held_and_never_model_visible() -> Resul
     );
 
     let stream = client
-        .get(format!("{}{LIVE}", s.gw.base))
+        .get(format!("{}{LIVE}{VIEW}", s.gw.base))
         .bearer_auth(&s.gw.token)
         .send()
         .await?;
@@ -367,6 +384,7 @@ async fn input_forwarded_only_while_user_held_and_never_model_visible() -> Resul
     for invalid in [
         json!({"t":"down","x":1.5,"y":0}),
         json!({"t":"key","key":"Unknown"}),
+        json!({"t":"viewport","width":100,"height":844,"dpr":2}),
     ] {
         let rejected = post(&json!({"client":id,"seq":2,"events":[invalid]})).await?;
         assert_eq!(rejected.status(), 400);
@@ -382,6 +400,16 @@ async fn input_forwarded_only_while_user_held_and_never_model_visible() -> Resul
     assert_eq!(
         host.ops().iter().filter(|op| *op == "live.input").count(),
         1
+    );
+
+    let events = json!([{"t":"viewport","width":844,"height":390,"dpr":2}]);
+    let viewport = json!({"client":id,"seq":2,"events":events});
+    assert_eq!(post(&viewport).await?.status(), 200);
+    assert_eq!(host.last("live.input").unwrap()["args"]["events"], events);
+    assert_eq!(post(&viewport).await?.status(), 200);
+    assert_eq!(
+        host.ops().iter().filter(|op| *op == "live.input").count(),
+        2
     );
 
     snapshot(
