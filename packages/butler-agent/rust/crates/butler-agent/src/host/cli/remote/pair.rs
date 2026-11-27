@@ -92,26 +92,32 @@ async fn answer(
 ) -> Result<(), CliError> {
     let name = request["device_name"].as_str().unwrap_or_default();
     let platform = request["platform"].as_str().unwrap_or_default();
-    let number = request["match_code"].as_str().unwrap_or_default();
-    print!("\n{name} ({platform}) wants to connect.\nConfirmation number: {number}\nAllow? [y/N] ");
+    let choices = &request["choices"];
+    let c0 = choices[0].as_str().unwrap_or_default();
+    let c1 = choices[1].as_str().unwrap_or_default();
+    let c2 = choices[2].as_str().unwrap_or_default();
+    print!(
+        "\n{name} ({platform}) wants to connect.\nPick the number shown on the device: {c0}  {c1}  {c2}\nNumber (Enter to decline): "
+    );
     io::stdout()
         .flush()
         .map_err(|_| CliError::failed("output_unavailable", "Cannot write pairing prompt."))?;
-    let allow = input.next_line().await.ok().flatten().is_some_and(|line| {
-        let answer = line.trim();
-        answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes")
-    });
+    let line = input.next_line().await.ok().flatten();
+    let pick = line
+        .as_deref()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
     if client
         .request(
             Method::POST,
             "/security/pairing/decision",
-            Some(json!({"id": id, "allow": allow})),
+            Some(json!({"id": id, "pick": pick})),
         )
         .await
         .is_err()
     {
         println!("Request expired.");
-    } else if !allow {
+    } else if pick.is_none() {
         println!("Declined.");
     }
     Ok(())

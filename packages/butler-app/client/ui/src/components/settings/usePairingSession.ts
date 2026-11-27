@@ -51,11 +51,11 @@ export function usePairingSession(enabled: boolean) {
     }
   }
 
-  async function decide(allow: boolean) {
+  async function decide(pick: string | null) {
     if (!code) return;
     setBusy(true);
     try {
-      await decidePairing(code.id, allow);
+      await decidePairing(code.id, pick);
     } catch (error) {
       if (mounted.current) notifyError(error, appCopy.settings.security.pairingFailed);
     } finally {

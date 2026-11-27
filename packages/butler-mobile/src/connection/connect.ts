@@ -18,7 +18,7 @@ import { createRelayFetch } from "./tunnel/relayFetch";
 // iOS may refuse the first local-network connection while it asks for permission: explain once per app run.
 let localNetworkExplained = false;
 
-/** Two random digits the owner compares with the computer before allowing. */
+/** Two random digits for the owner to pick on the computer. */
 function newMatchCode(): string {
   for (;;) {
     const byte = randomBytes(1)[0]!;
@@ -29,11 +29,11 @@ function newMatchCode(): string {
 type PairTarget = { origin: string; fetch: FetchLike };
 type PairRecord = Pick<PairInput, "addresses" | "noiseStatic" | "tunnel"> & { noisePrivate?: string };
 
-async function pairAt(target: PairTarget, code: string, record: PairRecord, onMatch: (matchCode: string) => void): Promise<Problem | null> {
+async function pairAt(target: PairTarget, code: string, record: PairRecord, onMatch: (matchCode: string) => void, signal?: AbortSignal): Promise<Problem | null> {
   const matchCode = newMatchCode();
   onMatch(matchCode);
-  const result = await pairDevice({ ...record, origin: target.origin, fetch: target.fetch, code, matchCode, device: thisDevice() });
-  if (!result.ok) return result.problem;
+  const result = await pairDevice({ ...record, origin: target.origin, fetch: target.fetch, code, matchCode, device: thisDevice(), signal });
+  if (!result.ok) return signal?.aborted ? "cancelled" : result.problem;
   try {
     await pairingStore.save(result.pairing, record.noisePrivate);
   } catch {
@@ -46,15 +46,15 @@ async function pairAt(target: PairTarget, code: string, record: PairRecord, onMa
 }
 
 /** Manual entry: LAN only (no k without a QR). */
-export function pairAndOpenHome(origin: string, code: string, onMatch: (matchCode: string) => void): Promise<Problem | null> {
-  return pairAt({ origin, fetch: nativeFetch }, code, { addresses: [origin] }, onMatch);
+export function pairAndOpenHome(origin: string, code: string, onMatch: (matchCode: string) => void, signal?: AbortSignal): Promise<Problem | null> {
+  return pairAt({ origin, fetch: nativeFetch }, code, { addresses: [origin] }, onMatch, signal);
 }
 
 /**
  * Scan path. LAN resolve first; if no LAN address answers and the QR has k + t, the pair request goes through the relay at once
  * (it is the probe). Nothing else spends the code's 60 s. On failure, `origin` is the LAN address to prefill ("" when none) and `relay` says the failing attempt went through the relay.
  */
-export async function pairAnyAndOpenHome(link: { origins: string[]; code: string; tunnel?: PairLinkTunnel }, onMatch: (matchCode: string) => void): Promise<{ origin: string; problem: Problem; relay: boolean } | null> {
+export async function pairAnyAndOpenHome(link: { origins: string[]; code: string; tunnel?: PairLinkTunnel }, onMatch: (matchCode: string) => void, signal?: AbortSignal): Promise<{ origin: string; problem: Problem; relay: boolean } | null> {
   const key = link.tunnel ? newNoiseKey() : null;
   const resolved = link.origins.length > 0 ? await resolveOrigin(link.origins, nativeFetch) : null;
   const relay = link.tunnel && key ? {
@@ -68,7 +68,7 @@ export async function pairAnyAndOpenHome(link: { origins: string[]; code: string
   };
   const target = resolved?.ok ? { origin: resolved.origin, fetch: nativeFetch } : relay;
   if (!target) return { origin: link.origins[0] ?? "", problem: resolved && !resolved.ok ? resolved.problem : "unreachable", relay: false };
-  const problem = await pairAt(target, link.code, record, onMatch);
+  const problem = await pairAt(target, link.code, record, onMatch, signal);
   return problem ? { origin: target === relay ? link.origins[0] ?? "" : target.origin, problem, relay: target === relay } : null;
 }
 

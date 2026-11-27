@@ -15,7 +15,7 @@ async fn paired_browser_stays_paired_across_reload_restart_and_repair() -> Resul
     let pin = issue(&app).await?;
     let (response, answer) = tokio::join!(
         connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let response = response?;
@@ -58,7 +58,7 @@ async fn paired_browser_stays_paired_across_reload_restart_and_repair() -> Resul
                 ("match_code", "47")
             ])
             .send(),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let repaired = repaired?;

@@ -5,9 +5,9 @@ export function PairWaiting({ matchCode }: { matchCode: string }) {
   const copy = useMobileCopy();
   return (
     <>
+      <Text tone="secondary">{copy.pair.matchLabel}</Text>
       <Text variant="h1" numeric="tabular">{matchCode}</Text>
-      <Text>{copy.pair.waitTitle}</Text>
-      <Text tone="secondary">{copy.pair.waitHint}</Text>
+      <Text>{copy.pair.waitHint}</Text>
     </>
   );
 }

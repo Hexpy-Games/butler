@@ -1,4 +1,4 @@
-import { createGatewayClient, type FetchLike } from "../../../butler-protocol/src/client/index.ts";
+import { createGatewayClient, type AbortSignalLike, type FetchLike } from "../../../butler-protocol/src/client/index.ts";
 import { isStorableId, noiseKeyName, stringField, type Pairing } from "./pairings";
 import { problemFrom, type Problem } from "./problems";
 
@@ -14,6 +14,7 @@ export interface PairInput {
   noiseStatic?: string;      // phone public key, base64url; sent whenever the QR had k (LAN and relay)
   tunnel?: { tunnelId: string; desktopStatic: string };
   timeoutMs?: number;
+  signal?: AbortSignalLike;
 }
 
 function pairingFrom(input: PairInput, data: unknown): Pairing | null {
@@ -31,6 +32,10 @@ function pairingFrom(input: PairInput, data: unknown): Pairing | null {
 export async function pairDevice(input: PairInput): Promise<PairOutcome> {
   const { origin, code, matchCode, device, fetch } = input;
   const controller = new AbortController();
+  const signal = input.signal instanceof AbortSignal ? input.signal : undefined;
+  const abort = () => controller.abort();
+  if (input.signal?.aborted) abort();
+  signal?.addEventListener("abort", abort);
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 75000);
   try {
     const data = await createGatewayClient({ origin, fetch }).request<unknown>("/devices/pair", {
@@ -43,6 +48,7 @@ export async function pairDevice(input: PairInput): Promise<PairOutcome> {
     return { ok: false, problem: problemFrom(error) };
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
 }
 

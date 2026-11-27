@@ -104,12 +104,12 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
                 .next_line()
                 .await?
                 .expect("CLI stopped before prompt")
-                .starts_with("Confirmation number: ")
+                .starts_with("Pick the number shown on the device: ")
             {}
-            let mut prompt = [0; b"Allow? [y/N] ".len()];
+            let mut prompt = [0; b"Number (Enter to decline): ".len()];
             lines.get_mut().read_exact(&mut prompt).await?;
-            assert_eq!(&prompt, b"Allow? [y/N] ");
-            stdin.write_all(b"y\n").await
+            assert_eq!(&prompt, b"Number (Enter to decline): ");
+            stdin.write_all(b"47\n").await
         }),
     );
     answer.expect("CLI prompt timeout")?;
@@ -163,12 +163,12 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
                 .next_line()
                 .await?
                 .expect("CLI stopped before prompt")
-                .starts_with("Confirmation number: ")
+                .starts_with("Pick the number shown on the device: ")
             {}
-            let mut prompt = [0; b"Allow? [y/N] ".len()];
+            let mut prompt = [0; b"Number (Enter to decline): ".len()];
             alias_lines.get_mut().read_exact(&mut prompt).await?;
-            assert_eq!(&prompt, b"Allow? [y/N] ");
-            alias_stdin.write_all(b"y\n").await
+            assert_eq!(&prompt, b"Number (Enter to decline): ");
+            alias_stdin.write_all(b"47\n").await
         }),
     );
     answer.expect("CLI alias prompt timeout")?;

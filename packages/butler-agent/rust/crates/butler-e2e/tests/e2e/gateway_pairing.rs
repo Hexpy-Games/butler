@@ -23,7 +23,7 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     let pin = issue(&app).await?;
     let (response, answer) = tokio::join!(
         connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let response = response?;
@@ -80,7 +80,7 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
     let other_pin = issue(&app).await?;
     let (other_response, answer) = tokio::join!(
         connect(&s.gw, &browser, other_pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let other_response = other_response?;
@@ -188,7 +188,7 @@ async fn sec_14_pairing_codes_are_bounded_single_use_and_post_only() -> Result<(
     );
     let (paired, answer) = tokio::join!(
         connect(&s.gw, &browser, current["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let paired = paired?;
@@ -262,7 +262,7 @@ async fn lan_pairing_code_connect_and_list_device() -> Result<(), HarnessError> 
     let pin = issue(&app).await?;
     let (response, answer) = tokio::join!(
         connect(&remote, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let response = response?;

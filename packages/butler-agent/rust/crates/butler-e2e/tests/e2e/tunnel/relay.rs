@@ -64,7 +64,7 @@ async fn pair_relay_phone(
                 "noise_static": phone.public_key(), "match_code": "47",
             }),
         ),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let paired = paired?;
@@ -245,7 +245,7 @@ async fn tunnel_02_pairing_through_relay_requires_noise_key() -> Result<(), Harn
             None,
             Some(body),
         ),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let paired = paired.unwrap();

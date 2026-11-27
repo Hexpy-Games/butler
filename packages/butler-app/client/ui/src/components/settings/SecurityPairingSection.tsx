@@ -18,24 +18,23 @@ export function securityPairingSection({ disabled, addresses, pairing, tunnel }:
     : null) : null;
   return (
     <SettingsSection id="device-pairing" kind="form" title={copy.pairDevice}>
-      <SettingsField settingId="pairing-code" label={copy.code} controlWidth="full" control={(
+      <SettingsField settingId="pairing-code" label={pairing.request ? copy.pairRequest : copy.code} controlWidth="full" control={(
         <Stack gap="sm" cross="start">
           {pairing.request && (
             <Stack gap="sm" alignSelf="stretch">
               <Typo.Body wrap="anywhere">{pairing.request.device_name}</Typo.Body>
-              <Stack align="row" gap="sm" cross="center" wrap>
-                <Typo.Caption>{copy.matchNumber}</Typo.Caption>
-                <Typo.MetricValue numeric="tabular" data-test-class="pairing-match">
-                  {pairing.request.match_code}
-                </Typo.MetricValue>
+              <Typo.Caption tone="secondary">{copy.pickHint}</Typo.Caption>
+              <Stack align="row" gap="sm">
+                {pairing.request.choices.map(choice => (
+                  <Button key={choice} size="lg" variant="outline" data-test-class="pairing-choice"
+                    disabled={pairing.busy} onClick={() => void pairing.decide(choice)}>
+                    {choice}
+                  </Button>
+                ))}
               </Stack>
-              <Typo.Caption tone="secondary">{copy.matchHint}</Typo.Caption>
               <ButtonContainer size="sm" justify="end">
-                <Button size="sm" variant="outline" disabled={pairing.busy} onClick={() => void pairing.decide(false)}>
+                <Button size="sm" variant="outline" disabled={pairing.busy} onClick={() => void pairing.decide(null)}>
                   {copy.decline}
-                </Button>
-                <Button size="sm" disabled={pairing.busy} onClick={() => void pairing.decide(true)}>
-                  {copy.allow}
                 </Button>
               </ButtonContainer>
             </Stack>

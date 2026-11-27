@@ -240,8 +240,10 @@ async fn connect_code_signs_in(
     let wrong = connect_form(gw, browser, "not-the-code").await?;
     assert_eq!(wrong.status().as_u16(), 401);
     assert!(wrong.headers().get("set-cookie").is_none());
-    let (signed_in, answer) =
-        tokio::join!(connect_form(gw, browser, code), app.answer_pairing(true),);
+    let (signed_in, answer) = tokio::join!(
+        connect_form(gw, browser, code),
+        app.answer_pairing(Some("47")),
+    );
     answer?;
     let signed_in = signed_in?;
     assert_eq!(signed_in.status().as_u16(), 303);

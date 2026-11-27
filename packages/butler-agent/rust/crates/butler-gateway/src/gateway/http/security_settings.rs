@@ -161,7 +161,8 @@ async fn pairing_decision(
     #[derive(Deserialize)]
     struct PairingDecision {
         id: String,
-        allow: bool,
+        #[serde(default)]
+        pick: Option<String>,
     }
 
     let body = read_body_with_limit(request.into_body(), 1024).await?;
@@ -169,7 +170,7 @@ async fn pairing_decision(
         serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
     let keyed = state.security.sessions().ok_or_else(code_unavailable)?;
     let sessions = keyed.sessions.as_ref().ok_or_else(code_unavailable)?;
-    if sessions.decide(&decision.id, decision.allow) {
+    if sessions.decide(&decision.id, decision.pick.as_deref()) {
         return ok(sessions.pairing_status());
     }
     Err(HttpError::public(

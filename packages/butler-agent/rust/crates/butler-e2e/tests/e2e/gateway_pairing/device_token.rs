@@ -47,7 +47,8 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     let client = browser();
     let pin = issue(&app).await?;
     let code = pin["code"].as_str().unwrap();
-    let (response, answer) = tokio::join!(pair(&s.gw, &client, code), app.answer_pairing(true),);
+    let (response, answer) =
+        tokio::join!(pair(&s.gw, &client, code), app.answer_pairing(Some("47")),);
     answer?;
     let response = response?;
     assert_eq!(response.status().as_u16(), 201);
@@ -103,7 +104,10 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     );
     let other_pin = issue(&app).await?;
     let other_code = other_pin["code"].as_str().unwrap();
-    let (other, answer) = tokio::join!(pair(&s.gw, &client, other_code), app.answer_pairing(true),);
+    let (other, answer) = tokio::join!(
+        pair(&s.gw, &client, other_code),
+        app.answer_pairing(Some("47")),
+    );
     answer?;
     let other: serde_json::Value = other?.json().await?;
     let other_token = other["data"]["device_token"].as_str().unwrap().to_owned();
@@ -186,7 +190,7 @@ async fn phone_settings_parity_routes_preserve_security_boundary() -> Result<(),
     let pin = issue(&app).await?;
     let (paired, answer) = tokio::join!(
         pair(&s.gw, &client, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let paired: serde_json::Value = paired?.json().await?;

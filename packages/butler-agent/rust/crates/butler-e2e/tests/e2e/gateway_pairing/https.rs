@@ -67,7 +67,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
                     ("match_code", "47")
                 ])
                 .send(),
-            app.answer_pairing(true),
+            app.answer_pairing(Some("47")),
         );
         answer?;
         let response = response?;
@@ -92,7 +92,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
     let pin = issue(&app).await?;
     let (local, answer) = tokio::join!(
         connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let local = local?;
@@ -115,7 +115,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
                 ("match_code", "47")
             ])
             .send(),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let rewritten = rewritten?;

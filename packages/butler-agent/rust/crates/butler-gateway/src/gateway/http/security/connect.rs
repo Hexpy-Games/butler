@@ -104,6 +104,7 @@ fn pairing_request(
         device_name: REMOTE_BROWSER.into(),
         platform: "browser".into(),
         match_code,
+        choices: Vec::new(),
     }))
 }
 

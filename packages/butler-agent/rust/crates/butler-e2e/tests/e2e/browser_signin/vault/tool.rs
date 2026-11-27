@@ -144,7 +144,7 @@ async fn phone_allows(
     let code = issue(admin).await?;
     let (paired, answer) = tokio::join!(
         connect(&s.gw, &phone, code["code"].as_str().unwrap()),
-        admin.answer_pairing(true),
+        admin.answer_pairing(Some("47")),
     );
     answer?;
     let cookie = cookie_pair(&paired?);

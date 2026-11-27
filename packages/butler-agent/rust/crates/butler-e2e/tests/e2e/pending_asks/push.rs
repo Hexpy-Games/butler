@@ -48,7 +48,7 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
                 &json!({"code":pin["code"],"device_name":name,"platform":"ios","match_code":"47"}),
             )
             .send();
-        let (reply, answer) = tokio::join!(pair, app.answer_pairing(true));
+        let (reply, answer) = tokio::join!(pair, app.answer_pairing(Some("47")));
         answer?;
         let reply = reply?;
         assert_eq!(reply.status(), 201);

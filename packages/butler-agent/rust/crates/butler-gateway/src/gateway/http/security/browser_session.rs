@@ -165,10 +165,11 @@ impl BrowserSessions {
         if matches
             && code.len() == 8
             && code.bytes().all(|b| b.is_ascii_digit())
-            && request.is_some()
+            && let Some(mut request) = request
         {
+            request.choices = pairing_choices(&request.match_code);
             pin.view.status = "pending".into();
-            pin.view.request = request;
+            pin.view.request = Some(request);
             pin.pending_until = Some(now + Duration::from_secs(60));
             return Some(Some(pin.view.id.clone()));
         }
@@ -180,14 +181,19 @@ impl BrowserSessions {
         None
     }
 
-    pub(in crate::gateway::http) fn decide(&self, id: &str, allow: bool) -> bool {
+    pub(in crate::gateway::http) fn decide(&self, id: &str, pick: Option<&str>) -> bool {
         let mut slot = self.pairing.lock();
         if let Some(pin) = slot.as_mut()
             && pin.view.id == id
             && pin.view.status == "pending"
             && pin.pending_until.is_some_and(|until| self.now() < until)
         {
-            pin.view.status = if allow { "approved" } else { "rejected" }.into();
+            let matches = pin
+                .view
+                .request
+                .as_ref()
+                .is_some_and(|request| pick == Some(request.match_code.as_str()));
+            pin.view.status = if matches { "approved" } else { "rejected" }.into();
             self.decided.notify_waiters();
             return true;
         }
@@ -307,7 +313,9 @@ fn code_digest(code: &str) -> [u8; 32] {
 pub(in crate::gateway::http) struct PairingRequest {
     pub device_name: String,
     pub platform: String,
+    #[serde(skip)]
     pub match_code: String,
+    pub choices: Vec<String>,
 }
 
 pub(super) enum Decision {
@@ -341,6 +349,24 @@ struct Pairing {
     digest: [u8; 32],
     failures: u8,
     view: PairingStatus,
+}
+
+fn pairing_choices(real: &str) -> Vec<String> {
+    let mut choices = Vec::with_capacity(3);
+    loop {
+        for byte in random_bytes() {
+            if choices.len() == 2 {
+                choices.insert(usize::from(byte % 3), real.into());
+                return choices;
+            }
+            if byte < 200 {
+                let decoy = format!("{:02}", byte % 100);
+                if decoy != real && !choices.contains(&decoy) {
+                    choices.push(decoy);
+                }
+            }
+        }
+    }
 }
 
 /// Rejection sampling avoids modulo bias in decimal digits.

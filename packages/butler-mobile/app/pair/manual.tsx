@@ -25,7 +25,9 @@ export default function Pair() {
         />
         {form.connecting && form.match && <PairWaiting matchCode={form.match} />}
         <ButtonGroup>
-          <Button label={copy.pair.connect} onPress={form.connect} loading={form.connecting} testID="pair-connect" />
+          {form.connecting && form.match
+            ? <Button variant="secondary" label={copy.pair.cancel} onPress={form.cancel} />
+            : <Button label={copy.pair.connect} onPress={form.connect} loading={form.connecting} testID="pair-connect" />}
         </ButtonGroup>
       </ScrollView>
       <Sheet

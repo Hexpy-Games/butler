@@ -11,7 +11,7 @@ async fn sec_17_repeated_wrong_codes_get_429_with_retry_after() -> Result<(), Ha
     let pin = issue(&app).await?;
     let (paired, answer) = tokio::join!(
         connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let paired = paired?;

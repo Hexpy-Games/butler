@@ -43,12 +43,12 @@ async function connect(code: string) {
   });
 }
 
-async function answerPairing(allow: boolean) {
+async function answerPairing(pick: string | null) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const status = await admin<{ id: string; status: string } | null>("/security/pairing");
     if (status?.status === "pending") {
-      await admin("/security/pairing/decision", { method: "POST", body: JSON.stringify({ id: status.id, allow }) });
+      await admin("/security/pairing/decision", { method: "POST", body: JSON.stringify({ id: status.id, pick }) });
       return;
     }
     await Bun.sleep(50);
@@ -93,10 +93,10 @@ try {
   await page.getByText(copy.invalidated, { exact: true }).waitFor();
   const pairing = section(page, "device-pairing");
   const browserRequest = connect(code);
-  await pairing.locator('[data-test-class="pairing-match"]').getByText("47", { exact: true }).waitFor();
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).waitFor();
   await pairing.getByText("Remote device · browser", { exact: true }).waitFor();
   await verifyLayouts(page);
-  await pairing.getByRole("button", { name: copy.allow, exact: true }).click();
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).click();
   const response = await browserRequest;
   assert.equal(response.status, 303, "UI code pairs a browser");
   const cookie = response.headers.get("set-cookie")!.split(";")[0]!;
@@ -109,7 +109,7 @@ try {
   await page.getByText(copy.noDevices, { exact: true }).waitFor();
   assert.equal((await fetch(new URL("settings", server.url), { headers: { cookie } })).status, 401);
   const external = await admin<{ code: string }>("/security/pairing", { method: "POST" });
-  const [externalResponse] = await Promise.all([connect(external.code), answerPairing(true)]);
+  const [externalResponse] = await Promise.all([connect(external.code), answerPairing("47")]);
   assert.equal(externalResponse.status, 303);
   await page.getByText("Remote device · browser", { exact: true }).waitFor();
   await page.getByRole("button", { name: copy.revokeAll, exact: true }).click();
@@ -131,7 +131,7 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ code: link.searchParams.get("c"), device_name: "Smoke phone", platform: "ios", match_code: "47" }),
   });
-  await pairing.locator('[data-test-class="pairing-match"]').getByText("47", { exact: true }).waitFor();
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).waitFor();
   await pairing.getByText("Smoke phone", { exact: true }).waitFor();
   await pairing.getByRole("button", { name: copy.decline, exact: true }).click();
   const declined = await declinedRequest;
@@ -144,7 +144,7 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ code: newLink.searchParams.get("c"), device_name: "Smoke phone", platform: "ios", match_code: "47" }),
   });
-  await pairing.getByRole("button", { name: copy.allow, exact: true }).click();
+  await pairing.locator('[data-test-class="pairing-choice"]').getByText("47", { exact: true }).click();
   const phone = await phoneRequest;
   assert.equal(phone.status, 201);
   assert.ok((await phone.json()).data.device_token);
@@ -152,7 +152,7 @@ try {
   await page.getByText("Smoke phone", { exact: true }).waitFor();
   assert.deepEqual((await admin<{ name: string; kind: string }[]>("/security/devices")).map(({ name, kind }) => ({ name, kind })), [{ name: "Smoke phone", kind: "ios" }]);
   assert.equal(server.stubModelCalls.length, 0, "pairing needs no model calls");
-  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "approve", "decline", "stop", "event-refresh", "revoke", "confirm-all", "responsive", "qr"], widths: [320, 375, 390, 430, 768, 1440] }));
+  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "pick", "decline", "stop", "event-refresh", "revoke", "confirm-all", "responsive", "qr"], widths: [320, 375, 390, 430, 768, 1440] }));
 } catch (error) {
   const message = String(error).replaceAll(secret, "[redacted]").replaceAll(server.token, "[redacted]");
   console.error(message);

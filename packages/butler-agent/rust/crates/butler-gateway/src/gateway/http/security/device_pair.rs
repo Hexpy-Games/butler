@@ -90,6 +90,7 @@ pub(in crate::gateway::http) async fn pair_device_request(
         device_name: name.into(),
         platform: pair.platform.trim().to_ascii_lowercase(),
         match_code: pair.match_code,
+        choices: Vec::new(),
     };
     let change = state.remote.changes.lock().await;
     let (keyed, pairing_id) =

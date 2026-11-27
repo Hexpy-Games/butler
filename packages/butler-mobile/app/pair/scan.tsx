@@ -19,6 +19,7 @@ export default function PairScan() {
   const [unavailable, setUnavailable] = useState(false);
   const [scan, setScan] = useState<Scan>({ kind: "live" });
   const [explainer, setExplainer] = useState(false);
+  const attempt = useRef<AbortController | null>(null);
   const asked = useRef(false);
   const busy = useRef(false); // a scan is being handled: ignore further callbacks (they fire per frame)
   const rejected = useRef<string | null>(null); // last rejected QR text: no repeat toast while it stays in view
@@ -30,8 +31,10 @@ export default function PairScan() {
   }, [permission, requestPermission]);
   const connect = async (link: PairScanLink) => {
     setScan({ kind: "connecting", link });
-    const failure = await pairAnyAndOpenHome(link, match => setScan({ kind: "connecting", link, match }));
+    attempt.current = new AbortController();
+    const failure = await pairAnyAndOpenHome(link, match => setScan({ kind: "connecting", link, match }), attempt.current.signal);
     if (!failure) return;
+    if (failure.problem === "cancelled") return rescan();
     setScan({ kind: "failed", link, origin: failure.origin, code: link.code, problem: failure.problem });
     if (explainLocalNetwork(failure.problem, failure.origin)) setExplainer(true);
   };
@@ -68,7 +71,9 @@ export default function PairScan() {
           </View>
         )}
         <ButtonGroup>
-          {blocked ? <>
+          {scan.kind === "connecting" && scan.match
+            ? <Button variant="secondary" label={copy.pair.cancel} onPress={() => attempt.current?.abort()} />
+            : blocked ? <>
             <Button label={copy.pair.manual} onPress={manual} />
             {permission && !permission.granted ? <Button variant="secondary" label={permission.canAskAgain ? copy.pair.allowCamera : copy.pair.openSettings} onPress={() => void (permission.canAskAgain ? requestPermission() : Linking.openSettings())} /> : null}
           </> : scan.kind === "failed" ? <>

@@ -22,7 +22,7 @@ async fn stolen_cookie_expires_on_server_and_stays_expired_after_restart()
     let pin = pairing::issue(&app).await?;
     let (response, answer) = tokio::join!(
         pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let response = response?;
@@ -126,7 +126,7 @@ async fn parallel_pairing_guesses_invalidate_and_redemption_is_single_use()
         (0..16).map(|_| pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()));
     let (responses, answer) = tokio::join!(
         futures_util::future::join_all(redeemers),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let mut successes = 0;
@@ -348,7 +348,7 @@ async fn cookie_expiry_closes_existing_sse_without_another_request() -> Result<(
     let pin = pairing::issue(&app).await?;
     let (response, answer) = tokio::join!(
         pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-        app.answer_pairing(true),
+        app.answer_pairing(Some("47")),
     );
     answer?;
     let response = response?;

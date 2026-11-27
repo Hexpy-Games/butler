@@ -49,7 +49,7 @@ async fn paired_devices_have_zero_idle_writes_and_request_driven_last_seen()
         let pin = issue(&app).await?;
         let (response, answer) = tokio::join!(
             connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
-            app.answer_pairing(true),
+            app.answer_pairing(Some("47")),
         );
         answer?;
         let response = response?;

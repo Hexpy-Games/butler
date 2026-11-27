@@ -49,7 +49,7 @@ fn page_form() -> String {
 <input id="code" name="code" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
 <input type="hidden" name="match_code" value="{number:02}">
 <button type="submit">Connect</button>
-<p>Confirmation number <strong>{number:02}</strong>. Allow on the computer if it shows this number.</p>
+<p>Confirmation number <strong>{number:02}</strong>. Pick this number on the computer.</p>
 </form>
 </main>
 </body>

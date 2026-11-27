@@ -68,7 +68,7 @@ impl AdminClient {
         clippy::expect_used,
         reason = "A missing pairing request fails the E2E scenario"
     )]
-    pub async fn answer_pairing(&self, allow: bool) -> Result<Value, HarnessError> {
+    pub async fn answer_pairing(&self, pick: Option<&str>) -> Result<Value, HarnessError> {
         let pending = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let reply = self
@@ -87,7 +87,7 @@ impl AdminClient {
             .send(
                 Method::POST,
                 "/security/pairing/decision",
-                Some(json!({"id": pending["id"], "allow": allow})),
+                Some(json!({"id": pending["id"], "pick": pick})),
                 &[],
             )
             .await?;
@@ -113,7 +113,7 @@ pub fn security_calls() -> [(Method, &'static str, Option<Value>); 9] {
         (
             Method::POST,
             "/security/pairing/decision",
-            Some(json!({"id": "x", "allow": false})),
+            Some(json!({"id": "x", "pick": null})),
         ),
         (Method::GET, "/security/devices", None),
         (Method::DELETE, "/security/devices", None),
