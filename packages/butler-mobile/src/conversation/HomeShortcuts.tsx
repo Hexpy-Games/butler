@@ -5,12 +5,15 @@ import type { SessionSummary } from "../../../butler-protocol/src/index.ts";
 import { Badge, ButlerMark, icons, ListGroup, ListRow, Spinner, Text, UnreadDot, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { sessionMark } from "@/conversation/sessions";
+import { ListModePicker } from "./ListModePicker";
+import type { ListMode } from "./listMode";
 
-export function HomeShortcuts({ status, general }: { status?: string; general?: SessionSummary }) {
+export function HomeShortcuts({ status, general, mode, onModeChange }: { status?: string; general?: SessionSummary; mode: ListMode; onModeChange(mode: ListMode): void }) {
   const t = useTokens(), app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const mark = general ? sessionMark(general) : null;
   const title = app.space.general;
   return <View style={{ gap: t.length("--space-4"), paddingTop: t.length("--space-6"), paddingBottom: t.length("--space-4") }}>
+    <ListModePicker value={mode} onChange={onModeChange} labels={{ all: app.space.all, recent: app.space.recent }} label={app.space.views} />
     <ListGroup>
       <ListRow icon={icons.Archive} title={app.library.title} navigates onPress={() => router.push("/library")} />
       <ListRow icon={icons.Clock3} title={app.automations.title} navigates onPress={() => router.push("/automations")} />

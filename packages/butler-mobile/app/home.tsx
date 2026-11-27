@@ -18,7 +18,8 @@ import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
 import { useCanonSidebars } from "@/conversation/useCanonSidebars";
-import { spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
+import { recentRows, spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
+import { loadListMode, saveListMode, type ListMode } from "@/conversation/listMode";
 import { sessionMark, sessionSubtitle, timeLabel } from "@/conversation/sessions";
 
 type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin?: string } | { kind: "problem"; origin?: string; problem: Problem };
@@ -92,9 +93,11 @@ function Conversations() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [mode, setMode] = useState<ListMode>(loadListMode);
+  const changeMode = (next: ListMode) => { setMode(next); saveListMode(next); };
   const sidebars = useCanonSidebars(useMemo(() => view?.projects.filter(project => !project.archived && !collapsed.has(`p:${project.id}`)).map(project => project.id) ?? [], [view, collapsed]));
   const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? withCanon(spaceTree(view), sidebars, appCopy.canon.backlog) : { children: new Map() }, [view, sidebars, appCopy]);
-  const rows: SpaceRow[] = visibleRows(tree, collapsed);
+  const rows: SpaceRow[] = mode === "recent" ? recentRows(tree, appCopy.space.general) : visibleRows(tree, collapsed);
   const reduced = useReducedMotion();
   const toggle = (key: string) => {
     const expanding = collapsed.has(key);
@@ -138,7 +141,7 @@ function Conversations() {
         void refresh().finally(() => setRefreshing(false));
       }} />}
       renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
-        {item.session ? <SessionRow session={item.session} locale={locale} computerName={view?.computer_name} onLongPress={() => setActionRow(item)} />
+        {item.session ? <SessionRow session={item.session} locale={locale} computerName={view?.computer_name} onLongPress={item.key === "s:general" ? undefined : () => setActionRow(item)} />
           : item.kind === "epic" ? <EpicRow epic={item.epic!} />
           : <ListRow icon={item.kind === "project" ? icons.Briefcase : item.kind === "plan" ? icons.Flag : icons.Folder} title={item.title}
             onLongPress={item.kind === "plan" || item.kind === "backlog" ? undefined : () => setActionRow(item)}
@@ -156,7 +159,7 @@ function Conversations() {
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={<HomeShortcuts status={status} general={tree.general} />}
+      ListHeaderComponent={<HomeShortcuts status={status} general={mode === "all" ? tree.general : undefined} mode={mode} onModeChange={changeMode} />}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />

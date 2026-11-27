@@ -1,7 +1,7 @@
 // test-category: pure-logic
 import { expect, test } from "bun:test";
-import type { NavigationView, SessionSummary } from "../../../butler-protocol/src/index.ts";
-import { spaceTree, visibleRows } from "./space";
+import type { EpicCard, NavigationView, SessionSummary } from "../../../butler-protocol/src/index.ts";
+import { recentRows, spaceTree, visibleRows, withCanon } from "./space";
 
 test("spaceTree projects live nodes in order and visibleRows collapses descendants", () => {
   const session: SessionSummary = {
@@ -38,5 +38,28 @@ test("spaceTree projects live nodes in order and visibleRows collapses descendan
   ]);
   expect(visibleRows(tree, new Set(["p:project"])).map(row => [row.key, row.depth])).toEqual([
     ["s:root", 0], ["p:project", 0], ["s:unplaced-chat", 0],
+  ]);
+});
+
+test("recentRows flattens a canon tree to its sessions, newest first, General included", () => {
+  const at = (id: string, last_activity_at: string, extra?: Partial<SessionSummary>): SessionSummary => ({
+    id, kind: "chat", title: id, session_hint: "", created_at: last_activity_at, updated_at: last_activity_at,
+    last_activity_at, unread: false, pinned: false, archived: false, automation_target_count: 0, ...extra,
+  });
+  const view: NavigationView = {
+    chats: [at("general", "09:00"), at("old", "10:00"), at("b", "12:00"), at("a", "12:00")],
+    projects: [{ id: "project", display_name: "Project", status: "active", last_activity_at: "11:00",
+      active_session_count: 1, pinned: false, archived: false, workspace_label: "", safe_path_label: "",
+      sessions: [at("nested", "11:00", { project_id: "project" })] }],
+    space: { revision: 0, groups: [], nodes: [{ key: "p:project", kind: "project", entityId: "project",
+      parentKey: null, position: 0, revision: 0, manualPlacement: false, scopeProjectId: null }] },
+    automations_summary: { total_count: 0, enabled_count: 0 }, settings_summary: { profile_label: "" }, generated_at: "12:00",
+  };
+  const epic = { id: "epic", title: "Epic", home_session_id: null, sessions: [{ session_id: "nested", worked: 1 }] } as unknown as EpicCard;
+  const tree = withCanon(spaceTree(view), new Map([["project", {
+    project_id: "project", groups: [{ key: "backlog", kind: "backlog", title: "", rows: [epic] }],
+  }]]), "Backlog");
+  expect(recentRows(tree, "General").map(r => [r.key, r.session!.title])).toEqual([
+    ["s:a", "a"], ["s:b", "b"], ["s:nested", "nested"], ["s:old", "old"], ["s:general", "General"],
   ]);
 });
