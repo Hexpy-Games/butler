@@ -52,7 +52,8 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
   </DecisionCard>;
 }
 
-type InputKind = "username" | "password" | "otp";
+export type InputKind = "username" | "password" | "otp";
+type HandoffPending = "stop" | "done" | "sent" | "input" | "save";
 interface HandoffInput {
   origin: string;
   fields: InputKind[];
@@ -65,7 +66,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
 }) {
   const copy = getAppCopy(useAppLocale()), browser = copy.browser;
   const { client, secureClient } = useConversation();
-  const [pending, setPending] = useState<"stop" | "done" | "sent" | "input" | "save">();
+  const [pending, setPending] = useState<HandoffPending>();
   const [failed, setFailed] = useState(false);
   const [fillFailed, setFillFailed] = useState(false);
   const [input, setInput] = useState<HandoffInput>();
@@ -116,7 +117,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
   const host = currentInput?.origin && URL.canParse(currentInput.origin) ? new URL(currentInput.origin).host : undefined;
   return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={fillFailed ? browser.signinFillFailed : failed ? copy.interfaceDetails.decisionFailed : undefined}
-    actions={<ButtonGroup layout="pair">
+    actions={offer && !fields.length ? <SaveButtons labels={{ saveSignIn: browser.saveSignIn, later: browser.later }} pending={pending} onSave={save => void act(save)} /> : <ButtonGroup layout="pair">
       <Button label={labels.stop} variant="secondary" loading={pending === "stop"} disabled={!!pending || (!child && !turn)}
         onPress={() => {
           if (child) void send("stop", `/steward-relations/${encodeURIComponent(child.relation.relation_id)}/cancel`, { parent_session_id: sessionId });
@@ -125,20 +126,48 @@ export function BrowserHandoffCard({ card, view, reload }: {
       <Button label={labels.done} variant={fields.length ? "secondary" : "default"} loading={pending === "done"} disabled={!!pending}
         onPress={() => void send("done", base + "/hand-back" + query, {})} />
     </ButtonGroup>}>
+    <BrowserHandoffForm labels={{ fields: labels.fields, submit: labels.submit, saveSignIn: browser.saveSignIn, later: browser.later }}
+      host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details}
+      fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
+      onSubmit={() => void act()} pending={pending} offer={offer ?? undefined} onSave={save => void act(save)} />
+  </DecisionCard>;
+}
+
+/** The hand-off card body: site, details, secure fields with their submit, and the save-sign-in prompt. */
+export function BrowserHandoffForm({ labels, host, details, fields, values, onChange, onSubmit, pending, offer, onSave }: {
+  labels: { fields: Record<InputKind, string>; submit: string; saveSignIn: string; later: string };
+  host?: string; details: string[]; fields: InputKind[]; values: Partial<Record<InputKind, string>>;
+  onChange(kind: InputKind, value: string): void; onSubmit(): void; pending?: HandoffPending;
+  offer?: { username: string; host: string }; onSave(save: boolean): void;
+}) {
+  const canFill = fields.some(kind => values[kind]);
+  return <>
     {host ? <Text literal>{host}</Text> : null}
-    {handoff.details.filter(line => !(fields.length || offer) || line !== labels.onDesktop).map((line, index) => <Text key={index} literal>{line}</Text>)}
+    {details.map((line, index) => <Text key={index} literal>{line}</Text>)}
     {fields.map(kind => <TextField key={kind} label={labels.fields[kind]} value={values[kind] ?? ""}
       secureTextEntry={kind === "password"} autoComplete={kind === "otp" ? "one-time-code" : kind}
       keyboardType={kind === "otp" ? "number-pad" : undefined} returnKeyType="done" disabled={!!pending}
-      onChangeText={value => setValues({ ...values, [kind]: value })} onSubmitEditing={() => void act()} />)}
+      onChangeText={value => onChange(kind, value)} onSubmitEditing={onSubmit} />)}
     {fields.length > 0 ? <ButtonGroup><Button label={labels.submit} disabled={!canFill || !!pending}
-      loading={pending === "input"} onPress={() => void act()} /></ButtonGroup> : null}
+      loading={pending === "input"} onPress={onSubmit} /></ButtonGroup> : null}
     {offer ? <>
-      <Text literal>{browser.saveSignIn} · {offer.username} · {offer.host}</Text>
-      <ButtonGroup layout="pair">
-        <Button label={browser.later} variant="secondary" disabled={!!pending} onPress={() => void act(false)} />
-        <Button label={browser.saveSignIn} disabled={!!pending} loading={pending === "save"} onPress={() => void act(true)} />
-      </ButtonGroup>
+      <Text literal>{labels.saveSignIn} · {offer.username} · {offer.host}</Text>
+      {fields.length ? <SaveButtons labels={labels} pending={pending} onSave={onSave} /> : null}
     </> : null}
-  </DecisionCard>;
+  </>;
+}
+
+/** 나중에 / 로그인 저장: the card's own actions when saving is all that is left. */
+export function SaveButtons({ labels, pending, onSave }: {
+  labels: { saveSignIn: string; later: string }; pending?: HandoffPending; onSave(save: boolean): void;
+}) {
+  return <ButtonGroup layout="pair">
+    <Button label={labels.later} variant="secondary" disabled={!!pending} onPress={() => onSave(false)} />
+    <Button label={labels.saveSignIn} disabled={!!pending} loading={pending === "save"} onPress={() => onSave(true)} />
+  </ButtonGroup>;
+}
+
+/** A site line the shown host already names (the host or its parent site). */
+export function sameSite(host: string | undefined, line: string) {
+  return Boolean(host && (host === line || host.endsWith(`.${line}`)));
 }

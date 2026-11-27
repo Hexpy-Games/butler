@@ -50,7 +50,7 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
   </ButtonContainer>;
   return <ComposerDecisionPanel placement={placement} media={decision.media}
     icon={handoff.signIn ? <Key aria-hidden="true" size="lg" /> : <Globe2 aria-hidden="true" size="lg" />}
-    eyebrow={copy.eyebrow} title={decision.title} details={host ? [host, ...decision.details] : decision.details}
+    eyebrow={copy.eyebrow} title={decision.title} details={host && (fields.length || offer) ? [host, ...decision.details.filter(line => typeof line !== "string" || line !== copy.onDesktop && line !== host && !host.endsWith(`.${line}`))] : decision.details}
     error={failed ? browser.signinFillFailed : decision.error} onOpen={decision.onOpenSource}
     aside={decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : undefined}
     data-test-class="composer-browser-handoff"
@@ -72,7 +72,7 @@ export function ComposerBrowserHandoffSurface({ decision, placement }: { placeme
           <Button type="button" size="sm" disabled={pending || decision.pending} onClick={() => void act(true)}>{browser.saveSignIn}</Button>
         </ButtonContainer>
       </Stack>}
-      {buttons}
+      {offer && !fields.length ? null : buttons}
     </Stack> : buttons}
   />;
 }

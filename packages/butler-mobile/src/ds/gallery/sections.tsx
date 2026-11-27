@@ -19,6 +19,7 @@ import { ForcedState } from "../internal/press";
 import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
 import { ListGroupSection } from "./ListGroupSection";
+import { BrowserHandoffSection } from "./BrowserHandoffSection";
 import { QueuedMessage } from "../QueuedMessage";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
@@ -245,6 +246,7 @@ function TextFieldSection() {
       <Cell name="with description">{field({ description: en.note })}</Cell>
       <Cell name="address, literal">{field({ value: "192.0.2.7:18765", literal: true, keyboardType: "url" })}</Cell>
       <Cell name="code, numeric">{field({ value: "1234 5678", numeric: "tabular", keyboardType: "number-pad" })}</Cell>
+      <Cell name="secure (password)">{field({ label: "Password", value: "correct-horse-42", secureTextEntry: true, autoComplete: "password" })}</Cell>
       {sets.slice(1).map(([name, s]) => <Cell key={name} name={`error · ${name}`}>{field({ label: s.message, value: s.sentence, error: s.error })}</Cell>)}
       <Cell name="Live"><LiveField /></Cell>
     </>
@@ -454,6 +456,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "work-activity", title: "WorkActivity", render: () => <WorkActivitySection /> },
   { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
+  { id: "browser-handoff", title: "Browser hand-off", render: () => <BrowserHandoffSection /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
   { id: "icon", title: "Icon", render: () => <IconSection /> },

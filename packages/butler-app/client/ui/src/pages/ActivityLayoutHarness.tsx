@@ -4,6 +4,7 @@ import { completedWorkBlocks } from "@/app/conversation-progress/terminal-activi
 import { MessageList } from "@/components/conversation/MessageList";
 import { SessionObserverTimeline } from "@/components/layout/SessionObserverTimeline";
 import { ComposerAuthorityDecisionSurface } from "@/components/conversation/ComposerAuthorityDecisionSurface";
+import type { HandoffInput } from "@/components/conversation/useComposerAuthorityDecision";
 import { normalizeApprovalSummary, approvalRequestView, browserHandoffView } from "@/app/approvalRequest";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";
@@ -109,7 +110,7 @@ export function ActivityLayoutHarness() {
       {params.get("approval") === "1" ? <ComposerCard><ComposerAuthorityDecisionSurface decision={{ ...decision, ...handoff,
         ...(handoff ? { handoff: {
           canOpenTab, signIn: handoff.signIn, inputKey: inputState ?? "", onOpenTab: () => {}, onStop: () => {}, onDone: () => {}, onHandedBack: () => {},
-          loadInput: inputState === "fields" ? loadHandoffFields : inputState === "save" ? loadHandoffOffer : loadEmptyHandoff,
+          loadInput: inputState === "fields" ? loadHandoffFields : inputState === "save" ? loadHandoffOffer : inputState === "fixture" ? loadHandoffFixture : loadEmptyHandoff,
           fillInput: async () => ({ status: "filled", handed_back: false }),
           saveInput: async (save) => ({ saved: save, handed_back: false }),
         } } : {}),
@@ -138,6 +139,7 @@ export function ActivityLayoutHarness() {
 }
 
 const loadEmptyHandoff = async () => ({ origin: "", fields: [], live: false, save_offer: null });
+const loadHandoffFixture = async () => (window as Window & { butlerHandoffInputFixture?: HandoffInput }).butlerHandoffInputFixture ?? loadEmptyHandoff();
 const loadHandoffFields = async () => ({
   origin: "https://login.example.com", fields: ["username", "password", "otp"] as ("username" | "password" | "otp")[], live: false, save_offer: null,
 });
