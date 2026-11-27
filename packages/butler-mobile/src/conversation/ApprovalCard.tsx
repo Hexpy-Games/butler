@@ -135,7 +135,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
       host={host} details={fields.length || offer ? handoff.details.filter(line => line !== labels.onDesktop && !sameSite(host, line)) : handoff.details}
       fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
       onSubmit={() => void act()} pending={pending} offer={offer ?? undefined} onSave={save => void act(save)} />
-    {input?.live === true && !input.fields.length && typeof tabId === "string" && tabId.length > 0 ? <ButtonGroup>
+    {input && !input.fields.length && typeof tabId === "string" && tabId.length > 0 ? <ButtonGroup>
       <Button variant="secondary" label={labels.openScreen} disabled={!!pending}
         onPress={() => router.push({ pathname: "/browser-live/[tabId]", params: { tabId, session: sessionId, request: card.requestRef } })} />
     </ButtonGroup> : null}

@@ -72,6 +72,7 @@ try {
     break;
   }
   assert.equal(await app.main<number>(`${subject}.view.webContents.executeJavaScript("innerWidth")`), before);
+  assert.equal(await app.main(`${subject}.phoneViewport ?? null`), null);
   legacyStream.abort();
   await waitBrowser(async () => await app.main<boolean>(`!${browser}.phoneLive.feeds.has(${subject}.id)`), "width-only stream stopped");
   const started = performance.now();

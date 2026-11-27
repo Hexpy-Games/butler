@@ -30,7 +30,7 @@ export class PhoneLive {
     const unavailable = { status: "refused", reason: "live_unavailable" };
     if (tab.holder !== "user" || !contents || contents.isDestroyed() || !tab.debuggerReady) return unavailable;
     if (this.feeds.get(tab.id)?.sub === sub) return { status: "ok" };
-    const stopped = this.stop(tab.id, true);
+    const stopped = this.stop(tab.id, Boolean(viewport));
     const feed = { sub, contents, lastAck: -Infinity, pending: Promise.resolve() };
     feed.destroyed = () => { void this.stop(tab.id); };
     feed.message = (_event, method, params, sessionId) => {
