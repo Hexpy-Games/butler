@@ -617,6 +617,7 @@ export const enUsCopy: AppCopy = {
       connected: "Connected",
       retry: "Try again",
       pairAgain: "Pair again",
+      searchEmpty: "No results.",
     },
     settings: {
       title: "Settings",

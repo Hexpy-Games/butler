@@ -19,7 +19,7 @@ export function HomeSearch({ query, onQueryChange }: { query: string; onQueryCha
     ) : (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4"), paddingTop: t.length("--space-6") }}>
         {state === "loading" ? <Spinner label={app.commandPalette.loading} /> : null}
-        {state === "empty" ? <Text tone="secondary" align="center">{app.commandPalette.empty}</Text> : null}
+        {state === "empty" ? <Text tone="secondary" align="center">{app.mobile.home.searchEmpty}</Text> : null}
         {state === "failed" ? <>
           <Text tone="danger" align="center">{app.commandPalette.failed}</Text>
           <ButtonGroup><Button label={app.mobile.home.retry} onPress={retry} /></ButtonGroup>
