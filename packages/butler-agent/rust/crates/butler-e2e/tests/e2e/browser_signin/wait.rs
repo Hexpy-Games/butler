@@ -16,7 +16,7 @@ const ASK: &str = "Help me enter the card number";
 async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-WAIT-HANDOFF")?
-        .stub_cassette(cassette()?)
+        .stub_cassette(cassette(ASK, "secure_field")?)
         .start()
         .await?;
     let admin = admin(&s);
@@ -81,7 +81,7 @@ async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<
     s.finish().await
 }
 
-pub(super) fn cassette() -> Result<Cassette, HarnessError> {
+pub(super) fn cassette(ask: &str, reason: &str) -> Result<Cassette, HarnessError> {
     let template = Cassette::load("TOOL-01")?;
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
@@ -92,13 +92,13 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
         ),
         (
             "tool_call",
-            json!({"id":"native:browser_wait_for_user","arguments":{"tab":"t1","reason":"secure_field"}}),
+            json!({"id":"native:browser_wait_for_user","arguments":{"tab":"t1","reason":reason}}),
         ),
     ];
     let mut round = Vec::new();
     for (index, (name, args)) in calls.into_iter().enumerate() {
         let mut exchange = template.exchanges[0].clone();
-        exchange.request.key.user_request = ASK.into();
+        exchange.request.key.user_request = ask.into();
         exchange.request.key.round = round.clone();
         exchange.response = super::super::browser_usage::stub::response(
             &json!({"type":"function_call","id":format!("fc_wait_{index}"),"call_id":format!("call_wait_{index}"),"name":name,"arguments":args.to_string(),"status":"completed"}),
@@ -107,7 +107,7 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
         round.extend(["function_call".into(), "function_call_output".into()]);
     }
     let mut last = template.exchanges[1].clone();
-    last.request.key.user_request = ASK.into();
+    last.request.key.user_request = ask.into();
     last.request.key.round = round;
     last.response = super::super::browser_usage::stub::response(
         &json!({"type":"message","id":"msg_wait","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Done.","annotations":[]}]}),

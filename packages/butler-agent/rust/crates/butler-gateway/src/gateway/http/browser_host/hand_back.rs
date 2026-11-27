@@ -83,16 +83,12 @@ pub(in crate::gateway::http) async fn open_hand_off(
     Ok(request.map(|request| (session, request.to_owned())))
 }
 
-/// The card's Done: hands a hand-off wait's tab back to Butler as the pane's
-/// Give back does. The App flips the holder (non-sticky); its change event
-/// resumes the wait through `resume_waits`. With no App holding that tab for
-/// the user (no host, tab closed or already given back), the wait resumes here.
-pub(in crate::gateway::http) async fn hand_back_wait(
+pub(super) async fn hand_off_tab(
     state: &HttpState,
     owner: String,
     request_ref: &str,
-) -> Result<(), HttpError> {
-    let page = state.application.authority_list(owner.clone()).await?;
+) -> Result<String, HttpError> {
+    let page = state.application.authority_list(owner).await?;
     let request = page
         .requests
         .iter()
@@ -100,7 +96,7 @@ pub(in crate::gateway::http) async fn hand_back_wait(
         .ok_or_else(|| {
             HttpError::public(404, "authority_request_not_found", "Request not found.")
         })?;
-    let tab = is_hand_off(request)
+    is_hand_off(request)
         .then(|| {
             request["approval"]["targets"]
                 .as_array()
@@ -113,10 +109,30 @@ pub(in crate::gateway::http) async fn hand_back_wait(
                 "not_a_hand_off",
                 "This request is not a browser hand-off.",
             )
-        })?;
+        })
+}
+
+pub(super) fn tab_session(hub: &super::Inner, tab: &str) -> Option<String> {
+    hub.tabs
+        .get(tab)?
+        .get("owner")?
+        .as_str()?
+        .strip_prefix("conversation:")
+        .map(str::to_owned)
+}
+
+/// The card's Done: hands a hand-off wait's tab back to Butler as the pane's
+/// Give back does. The App flips the holder (non-sticky); its change event
+/// resumes the wait through `resume_waits`. With no App holding that tab for
+/// the user (no host, tab closed or already given back), the wait resumes here.
+pub(in crate::gateway::http) async fn hand_back_wait(
+    state: &HttpState,
+    owner: String,
+    request_ref: &str,
+) -> Result<(), HttpError> {
+    let tab = hand_off_tab(state, owner.clone(), request_ref).await?;
     let sent = state.browser.0.lock().is_ok_and(|hub| {
-        let session = hub.tabs.get(&tab).and_then(|t| t["owner"].as_str())
-            .and_then(|o| o.strip_prefix("conversation:")).map(str::to_owned);
+        let session = tab_session(&hub, &tab);
         hub.tabs.is_user(&tab) && session.is_some_and(|session| hub.host.as_ref().is_some_and(|host|
             host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.given_back","session":session,"tab":tab,"args":{}})).is_ok()))
     });

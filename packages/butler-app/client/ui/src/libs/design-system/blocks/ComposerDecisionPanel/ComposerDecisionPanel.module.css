@@ -49,12 +49,18 @@
   white-space: pre-wrap;
 }
 
-.error {
+.error,
+.form {
   padding-block: var(--space-sm);
   padding-inline: var(--composer-panel-inset);
   padding-inline-start: calc(
     var(--composer-panel-inset) + var(--icon-size-sm) + var(--space-sm)
   );
+}
+
+/* The form follows the details directly; its fields keep the text column. */
+.form {
+  padding-block-start: 0;
 }
 
 /* Media: a 16:10 page thumbnail beside the subject and details, top-aligned

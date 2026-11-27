@@ -137,7 +137,16 @@ function createSecrets(request, available) {
       return values && typeof values === "object" && !Array.isArray(values) ? { values } : unavailable;
     } catch { return unavailable; }
   }
-  return { credential, vault };
+  async function input(token, origin) {
+    const unavailable = { error: "input_unavailable" };
+    if (!available() || !/^[0-9a-f]{32}$/u.test(token) || typeof origin !== "string") return unavailable;
+    try {
+      const response = await request(`/internal/browser-host/inputs/${token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ origin }) });
+      if (!response.ok) return response.status === 403 ? { error: "origin_mismatch" } : unavailable;
+      return await response.json();
+    } catch { return unavailable; }
+  }
+  return { credential, vault, input };
 }
 
 async function uploadStill(fetch, credential, value, onDelivered) {

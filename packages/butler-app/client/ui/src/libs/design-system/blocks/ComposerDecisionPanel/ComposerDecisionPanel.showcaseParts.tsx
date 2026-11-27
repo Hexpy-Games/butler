@@ -1,3 +1,6 @@
+import { ComposerCard } from "../ComposerCard";
+import { Field, FieldLabel } from "../../components/Field";
+import { Input } from "../../components/Input";
 import type { ShowcaseRenderContext } from "../../showcase";
 import { getAppCopy } from "../../../../../../../../butler-i18n/src/locale.ts";
 import { Button } from "../../components/Button";
@@ -70,4 +73,16 @@ export function BrowserHandoff({ locale }: ShowcaseRenderContext) {
         <Button type="button" size="sm">{copy.browser.rail.openToCheck}</Button>
       </ButtonContainer>} />
   );
+}
+
+// form: inputs the decision needs, in the text column under the details; the actions stay a full-width row.
+export function SignInForm() {
+  return <ComposerCard><ComposerDecisionPanel icon={<ShieldCheck aria-hidden="true" size="lg" />} eyebrow="Browser" title="Sign-in needed"
+    onOpen={() => undefined} details={["login.example-shop.test"]}
+    form={<><Field><FieldLabel htmlFor="showcase-user">Username</FieldLabel><Input id="showcase-user" autoComplete="username" /></Field>
+      <Field><FieldLabel htmlFor="showcase-pass">Password</FieldLabel><Input id="showcase-pass" type="password" autoComplete="current-password" /></Field></>}
+    actions={<ButtonContainer size="sm" justify="end">
+      <Button type="button" size="sm" variant="secondary">Stop</Button>
+      <Button type="button" size="sm">Enter</Button>
+    </ButtonContainer>} /></ComposerCard>;
 }

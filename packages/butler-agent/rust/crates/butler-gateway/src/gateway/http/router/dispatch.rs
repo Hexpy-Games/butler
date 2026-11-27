@@ -39,6 +39,7 @@ pub(in crate::gateway::http) async fn route(
             Err(HttpError::public(404, "not_found", "Route not found."))
         };
     };
+    browser_host::input::secure_channel(&request, &client)?;
     let request = match remote_sessions::route(&state, handler, request).await? {
         remote_sessions::Routed::Here(request) => request,
         remote_sessions::Routed::Answered(response) => return Ok(response),

@@ -6,6 +6,7 @@ pub(super) mod downloads;
 pub(super) mod fill;
 mod hand_back;
 pub(super) mod hidden;
+pub(super) mod input;
 mod live;
 mod live_view;
 pub(super) use live_view::route as live_route;
@@ -94,6 +95,8 @@ struct Inner {
     /// Session → (turn, backend) its newest turn's tabs open on.
     pins: HashMap<String, (String, backend::Backend)>,
     fills: HashMap<String, fill::Fill>,
+    inputs: HashMap<String, input::InputFill>,
+    input_busy: HashSet<String>,
     vault_fills: HashMap<String, pay::VaultFill>,
     /// The attached host is the hidden App host (no window, no user there).
     hidden: bool,
@@ -151,6 +154,8 @@ impl Inner {
         self.uses.clear();
         self.turns.clear();
         self.fills.clear();
+        self.inputs.clear();
+        self.input_busy.clear();
         self.vault_fills.clear();
     }
 }
@@ -217,17 +222,8 @@ pub(super) async fn route(
         (&Method::POST, "/internal/browser-host/events") => {
             agent_calls::events(state, read_json(request).await?).await
         }
-        (&Method::POST, p) if p.starts_with("/internal/browser-host/credentials/") => {
-            let token = p
-                .trim_start_matches("/internal/browser-host/credentials/")
-                .to_owned();
-            fill::credentials(state, &token, &read_json(request).await?).await
-        }
-        (&Method::POST, p) if p.starts_with("/internal/browser-host/vault/") => {
-            let token = p
-                .trim_start_matches("/internal/browser-host/vault/")
-                .to_owned();
-            pay::secrets(state, &token, &read_json(request).await?).await
+        (&Method::POST, p) if fill::token_route(p).is_some() => {
+            fill::token_route_call(state, p, &read_json(request).await?).await
         }
         (&Method::POST, p)
             if p.starts_with("/internal/browser-host/results/")
@@ -386,7 +382,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     super::json(StatusCode::OK, result)
 }
 
-async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
+pub(super) async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
     let path = request.uri().path();
     // Rendered pages and collected pixels: up to 8 MiB, base64 in JSON.
     let limit = if path == "/internal/images/calls" {

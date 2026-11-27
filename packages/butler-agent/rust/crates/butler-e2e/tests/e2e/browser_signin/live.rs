@@ -41,7 +41,7 @@ impl Records {
 async fn live_stream_needs_open_hand_off_and_ends_on_hand_back() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-LIVE-HAND-BACK")?
-        .stub_cassette(cassette()?)
+        .stub_cassette(cassette(ASK, "secure_field")?)
         .start()
         .await?;
     let admin = admin(&s);
@@ -167,7 +167,7 @@ async fn live_stream_needs_open_hand_off_and_ends_on_hand_back() -> Result<(), H
 async fn last_viewer_drop_stops_capture() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-LIVE-VIEWERS")?
-        .stub_cassette(cassette()?)
+        .stub_cassette(cassette(ASK, "secure_field")?)
         .start()
         .await?;
     let admin = admin(&s);
@@ -243,7 +243,7 @@ async fn last_viewer_drop_stops_capture() -> Result<(), HarnessError> {
 async fn slow_viewer_gets_latest_frame() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-LIVE-LATEST")?
-        .stub_cassette(cassette()?)
+        .stub_cassette(cassette(ASK, "secure_field")?)
         .start()
         .await?;
     let admin = admin(&s);
@@ -324,7 +324,7 @@ async fn input_forwarded_only_while_user_held_and_never_model_visible() -> Resul
 {
     butler_e2e::gate!();
     let s = Setup::new("BROWSER-LIVE-INPUT")?
-        .stub_cassette(cassette()?)
+        .stub_cassette(cassette(ASK, "secure_field")?)
         .start()
         .await?;
     let admin = admin(&s);
