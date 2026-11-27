@@ -17,10 +17,9 @@ export function installSignInOffers(browser) {
     try { origin = new URL(tab.view.webContents.getURL()).origin; } catch { return; }
     const username = typeof input?.username === "string" ? input.username.trim().slice(0, 256) : "";
     if (!username) return;
-    clearPending(tab);
-    tab.pendingUsername = { origin, frameOrigin: frame.origin, username, timer: setTimeout(() => clearPending(tab), USERNAME_MS) };
+    rememberUsername(tab, origin, frame.origin, username);
   });
-  ipcMain.on("butler-browser:signin-candidate", async (event, input) => {
+  ipcMain.on("butler-browser:signin-candidate", (event, input) => {
     const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
     const frame = event.senderFrame;
     if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user") return;
@@ -32,12 +31,32 @@ export function installSignInOffers(browser) {
       (pending?.origin === origin && pending.frameOrigin === frame.origin ? pending.username : "");
     const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : "";
     if (!username || !password) return;
-    // The Agent checks store availability and whether this exact sign-in is already saved.
+    offerSignIn(browser, tab, origin, frameOrigin, username, password);
+  });
+}
+
+export function rememberUsername(tab, origin, frameOrigin, username) {
+  clearPending(tab);
+  tab.pendingUsername = { origin, frameOrigin, username, timer: setTimeout(() => clearPending(tab), USERNAME_MS) };
+}
+
+/** A sign-in Butler typed from the input card: the same offer as a submitted page form. */
+export function offerTyped(browser, tab, origin, username, password) {
+  const pending = tab.pendingUsername;
+  const name = username || (pending?.origin === origin && pending.frameOrigin === origin ? pending.username : "");
+  return name && password ? offerSignIn(browser, tab, origin, undefined, name.slice(0, 256), password) : Promise.resolve();
+}
+
+// The Agent checks store availability and whether this exact sign-in is already saved.
+function offerSignIn(browser, tab, origin, frameOrigin, username, password) {
+  const check = (async () => {
     if (!await browser.signInOfferWanted?.({ origin, frame_origin: frameOrigin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
     clearOffer(tab);
     tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
     browser.publish();
-  });
+  })().finally(() => { if (tab.offerCheck === check) tab.offerCheck = null; });
+  tab.offerCheck = check;
+  return check;
 }
 
 function clearPending(tab) {

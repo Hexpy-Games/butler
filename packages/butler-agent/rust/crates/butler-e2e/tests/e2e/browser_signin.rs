@@ -14,6 +14,7 @@ mod history_import;
 mod host;
 mod import;
 mod import_export;
+mod input;
 mod native_import;
 mod oneclick;
 mod password_undo;

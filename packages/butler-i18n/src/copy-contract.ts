@@ -175,7 +175,7 @@ export interface ApprovalRequestCopy {
   browserMode: { signed_out: string; signed_in: string };
   signInStep: (reason: string) => string;
   /** The sign-in hand-off card: a step only the user can do in the tab; nothing to allow. */
-  signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string; done: string };
+  signInHandoff: { eyebrow: string; title: string; inTab: string; onDesktop: string; openTab: string; stop: string; done: string; fields: { username: string; password: string; otp: string }; submit: string; savePrompt: (username: string) => string };
   /** The wait-for-user hand-off card title, by why the user must act. */
   waitHandoff: (reason: string) => string;
   /** A saved card or autofill fill's hand-off: the step only the user can do (keypad, card app, OTP, 3-D Secure). */

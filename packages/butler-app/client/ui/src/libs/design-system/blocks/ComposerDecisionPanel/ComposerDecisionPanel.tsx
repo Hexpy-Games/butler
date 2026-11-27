@@ -35,6 +35,8 @@ export interface ComposerDecisionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   aside?: ReactNode;
   /** A failed decision, announced as an alert between the subject and the actions. */
   error?: string;
+  /** Inputs the decision needs before an action (e.g. sign-in fields), in the text column under the details. */
+  form?: ReactNode;
   /** The decision buttons, usually a ButtonContainer justify="end"; they take the composer radius (control radius in the conversation). */
   actions: ReactNode | ((complete: (action: () => void) => void) => ReactNode);
   /**
@@ -64,7 +66,7 @@ function DecisionMedia({ content, label, onOpen }: ComposerDecisionMedia) {
 }
 
 /** A pending decision shown in place of the composer input: subject row, optional details and error, media, actions. */
-export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, actions, media, renderText, literal, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
+export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, detailsShowMoreLabel, detailsShowLessLabel, aside, error, form, actions, media, renderText, literal, placement, className, onKeyDown, ...props }: ComposerDecisionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useComposerPanelTransition(panel);
   const hasDetails = Boolean(details?.length);
@@ -78,6 +80,7 @@ export function ComposerDecisionPanel({ icon, eyebrow, title, onOpen, details, d
       <ComposerDecisionDetails lines={details!} renderText={renderText} literal={literal} showMoreLabel={detailsShowMoreLabel} showLessLabel={detailsShowLessLabel} />
     </ComposerPanelBody>}
     {error && <FieldError className={dsClass(styles.error)}><Typo.Caption as="p" tone="inherit">{error}</Typo.Caption></FieldError>}
+    {form && <div className={styles.form} data-slot="composer-decision-form">{form}</div>}
     {media && <DecisionMedia {...media} />}
     <ComposerPanelActions dataSlot="composer-decision-actions">{typeof actions === "function" ? actions(defer) : actions}</ComposerPanelActions>
   </ComposerPanelFrame>;

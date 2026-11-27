@@ -15,6 +15,7 @@ interface ConversationContext {
   open(pairing: Pairing): Promise<ProbeResult>; // replaces connect: chooses the route, connects when ready
   disconnect(): Promise<void>;
   client: GatewayClient | null;
+  secureClient: GatewayClient | null;
   pairing: Pairing | null;
   revoked: { computerName?: string } | null;
   route: Route | null;
@@ -89,11 +90,11 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     }
     await teardown();
   }, [teardown]);
-  const { access, open } = useLiveRoute({
-    pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, peer,
+  const { access, open, secureClient } = useLiveRoute({
+    pairing, route, relay, rerouting, live, timer, listeners, activePairing, activeRoute, client, peer,
     setPairing, setRoute, setPeer, setProblem, setClient, setLost, setReconcile, setRevoked, teardown,
   });
-  return <Context.Provider value={{ open, disconnect, client, pairing: activePairing, revoked, route: activeRoute, access, lost, problem, reconcile, subscribe }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ open, disconnect, client, secureClient, pairing: activePairing, revoked, route: activeRoute, access, lost, problem, reconcile, subscribe }}>{children}</Context.Provider>;
 }
 
 export function useConversation(): ConversationContext {
