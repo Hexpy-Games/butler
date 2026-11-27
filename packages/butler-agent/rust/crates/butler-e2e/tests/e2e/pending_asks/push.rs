@@ -42,11 +42,15 @@ async fn push_01_phone_gets_status_only_pushes_via_relay_until_gone_or_revoked()
     let mut devices = Vec::new();
     for name in ["Phone A", "Phone B", "Phone C"] {
         let pin = issue(&app).await?;
-        let reply = client
+        let pair = client
             .post(format!("{}/devices/pair", s.gw.base))
-            .json(&json!({"code":pin["code"],"device_name":name,"platform":"ios"}))
-            .send()
-            .await?;
+            .json(
+                &json!({"code":pin["code"],"device_name":name,"platform":"ios","match_code":"47"}),
+            )
+            .send();
+        let (reply, answer) = tokio::join!(pair, app.answer_pairing(true));
+        answer?;
+        let reply = reply?;
         assert_eq!(reply.status(), 201);
         let body: Value = reply.json().await?;
         devices.push(body["data"]["device_token"].as_str().unwrap().to_owned());

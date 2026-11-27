@@ -20,7 +20,12 @@ async fn stolen_cookie_expires_on_server_and_stays_expired_after_restart()
     let app = pairing::admin(&s);
     let browser = pairing::browser();
     let pin = pairing::issue(&app).await?;
-    let response = pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let (response, answer) = tokio::join!(
+        pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     let cookie = pairing::cookie_pair(&response);
     assert_eq!(pairing::read(&s.gw, &browser, &cookie).await?, 200);
@@ -119,8 +124,13 @@ async fn parallel_pairing_guesses_invalidate_and_redemption_is_single_use()
     let pin = pairing::issue(&app).await?;
     let redeemers =
         (0..16).map(|_| pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()));
+    let (responses, answer) = tokio::join!(
+        futures_util::future::join_all(redeemers),
+        app.answer_pairing(true),
+    );
+    answer?;
     let mut successes = 0;
-    for response in futures_util::future::join_all(redeemers).await {
+    for response in responses {
         match response?.status().as_u16() {
             303 => successes += 1,
             401 => {}
@@ -334,8 +344,14 @@ async fn cookie_expiry_closes_existing_sse_without_another_request() -> Result<(
         .start()
         .await?;
     let browser = pairing::browser();
-    let pin = pairing::issue(&pairing::admin(&s)).await?;
-    let response = pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let app = pairing::admin(&s);
+    let pin = pairing::issue(&app).await?;
+    let (response, answer) = tokio::join!(
+        pairing::connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     let cookie = pairing::cookie_pair(&response);
     s.agent.terminate().await?;

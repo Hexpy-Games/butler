@@ -1,6 +1,7 @@
 import { ScrollView } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Button, ButtonGroup, Sheet, Surface, Text, TextField, useTokens } from "@/ds";
+import { PairWaiting } from "@/connection/PairWaiting";
 import { usePairForm } from "@/connection/usePairForm";
 import { useMobileCopy } from "@/i18n";
 
@@ -22,6 +23,7 @@ export default function Pair() {
           disabled={form.connecting} numeric="tabular" keyboardType="number-pad" autoComplete="one-time-code"
           returnKeyType="go" onSubmitEditing={form.connect} testID="pair-code"
         />
+        {form.connecting && form.match && <PairWaiting matchCode={form.match} />}
         <ButtonGroup>
           <Button label={copy.pair.connect} onPress={form.connect} loading={form.connecting} testID="pair-connect" />
         </ButtonGroup>

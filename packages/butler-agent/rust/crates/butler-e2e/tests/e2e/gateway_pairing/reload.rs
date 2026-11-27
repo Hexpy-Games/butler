@@ -13,7 +13,12 @@ async fn paired_browser_stays_paired_across_reload_restart_and_repair() -> Resul
     let app = admin(&s);
     let browser = browser();
     let pin = issue(&app).await?;
-    let response = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let (response, answer) = tokio::join!(
+        connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 303);
     assert!(
         response.headers()["set-cookie"]
@@ -42,14 +47,21 @@ async fn paired_browser_stays_paired_across_reload_restart_and_repair() -> Resul
     assert!(!restarted.text().await?.contains("Connection code"));
 
     let pin = issue(&app).await?;
-    let repaired = browser
-        .post(format!("{}/connect", s.gw.base))
-        .header("origin", &s.gw.base)
-        .header("sec-fetch-site", "same-origin")
-        .header("cookie", &cookie)
-        .form(&[("code", pin["code"].as_str().unwrap())])
-        .send()
-        .await?;
+    let (repaired, answer) = tokio::join!(
+        browser
+            .post(format!("{}/connect", s.gw.base))
+            .header("origin", &s.gw.base)
+            .header("sec-fetch-site", "same-origin")
+            .header("cookie", &cookie)
+            .form(&[
+                ("code", pin["code"].as_str().unwrap()),
+                ("match_code", "47")
+            ])
+            .send(),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let repaired = repaired?;
     assert_eq!(repaired.status().as_u16(), 303);
     let new_cookie = cookie_pair(&repaired);
     let paired = devices(&app).await?;

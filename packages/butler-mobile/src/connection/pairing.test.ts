@@ -67,6 +67,8 @@ test("problemFrom", () => {
   };
   const cases: [number, unknown, Problem][] = [
     [401, error("invalid_connection_code"), "invalidCode"],
+    [403, error("pairing_rejected"), "rejected"],
+    [410, error("pairing_expired"), "expired"],
     [403, error("host_not_allowed"), "hostNotAllowed"],
     [401, error("local_auth_required"), "needsPairing"],
     [200, { protocol_version: "butler.app.v2" }, "versionMismatch"],
@@ -91,16 +93,16 @@ test("pairDevice", async () => {
     calls.push({ url, init });
     return { status, ok: status < 300, body: null, json: async () => ({ protocol_version: "butler.app.v1", data, error: { code: "invalid_connection_code" } }) };
   };
-  const input = { origin, addresses: [origin], code, device: { name: "Test phone", platform: "ios" as const }, fetch };
+  const input = { origin, addresses: [origin], code, matchCode: "47", device: { name: "Test phone", platform: "ios" as const }, fetch };
   expect(await pairDevice(input)).toEqual({ ok: true, pairing: { addresses: [origin], butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" } });
   status = 201;
   data = { butler_id: "b-1", device_id: "d1", device_token: "bdt_x.y", computer_name: "Mac mini" };
   const relayed = await pairDevice({ ...input, noiseStatic: k, tunnel: { tunnelId: t, desktopStatic: k } });
-  expect(JSON.parse(String(calls[1].init.body))).toEqual({ code, device_name: "Test phone", platform: "ios", noise_static: k });
+  expect(JSON.parse(String(calls[1].init.body))).toEqual({ code, match_code: "47", device_name: "Test phone", platform: "ios", noise_static: k });
   expect(relayed).toMatchObject({ ok: true, pairing: { tunnelId: t, desktopStatic: k, noiseStatic: "butler.noise.b-1" } });
   expect(calls[0].url).toBe("http://192.0.2.5:18765/devices/pair");
   expect(calls[0].init.method).toBe("POST");
-  expect(JSON.parse(String(calls[0].init.body))).toEqual({ code, device_name: "Test phone", platform: "ios" });
+  expect(JSON.parse(String(calls[0].init.body))).toEqual({ code, match_code: "47", device_name: "Test phone", platform: "ios" });
   expect(calls[0].init.headers.Authorization).toBeUndefined();
   data = { butler_id: "../x", device_id: "d1", device_token: "bdt_x.y" };
   expect(await pairDevice(input)).toEqual({ ok: false, problem: "failed" });

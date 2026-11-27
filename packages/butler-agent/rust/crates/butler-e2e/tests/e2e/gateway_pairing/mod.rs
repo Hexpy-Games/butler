@@ -1,3 +1,4 @@
+pub(crate) mod approval;
 pub(crate) mod cli;
 pub(crate) mod device_token;
 pub(crate) mod helpers;

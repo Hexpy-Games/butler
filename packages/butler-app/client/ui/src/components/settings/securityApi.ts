@@ -32,7 +32,8 @@ export interface PairingCode {
   expires_in: number;
 }
 export interface PairingStatus extends Omit<PairingCode, "code"> {
-  status: "active" | "expired" | "invalidated" | "paired";
+  status: "active" | "pending" | "approved" | "paired" | "rejected" | "expired" | "invalidated";
+  request: { device_name: string; platform: string; match_code: string } | null;
   invalidated_by: string | null;
   device_id: string | null;
 }
@@ -46,6 +47,7 @@ export interface PairedDevice {
 }
 export const issuePairingCode = () => api<PairingCode>("/security/pairing", { method: "POST" });
 export const getPairingStatus = () => api<PairingStatus | null>("/security/pairing");
+export const decidePairing = (id: string, allow: boolean) => api<PairingStatus>("/security/pairing/decision", { method: "POST", body: JSON.stringify({ id, allow }) });
 export const listPairedDevices = () => api<PairedDevice[]>("/security/devices");
 export const revokePairedDevice = (deviceId?: string) => api(
   deviceId ? `/security/devices/${encodeURIComponent(deviceId)}` : "/security/devices",

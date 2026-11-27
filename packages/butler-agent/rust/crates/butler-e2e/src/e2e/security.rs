@@ -2,6 +2,8 @@
 //! this computer, with the gateway token and the local admin credential in
 //! `X-Butler-Admin`.
 
+use std::time::Duration;
+
 use reqwest::Method;
 use serde_json::{Value, json};
 
@@ -62,6 +64,37 @@ impl AdminClient {
         self.view().await
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "A missing pairing request fails the E2E scenario"
+    )]
+    pub async fn answer_pairing(&self, allow: bool) -> Result<Value, HarnessError> {
+        let pending = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let reply = self
+                    .send(Method::GET, "/security/pairing", None, &[])
+                    .await?;
+                let status = ok(&reply, "GET /security/pairing")?;
+                if status["status"] == "pending" {
+                    return Ok::<_, HarnessError>(status);
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("no pending pairing request")?;
+        let reply = self
+            .send(
+                Method::POST,
+                "/security/pairing/decision",
+                Some(json!({"id": pending["id"], "allow": allow})),
+                &[],
+            )
+            .await?;
+        assert_eq!(reply.status, 200);
+        Ok(pending)
+    }
+
     /// `POST /security/connection-code/rotate`: the new code.
     pub async fn rotate(&self) -> Result<Value, HarnessError> {
         let reply = self
@@ -72,11 +105,16 @@ impl AdminClient {
 }
 
 /// Every security route, each with a request that would change something.
-pub fn security_calls() -> [(Method, &'static str, Option<Value>); 8] {
+pub fn security_calls() -> [(Method, &'static str, Option<Value>); 9] {
     [
         (Method::GET, "/security", None),
         (Method::POST, "/security/pairing", None),
         (Method::GET, "/security/pairing", None),
+        (
+            Method::POST,
+            "/security/pairing/decision",
+            Some(json!({"id": "x", "allow": false})),
+        ),
         (Method::GET, "/security/devices", None),
         (Method::DELETE, "/security/devices", None),
         (

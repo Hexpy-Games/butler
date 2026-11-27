@@ -7,6 +7,8 @@ use axum::body::Body;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::Response;
 
+use crate::gateway::crypto::random_bytes;
+
 const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 
 const PAGE_HEAD: &str = r#"<!doctype html>
@@ -35,17 +37,32 @@ button { margin-top: 12px; width: 100%; padding: 10px 12px; border: 0; border-ra
 <p>Enter the pairing code shown by <code>butler remote pair</code> on the computer running Butler.</p>
 "#;
 
-const PAGE_FORM: &str = r#"<form method="post" action="/connect">
+fn page_form() -> String {
+    let number = loop {
+        if let Some(byte) = random_bytes().into_iter().find(|&byte| byte < 200) {
+            break byte % 100;
+        }
+    };
+    format!(
+        r#"<form method="post" action="/connect">
 <label for="code">Connection code</label>
 <input id="code" name="code" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus>
+<input type="hidden" name="match_code" value="{number:02}">
 <button type="submit">Connect</button>
+<p>Confirmation number <strong>{number:02}</strong>. Allow on the computer if it shows this number.</p>
 </form>
 </main>
 </body>
 </html>
-"#;
+"#
+    )
+}
 
 const REJECTED: &str = "<p class=\"error\" role=\"alert\">That code is not valid.</p>\n";
+const DECLINED: &str =
+    "<p class=\"error\" role=\"alert\">This request was declined on the computer.</p>\n";
+const EXPIRED: &str =
+    "<p class=\"error\" role=\"alert\">No answer from the computer. Try again.</p>\n";
 const REQUEST_DENIED: &str =
     "<p class=\"error\" role=\"alert\">This connection request is not allowed.</p>\n";
 const RATE_LIMITED: &str =
@@ -61,6 +78,8 @@ pub(in crate::gateway::http) enum ConnectPage {
     SessionRequired,
     /// A code that is unknown, used or expired.
     Rejected,
+    Declined,
+    Expired,
     /// A Host, Origin or Fetch Metadata check refused the form request.
     RequestDenied,
     /// The form request exceeded a rate limit.
@@ -78,12 +97,14 @@ impl ConnectPage {
     pub(in crate::gateway::http) fn response_with_status(self, status: StatusCode) -> Response {
         let notice = match self {
             Self::Rejected => REJECTED,
+            Self::Declined => DECLINED,
+            Self::Expired => EXPIRED,
             Self::RequestDenied => REQUEST_DENIED,
             Self::RateLimited => RATE_LIMITED,
             Self::Failed => FAILED,
             Self::Ask | Self::SessionRequired => "",
         };
-        let mut response = Response::new(Body::from(format!("{PAGE_HEAD}{notice}{PAGE_FORM}")));
+        let mut response = Response::new(Body::from(format!("{PAGE_HEAD}{notice}{}", page_form())));
         *response.status_mut() = status;
         let headers = response.headers_mut();
         for (name, value) in [
@@ -102,7 +123,8 @@ impl ConnectPage {
         match self {
             Self::Ask => StatusCode::OK,
             Self::SessionRequired | Self::Rejected => StatusCode::UNAUTHORIZED,
-            Self::RequestDenied => StatusCode::FORBIDDEN,
+            Self::RequestDenied | Self::Declined => StatusCode::FORBIDDEN,
+            Self::Expired => StatusCode::GONE,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::Failed => StatusCode::INTERNAL_SERVER_ERROR,
         }

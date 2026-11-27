@@ -56,15 +56,18 @@ async fn pair_relay_phone(
     let pairing = app
         .send(Method::POST, "/security/pairing", None, &[])
         .await?;
-    let paired =
+    let (paired, answer) = tokio::join!(
         s.gw.post(
             "/devices/pair",
             json!({
                 "code": pairing.data()["code"], "device_name": "Phone", "platform": "ios",
-                "noise_static": phone.public_key(),
+                "noise_static": phone.public_key(), "match_code": "47",
             }),
-        )
-        .await?;
+        ),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let paired = paired?;
     assert_eq!(paired.status, 201);
     Ok((s, app, socket, desktop_public, id, paired))
 }
@@ -211,8 +214,7 @@ async fn tunnel_02_pairing_through_relay_requires_noise_key() -> Result<(), Harn
         .await?;
     let phone = Phone::new();
 
-    let mut body =
-        json!({"code": pairing.data()["code"], "device_name": "Phone", "platform": "android"});
+    let mut body = json!({"code": pairing.data()["code"], "device_name": "Phone", "platform": "android", "match_code": "47"});
     let mismatch = phone
         .request(
             &mut socket,
@@ -232,8 +234,8 @@ async fn tunnel_02_pairing_through_relay_requires_noise_key() -> Result<(), Harn
         "noise_static_mismatch"
     );
     body["noise_static"] = json!(phone.public_key());
-    let paired = phone
-        .request(
+    let (paired, answer) = tokio::join!(
+        phone.request(
             &mut socket,
             2,
             &desktop_public,
@@ -242,9 +244,11 @@ async fn tunnel_02_pairing_through_relay_requires_noise_key() -> Result<(), Harn
             "/devices/pair",
             None,
             Some(body),
-        )
-        .await
-        .unwrap();
+        ),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let paired = paired.unwrap();
     assert_eq!(paired.status, 201);
     let envelope: Value = serde_json::from_slice(&paired.body).unwrap();
     let token = envelope["data"]["device_token"].as_str().unwrap();

@@ -15,6 +15,7 @@ async fn pair(
             "code": code,
             "device_name": "Test phone",
             "platform": "ios",
+            "match_code": "47",
             "public_key": "later",
         }))
         .send()
@@ -46,7 +47,9 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     let client = browser();
     let pin = issue(&app).await?;
     let code = pin["code"].as_str().unwrap();
-    let response = pair(&s.gw, &client, code).await?;
+    let (response, answer) = tokio::join!(pair(&s.gw, &client, code), app.answer_pairing(true),);
+    answer?;
+    let response = response?;
     assert_eq!(response.status().as_u16(), 201);
     assert_eq!(response.headers()["cache-control"], "no-store");
     let body: serde_json::Value = response.json().await?;
@@ -100,7 +103,9 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     );
     let other_pin = issue(&app).await?;
     let other_code = other_pin["code"].as_str().unwrap();
-    let other: serde_json::Value = pair(&s.gw, &client, other_code).await?.json().await?;
+    let (other, answer) = tokio::join!(pair(&s.gw, &client, other_code), app.answer_pairing(true),);
+    answer?;
+    let other: serde_json::Value = other?.json().await?;
     let other_token = other["data"]["device_token"].as_str().unwrap().to_owned();
     assert_eq!(other["data"]["butler_id"], butler_id);
     let other_id = other["data"]["device_id"].as_str().unwrap().to_owned();
@@ -177,11 +182,14 @@ async fn phone_settings_parity_routes_preserve_security_boundary() -> Result<(),
         .start()
         .await?;
     let client = browser();
-    let pin = issue(&admin(&s)).await?;
-    let paired: serde_json::Value = pair(&s.gw, &client, pin["code"].as_str().unwrap())
-        .await?
-        .json()
-        .await?;
+    let app = admin(&s);
+    let pin = issue(&app).await?;
+    let (paired, answer) = tokio::join!(
+        pair(&s.gw, &client, pin["code"].as_str().unwrap()),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let paired: serde_json::Value = paired?.json().await?;
     let token = paired["data"]["device_token"].as_str().unwrap();
     let response = client
         .patch(format!("{}/settings", s.gw.base))

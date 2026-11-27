@@ -8,6 +8,7 @@ export interface PairInput {
   origin: string;            // LAN origin, or the relay address when fetch is the relay FetchLike
   addresses: string[];       // what the saved pairing stores
   code: string;
+  matchCode: string;
   device: { name: string; platform: PairPlatform };
   fetch: FetchLike;
   noiseStatic?: string;      // phone public key, base64url; sent whenever the QR had k (LAN and relay)
@@ -28,12 +29,12 @@ function pairingFrom(input: PairInput, data: unknown): Pairing | null {
 }
 
 export async function pairDevice(input: PairInput): Promise<PairOutcome> {
-  const { origin, code, device, fetch } = input;
+  const { origin, code, matchCode, device, fetch } = input;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 10000);
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 75000);
   try {
     const data = await createGatewayClient({ origin, fetch }).request<unknown>("/devices/pair", {
-      body: { code, device_name: device.name, platform: device.platform, ...(input.noiseStatic ? { noise_static: input.noiseStatic } : {}) },
+      body: { code, match_code: matchCode, device_name: device.name, platform: device.platform, ...(input.noiseStatic ? { noise_static: input.noiseStatic } : {}) },
       signal: controller.signal,
     });
     const pairing = pairingFrom(input, data);

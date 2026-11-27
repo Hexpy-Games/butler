@@ -47,7 +47,12 @@ async fn paired_devices_have_zero_idle_writes_and_request_driven_last_seen()
     let mut cookies = Vec::new();
     for _ in 0..3 {
         let pin = issue(&app).await?;
-        let response = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+        let (response, answer) = tokio::join!(
+            connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+            app.answer_pairing(true),
+        );
+        answer?;
+        let response = response?;
         assert_eq!(response.status().as_u16(), 303);
         cookies.push(cookie_pair(&response));
     }

@@ -9,7 +9,12 @@ async fn sec_17_repeated_wrong_codes_get_429_with_retry_after() -> Result<(), Ha
     let app = admin(&s);
     let browser = browser();
     let pin = issue(&app).await?;
-    let paired = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
+    let (paired, answer) = tokio::join!(
+        connect(&s.gw, &browser, pin["code"].as_str().unwrap()),
+        app.answer_pairing(true),
+    );
+    answer?;
+    let paired = paired?;
     assert_eq!(paired.status().as_u16(), 303);
 
     issue(&app).await?;
@@ -21,7 +26,7 @@ async fn sec_17_repeated_wrong_codes_get_429_with_retry_after() -> Result<(), Ha
     let code = pin["code"].as_str().unwrap();
     let response = browser
         .post(format!("{}/devices/pair", s.gw.base))
-        .json(&json!({"code": code, "device_name": "Test phone", "platform": "ios"}))
+        .json(&json!({"code": code, "device_name": "Test phone", "platform": "ios", "match_code": "47"}))
         .send()
         .await?;
     assert_eq!(response.status().as_u16(), 429);
@@ -42,7 +47,7 @@ async fn sec_17_repeated_wrong_codes_get_429_with_retry_after() -> Result<(), Ha
         .header("accept", "text/html")
         .header("origin", &s.gw.base)
         .header("sec-fetch-site", "same-origin")
-        .form(&[("code", code)])
+        .form(&[("code", code), ("match_code", "47")])
         .send()
         .await?;
     assert_eq!(response.status().as_u16(), 429);

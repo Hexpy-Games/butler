@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 use parking_lot::Mutex;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tokio::sync::Notify;
 
 use super::unix_seconds;
 use crate::gateway::crypto::constant_time_eq;
@@ -37,6 +38,7 @@ pub(in crate::gateway::http) struct ConnectionLink {
 /// Pending one-time codes and the session cookie of one gateway listener.
 pub(in crate::gateway::http) struct BrowserSessions {
     pairing: Mutex<Option<Pairing>>,
+    decided: Notify,
     #[cfg(feature = "e2e-fixtures")]
     clock_offset: std::sync::atomic::AtomicU64,
     pending: Mutex<HashMap<[u8; 32], SystemTime>>,
@@ -47,6 +49,7 @@ impl BrowserSessions {
         Self {
             pending: Mutex::new(HashMap::new()),
             pairing: Mutex::new(None),
+            decided: Notify::new(),
             #[cfg(feature = "e2e-fixtures")]
             clock_offset: std::sync::atomic::AtomicU64::new(0),
         }
@@ -64,6 +67,7 @@ impl BrowserSessions {
     pub(in crate::gateway::http) fn advance(&self, seconds: u64) {
         self.clock_offset
             .fetch_add(seconds, std::sync::atomic::Ordering::Relaxed);
+        self.decided.notify_waiters();
     }
 
     pub(in crate::gateway::http) fn issue_pairing(&self) -> PairingCode {
@@ -82,6 +86,7 @@ impl BrowserSessions {
             digest: code_digest(&code),
             failures: 0,
             expires,
+            pending_until: None,
             view: PairingStatus {
                 id: id.clone(),
                 expires_at: unix_seconds(expires),
@@ -89,8 +94,10 @@ impl BrowserSessions {
                 status: "active".into(),
                 invalidated_by: None,
                 device_id: None,
+                request: None,
             },
         });
+        self.decided.notify_waiters();
         PairingCode {
             id,
             code,
@@ -129,6 +136,7 @@ impl BrowserSessions {
         code: &str,
         form: bool,
         ip: &str,
+        request: Option<PairingRequest>,
     ) -> Option<Option<String>> {
         let now = self.now();
         let digest = code_digest(code);
@@ -154,8 +162,14 @@ impl BrowserSessions {
         if pin.view.status != "active" || pin.expires <= now {
             return None;
         }
-        if matches && code.len() == 8 && code.bytes().all(|b| b.is_ascii_digit()) {
-            pin.view.status = "paired".into();
+        if matches
+            && code.len() == 8
+            && code.bytes().all(|b| b.is_ascii_digit())
+            && request.is_some()
+        {
+            pin.view.status = "pending".into();
+            pin.view.request = request;
+            pin.pending_until = Some(now + Duration::from_secs(60));
             return Some(Some(pin.view.id.clone()));
         }
         pin.failures += 1;
@@ -166,11 +180,70 @@ impl BrowserSessions {
         None
     }
 
+    pub(in crate::gateway::http) fn decide(&self, id: &str, allow: bool) -> bool {
+        let mut slot = self.pairing.lock();
+        if let Some(pin) = slot.as_mut()
+            && pin.view.id == id
+            && pin.view.status == "pending"
+            && pin.pending_until.is_some_and(|until| self.now() < until)
+        {
+            pin.view.status = if allow { "approved" } else { "rejected" }.into();
+            self.decided.notify_waiters();
+            return true;
+        }
+        false
+    }
+
+    pub(super) async fn wait_decision(&self, id: &str) -> Decision {
+        loop {
+            let notified = self.decided.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let remaining = {
+                let mut slot = self.pairing.lock();
+                let Some(pin) = slot.as_mut().filter(|pin| pin.view.id == id) else {
+                    return Decision::Expired;
+                };
+                match pin.view.status.as_str() {
+                    "approved" => return Decision::Approved,
+                    "rejected" => return Decision::Rejected,
+                    "pending" => {
+                        let remaining = pin
+                            .pending_until
+                            .and_then(|until| until.duration_since(self.now()).ok())
+                            .filter(|remaining| !remaining.is_zero());
+                        let Some(remaining) = remaining else {
+                            pin.view.status = "expired".into();
+                            return Decision::Expired;
+                        };
+                        remaining
+                    }
+                    _ => return Decision::Expired,
+                }
+            };
+            tokio::select! {
+                () = notified => {},
+                () = tokio::time::sleep(remaining) => {},
+            }
+        }
+    }
+
+    pub(super) fn abandon(&self, id: &str) {
+        if let Some(pin) = self.pairing.lock().as_mut()
+            && pin.view.id == id
+            && matches!(pin.view.status.as_str(), "pending" | "approved")
+        {
+            pin.view.status = "expired".into();
+            self.decided.notify_waiters();
+        }
+    }
+
     pub(in crate::gateway::http) fn paired(&self, pairing_id: &str, id: &str) {
         if let Some(pin) = self.pairing.lock().as_mut()
-            && pin.view.status == "paired"
+            && pin.view.status == "approved"
             && pin.view.id == pairing_id
         {
+            pin.view.status = "paired".into();
             pin.view.device_id = Some(id.into());
         }
     }
@@ -231,6 +304,19 @@ fn code_digest(code: &str) -> [u8; 32] {
 }
 
 #[derive(Clone, Serialize)]
+pub(in crate::gateway::http) struct PairingRequest {
+    pub device_name: String,
+    pub platform: String,
+    pub match_code: String,
+}
+
+pub(super) enum Decision {
+    Approved,
+    Rejected,
+    Expired,
+}
+
+#[derive(Clone, Serialize)]
 pub(in crate::gateway::http) struct PairingStatus {
     pub id: String,
     pub expires_at: u64,
@@ -238,6 +324,7 @@ pub(in crate::gateway::http) struct PairingStatus {
     pub status: String,
     pub invalidated_by: Option<String>,
     pub device_id: Option<String>,
+    pub request: Option<PairingRequest>,
 }
 
 #[derive(Serialize)]
@@ -250,6 +337,7 @@ pub(in crate::gateway::http) struct PairingCode {
 
 struct Pairing {
     expires: SystemTime,
+    pending_until: Option<SystemTime>,
     digest: [u8; 32],
     failures: u8,
     view: PairingStatus,
