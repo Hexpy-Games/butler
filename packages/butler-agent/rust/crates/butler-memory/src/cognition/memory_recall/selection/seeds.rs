@@ -207,6 +207,7 @@ fn expand_graph(
     let admitted = input.admitted_channels.clone().unwrap_or_default();
     let mut source_current = |binding: &IdentitySourceBinding| sources.source_current(binding);
     let cued = resolved.iter().map(String::as_str).collect::<HashSet<_>>();
+    let mut walked = HashSet::<String>::new();
     let mut members = |node: &str, limit: usize| {
         let result = graph.identity_members(
             node,
@@ -218,7 +219,7 @@ fn expand_graph(
         )?;
         let mut members = result.members;
         let mut partial = result.partial;
-        if admitted.graph && cued.contains(node) {
+        if admitted.graph && cued.contains(node) && walked.insert(node.to_owned()) {
             // A seed is read across every copy linked to it. A node reached by
             // traversal is not, so a much-linked thing cannot flood the walk.
             let (copies, cut) =

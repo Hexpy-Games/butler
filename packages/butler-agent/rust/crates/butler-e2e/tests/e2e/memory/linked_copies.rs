@@ -77,7 +77,7 @@ async fn mem_recall_reads_every_linked_copy() -> Result<(), HarnessError> {
             let node = format!("copy-{i}");
             let (source, episode, revision) = if i == 5 { &explicit } else { &conversation };
             db.execute(
-                "INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?1,'entity',?2,'global','2026-10-02T00:00:00.000Z')",
+                "INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?1,'entity',?2,'user','2026-10-02T00:00:00.000Z')",
                 [node.as_str(), name],
             ).unwrap();
             db.execute(
