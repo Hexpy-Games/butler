@@ -109,7 +109,16 @@ impl Fixture {
             .rev()
             .flat_map(|r| r["input"].as_array().into_iter().flatten())
             .find(|i| i["type"] == "function_call_output" && i["call_id"] == id)
-            .and_then(|i| i["output"].as_str())
+            .and_then(|i| {
+                let output = &i["output"];
+                output.as_str().or_else(|| {
+                    output
+                        .as_array()?
+                        .iter()
+                        .find(|part| part["type"] == "input_text")?["text"]
+                        .as_str()
+                })
+            })
             .map(|s| {
                 let v: Value = serde_json::from_str(s).unwrap();
                 v.get("output").cloned().unwrap_or(v)
