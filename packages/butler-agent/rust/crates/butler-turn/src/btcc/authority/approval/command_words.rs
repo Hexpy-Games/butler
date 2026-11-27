@@ -334,8 +334,18 @@ pub(in crate::btcc) fn normalize_prefix(text: &str) -> Option<Vec<String>> {
     Some(prefix)
 }
 
+/// Reject single quotes for rule parsing after stripping a wrapper because cmd.exe treats them as literals.
+pub(in crate::btcc) fn rule_script(command: &str) -> (&str, bool) {
+    let stripped = butler_platform::command_sandbox::path_script(command);
+    let parsable = stripped == command || !stripped.contains('\'');
+    (stripped, parsable)
+}
+
 pub(in crate::btcc) fn rule_prefixes(line: &str) -> Option<Vec<String>> {
-    let line = butler_platform::command_sandbox::path_script(line);
+    let (line, parsable) = rule_script(line);
+    if !parsable {
+        return None;
+    }
     let mut prefixes = Vec::new();
     for (index, words) in segments(line)?.into_iter().enumerate() {
         if !read_only(&words, index == 0) {

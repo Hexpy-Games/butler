@@ -1,6 +1,6 @@
 use super::{AccessDecision, GrantUse, TargetScope};
 use crate::btcc::authority::approval::command_words::{
-    normalize_prefix, program, read_only, segment_prefix, segments,
+    normalize_prefix, program, read_only, rule_script, segment_prefix, segments,
 };
 use std::path::PathBuf;
 
@@ -62,7 +62,7 @@ pub enum RuleVerdict {
 }
 
 pub fn rule_verdict(command: &str, rules: &[CommandRule]) -> RuleVerdict {
-    let command = butler_platform::command_sandbox::path_script(command);
+    let (command, parsable) = rule_script(command);
     if rules.is_empty() {
         return RuleVerdict::NoRule;
     }
@@ -75,7 +75,7 @@ pub fn rule_verdict(command: &str, rules: &[CommandRule]) -> RuleVerdict {
             .iter()
             .any(|rule| rule.effect == RuleEffect::Deny && words.starts_with(&rule.prefix))
     };
-    let Some(parsed) = segments(command) else {
+    let Some(parsed) = parsable.then(|| segments(command)).flatten() else {
         return if command.split(['|', '&', ';', '\n']).any(|segment| {
             denies(
                 segment
