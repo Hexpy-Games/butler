@@ -20,6 +20,7 @@ import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
 import { ListGroupSection } from "./ListGroupSection";
 import { QueuedMessage } from "../QueuedMessage";
+import { SearchField } from "../SearchField";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
 import { Surface } from "../Surface";
@@ -251,6 +252,19 @@ function TextFieldSection() {
   );
 }
 
+function SearchFieldSection() {
+  const app = getAppCopy(useAppLocale());
+  const [value, setValue] = useState("");
+  const labels = { placeholder: app.composer.usage.search, clearLabel: app.composer.modelSearchClear, cancelLabel: app.common.cancel };
+  return (
+    <>
+      <Cell name="empty"><SearchField {...labels} value="" onChangeText={noop} onCancel={noop} /></Cell>
+      <Cell name="filled"><SearchField {...labels} value={en.sentence} onChangeText={noop} onCancel={noop} /></Cell>
+      <Cell name="Live"><SearchField {...labels} value={value} onChangeText={setValue} onCancel={() => setValue("")} /></Cell>
+    </>
+  );
+}
+
 function LiveSwitch() {
   const [value, setValue] = useState(false);
   return <Switch value={value} onValueChange={setValue} label={en.sentence} />;
@@ -464,6 +478,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "list-row", title: "ListRow", render: () => <ListRowSection /> },
   { id: "list-group", title: "ListGroup", render: () => <ListGroupSection /> },
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },
+  { id: "search-field", title: "SearchField", render: () => <SearchFieldSection /> },
   { id: "switch", title: "Switch", render: () => <SwitchSection /> },
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },
   { id: "context-ring", title: "ContextRing", render: () => <>{[0.05, 0.5, 0.95].map(ratio =>

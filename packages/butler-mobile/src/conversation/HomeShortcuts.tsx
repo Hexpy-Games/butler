@@ -15,7 +15,7 @@ export function HomeShortcuts({ status, general, mode, onModeChange }: { status?
   const t = useTokens(), app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const mark = general ? sessionMark(general) : null;
   const title = app.space.general;
-  return <View style={{ gap: t.length("--space-4"), paddingTop: t.length("--space-6") }}>
+  return <View style={{ gap: t.length("--space-4") }}>
     <ListGroup>
       <ListRow icon={icons.Archive} title={app.library.title} navigates onPress={() => router.push("/library")} />
       <ListRow icon={icons.Clock3} title={app.automations.title} navigates onPress={() => router.push("/automations")} />

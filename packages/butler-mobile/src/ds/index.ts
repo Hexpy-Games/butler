@@ -9,6 +9,7 @@ export { Icon, type IconProps } from "./Icon";
 export { icons, type IconGlyph } from "./icons";
 export { ListRow, type ListRowProps } from "./ListRow";
 export { ListGroup, ListGroupItem, type ListGroupItemProps, type ListGroupProps } from "./ListGroup";
+export { SearchField, type SearchFieldProps } from "./SearchField";
 export { Sheet, type SheetProps } from "./Sheet";
 export { Spinner, type SpinnerProps } from "./Spinner";
 export { Surface, type SurfaceProps } from "./Surface";
