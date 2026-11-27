@@ -4,7 +4,7 @@
 //! SSH server waits for the handles of its session to close, so a service
 //! started that way holds the session open. `CreateProcess` here passes none.
 
-use crate::windows_command_line::quote_argument;
+use crate::windows_args::quote_argument;
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::process::ExitStatusExt;

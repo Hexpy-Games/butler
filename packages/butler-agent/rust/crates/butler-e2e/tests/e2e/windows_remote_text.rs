@@ -3,7 +3,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_platform::{
     powershell_text::{decoded, encoded_command},
-    windows_command_line::quote_argument,
+    windows_args::quote_argument,
 };
 
 const HOSTILE: &str = r#"C:\Users\김 유저\a'b"c%PATH%&"#;

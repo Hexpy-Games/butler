@@ -9,7 +9,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::windows_command_line::quote_argument;
+use crate::windows_args::quote_argument;
 
 pub(super) fn install(
     artifact: &Path,

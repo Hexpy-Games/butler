@@ -3,7 +3,7 @@ mod powershell;
 use butler_platform::{
     hook_process::HookOutput,
     powershell_text::{decoded, encoded_command},
-    windows_command_line::quote_argument,
+    windows_args::quote_argument,
 };
 use powershell::{
     AGENT, DEPLOY, FOLDER, FOLDER_OK, HOME, INSTALLED, PRELUDE, PROBE, REMOVE, UPLOAD,
