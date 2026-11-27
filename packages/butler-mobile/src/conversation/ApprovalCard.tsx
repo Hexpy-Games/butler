@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { AuthorityDecisionResult, SessionView } from "../../../butler-protocol/src/index.ts";
 import { Button, ButtonGroup, CodeBlock, DecisionCard, Text } from "@/ds";
@@ -55,6 +56,7 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
 export function BrowserHandoffCard({ card, view, reload }: {
   card: AuthorityApprovalCard; view: SessionView; reload(): void;
 }) {
+  const router = useRouter();
   const copy = getAppCopy(useAppLocale());
   const { client } = useConversation();
   const [pending, setPending] = useState<"stop" | "done" | "sent">();
@@ -72,6 +74,7 @@ export function BrowserHandoffCard({ card, view, reload }: {
   };
   if (!handoff) return null;
   const labels = copy.interfaceTemplates.approvalRequest.signInHandoff;
+  const tabId = card.approval?.operation?.browser_tab;
   return <DecisionCard eyebrow={labels.eyebrow} title={handoff.title}
     footnote={failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={<ButtonGroup layout="pair">
@@ -84,5 +87,9 @@ export function BrowserHandoffCard({ card, view, reload }: {
         onPress={() => void send("done", `/authority-requests/${encodeURIComponent(card.requestRef)}/hand-back?session_id=${encodeURIComponent(sessionId)}`, {})} />
     </ButtonGroup>}>
     {handoff.details.map((line, index) => <Text key={index} literal>{line}</Text>)}
+    {typeof tabId === "string" && tabId.length > 0 ? <ButtonGroup>
+      <Button variant="secondary" label={labels.openScreen}
+        onPress={() => router.push({ pathname: "/browser-live/[tabId]", params: { tabId, session: sessionId, request: card.requestRef } })} />
+    </ButtonGroup> : null}
   </DecisionCard>;
 }
