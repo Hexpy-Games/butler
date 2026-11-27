@@ -268,6 +268,17 @@ pub(in crate::btcc) fn is_read_only(line: &str) -> bool {
     })
 }
 
+/// Whether word 0 is certainly the program the segment runs: no quote, glob,
+/// path separator or cmd.exe name delimiter, and not a launcher that runs a later word.
+pub(in crate::btcc) fn plain_program(words: &[Word]) -> bool {
+    words.first().is_some_and(|first| {
+        !first.quoted
+            && !first.glob
+            && !first.text.contains(['/', '\\', ','])
+            && !LAUNCHERS.contains(&program(&first.text).as_str())
+    })
+}
+
 pub(in crate::btcc) fn rule_prefix(words: &[String]) -> Option<Vec<String>> {
     let first = words.first()?;
     if first.is_empty() || first.contains(['/', '\\', '\'', '"']) {
