@@ -1,12 +1,14 @@
-//! Foreground pairing, usable without a display or terminal input.
+//! Foreground pairing; the owner allows each request on this terminal.
 use super::client::Client;
 use crate::host::cli::error::CliError;
 use qrcode::{EcLevel, QrCode, render::unicode};
 use reqwest::Method;
+use serde_json::{Value, json};
 use std::{
     io::{self, Write},
     time::Duration,
 };
+use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
 
 pub(super) async fn run(client: &Client) -> Result<(), CliError> {
     let cancelled = tokio::signal::ctrl_c();
@@ -35,6 +37,7 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
     for origin in &origins {
         println!("Address: {origin}");
     }
+    let mut input = BufReader::new(tokio::io::stdin()).lines();
     loop {
         let issued = client
             .request(Method::POST, "/security/pairing", None)
@@ -53,7 +56,10 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
                 .request(Method::GET, "/security/pairing", None)
                 .await?;
             if status["id"] != issued["id"]
-                || matches!(status["status"].as_str(), Some("expired" | "invalidated"))
+                || matches!(
+                    status["status"].as_str(),
+                    Some("expired" | "invalidated" | "rejected")
+                )
             {
                 println!("\nRefreshing pairing code.");
                 break;
@@ -62,14 +68,59 @@ async fn foreground(client: &Client) -> Result<(), CliError> {
                 println!("\nDevice paired.");
                 return Ok(());
             }
-            let remaining = status["expires_in"].as_u64().unwrap_or(0);
-            print!("\rExpires in {remaining:2}s · Ctrl-C to stop");
-            io::stdout().flush().map_err(|_| {
-                CliError::failed("output_unavailable", "Cannot write pairing countdown.")
-            })?;
+            if status["status"] == "pending" {
+                answer(client, &issued["id"], &status["request"], &mut input).await?;
+                continue;
+            }
+            if status["status"] != "approved" {
+                let remaining = status["expires_in"].as_u64().unwrap_or(0);
+                print!("\rExpires in {remaining:2}s · Ctrl-C to stop");
+                io::stdout().flush().map_err(|_| {
+                    CliError::failed("output_unavailable", "Cannot write pairing countdown.")
+                })?;
+            }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
+}
+
+async fn answer(
+    client: &Client,
+    id: &Value,
+    request: &Value,
+    input: &mut Lines<BufReader<Stdin>>,
+) -> Result<(), CliError> {
+    let name = request["device_name"].as_str().unwrap_or_default();
+    let platform = request["platform"].as_str().unwrap_or_default();
+    let choices = &request["choices"];
+    let c0 = choices[0].as_str().unwrap_or_default();
+    let c1 = choices[1].as_str().unwrap_or_default();
+    let c2 = choices[2].as_str().unwrap_or_default();
+    print!(
+        "\n{name} ({platform}) wants to connect.\nPick the number shown on the device: {c0}  {c1}  {c2}\nNumber (Enter to decline): "
+    );
+    io::stdout()
+        .flush()
+        .map_err(|_| CliError::failed("output_unavailable", "Cannot write pairing prompt."))?;
+    let line = input.next_line().await.ok().flatten();
+    let pick = line
+        .as_deref()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    if client
+        .request(
+            Method::POST,
+            "/security/pairing/decision",
+            Some(json!({"id": id, "pick": pick})),
+        )
+        .await
+        .is_err()
+    {
+        println!("Request expired.");
+    } else if pick.is_none() {
+        println!("Declined.");
+    }
+    Ok(())
 }
 
 /// The phone app's pairing payload v1; matches the desktop QR.

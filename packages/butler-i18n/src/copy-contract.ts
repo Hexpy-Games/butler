@@ -460,10 +460,10 @@ export interface MobileCopy {
   appName: string;
   pair: { title: string; lede: string; choiceLede: string; address: string; code: string; connect: string;
     scan: string; manual: string; scanHint: string; notPairingQr: string; cameraOff: string; openSettings: string; allowCamera: string;
-    rescan: string; connecting: string;
+    rescan: string; connecting: string; matchLabel: string; waitHint: string; cancel: string;
     addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
-    notButler: string; unreachable: string; failed: string; desktopOffline: string; relayOff: string };
+    notButler: string; unreachable: string; failed: string; desktopOffline: string; relayOff: string; rejected: string; expired: string; cancelled: string };
   localNetwork: { title: string; body: string; retry: string; cancel: string };
   conversations: {
     title: string;
@@ -2103,6 +2103,10 @@ export interface AppCopy {
       pairDevice: string;
       createCode: string;
       pairingQr: string;
+      pairRequest: string;
+      pickHint: string;
+      decline: string;
+      rejected: string;
       scanWithPhone: string;
       expiresIn: (seconds: number) => string;
       invalidated: string;
