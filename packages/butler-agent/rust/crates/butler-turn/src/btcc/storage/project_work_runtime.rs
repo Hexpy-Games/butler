@@ -122,7 +122,7 @@ impl ProjectWorkRuntimeProjection for SqliteProjectWorkRuntime {
     }
     fn observe_canonical_works(&self, input: ProjectWorkObserveWorks) -> PortFuture<'_, ()> {
         Box::pin(async move {
-            self.write(move |db, _| result::observe_works(db, &input))
+            self.write(move |db, clock| result::observe_works(db, &input, clock))
                 .await
         })
     }

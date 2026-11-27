@@ -10,6 +10,7 @@ use crate::btcc::work::{
     ToolResultRef, WorkScope,
 };
 
+use super::super::work::relation::abandon;
 use super::super::{StorageError, StorageResult};
 use ownership::assert_projection_ownership;
 
@@ -87,7 +88,11 @@ pub(super) fn read_committed(
 
 /// Persists observed project Works after verifying every referenced result
 /// against its committed tool result and the projection's ownership.
-pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) -> StorageResult<()> {
+pub(super) fn observe_works(
+    db: &Connection,
+    input: &ProjectWorkObserveWorks,
+    clock: &dyn Fn() -> String,
+) -> StorageResult<()> {
     if !valid_hash(&input.canonical_head_sha256) {
         return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
     }
@@ -108,6 +113,20 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
     else {
         return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
     };
+    let session_work: Option<String> = db
+        .query_row(
+            "SELECT work.work_id FROM btcc_guided_work_session_heads head \
+             JOIN btcc_guided_works work ON work.work_id=head.work_id \
+             WHERE head.session_id=?1 AND work.session_id=?1 AND work.scope_kind='session' \
+             AND work.scope_ref=?1 AND work.status IN ('open', 'blocked')",
+            [&head.work.session_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
+    if let Some(work_id) = session_work {
+        abandon(db, &work_id, clock)?;
+    }
     db.execute(
         "INSERT INTO btcc_guided_work_session_heads(session_id,work_id,updated_at) VALUES(?1,?2,?3) \
          ON CONFLICT(session_id) DO UPDATE SET work_id=excluded.work_id,updated_at=excluded.updated_at",

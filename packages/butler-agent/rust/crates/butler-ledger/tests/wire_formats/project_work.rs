@@ -2,6 +2,8 @@
 //! their child records, publication claims and journals, the lock shard, and
 //! the dashboard projections over them.
 
+#[path = "project_work/session_switch.rs"]
+pub(crate) mod session_switch;
 #[path = "project_work/subjects.rs"]
 pub(crate) mod subjects;
 

@@ -124,7 +124,8 @@ fn assert_work_ownership(
 }
 
 /// Every session head touching the observed sessions or Works must point at
-/// a Work of the observed session, project scope and ledger project.
+/// a Work owned by the observed session, in either its session scope or the
+/// observed project scope and ledger project.
 fn assert_session_heads(
     db: &Connection,
     input: &ProjectWorkObserveWorks,
@@ -164,11 +165,12 @@ fn assert_session_heads(
         let WorkScope::Project { project_ref } = &expected.work.scope else {
             return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         };
-        if work_session.as_deref() != Some(expected.work.session_id.as_str())
-            || kind.as_deref() != Some("project")
-            || scope.as_deref() != Some(project_ref.as_str())
-            || ledger.as_deref() != Some(input.ledger_project_id.as_str())
-        {
+        let session_scope =
+            kind.as_deref() == Some("session") && scope.as_deref() == Some(session.as_str());
+        let project_scope = kind.as_deref() == Some("project")
+            && scope.as_deref() == Some(project_ref.as_str())
+            && ledger.as_deref() == Some(input.ledger_project_id.as_str());
+        if work_session.as_deref() != Some(session.as_str()) || !(session_scope || project_scope) {
             return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
         }
     }
