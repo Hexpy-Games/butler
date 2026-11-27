@@ -31,7 +31,11 @@ impl GuidedTurnFactoryAdapter {
             )
             .await,
             Ok(true)
-        );
+        ) && tokio::task::spawn_blocking(
+            butler_platform::command_sandbox::project_write_available,
+        )
+        .await
+        .unwrap_or(false);
         let mut root_pins = Vec::new();
         if phase.execution_policy.access_mode != butler_turn::btcc::AccessMode::FullAccess {
             let data = self.butler_data.clone();
@@ -61,9 +65,7 @@ impl GuidedTurnFactoryAdapter {
         if sandbox_on {
             let inventory_root = path.clone();
             tokio::task::spawn_blocking(move || {
-                if butler_platform::command_sandbox::project_write_available() {
-                    butler_platform::command_sandbox::prewarm_project(&inventory_root);
-                }
+                butler_platform::command_sandbox::prewarm_project(&inventory_root);
             });
         }
         Ok((path, root_pins, inventory))
