@@ -52,6 +52,37 @@ fn is_hand_off(request: &Value) -> bool {
     }
 }
 
+/// The open hand-off wait on `tab` while the user holds it: (owner session, request_ref).
+pub(in crate::gateway::http) async fn open_hand_off(
+    state: &HttpState,
+    tab: &str,
+) -> Result<Option<(String, String)>, HttpError> {
+    let session = {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        if !hub.tabs.is_user(tab) {
+            return Ok(None);
+        }
+        let Some(session) = hub
+            .tabs
+            .get(tab)
+            .and_then(|t| t["owner"].as_str())
+            .and_then(|owner| owner.strip_prefix("conversation:"))
+        else {
+            return Ok(None);
+        };
+        session.to_owned()
+    };
+    let owner = crate::gateway::application::app_session_hint(&session);
+    let requests = state.application.authority_list(owner).await?;
+    let tab = json!(tab);
+    let request = requests
+        .requests
+        .iter()
+        .find(|request| waits_on(request, &tab))
+        .and_then(|request| request["request_ref"].as_str());
+    Ok(request.map(|request| (session, request.to_owned())))
+}
+
 pub(super) async fn hand_off_tab(
     state: &HttpState,
     owner: String,

@@ -19,12 +19,13 @@ export function BrowserHandoffSection({ state }: { state?: string }) {
     {shown("fields") ? <Sample name="fields" fields={["username", "password"]} /> : null}
     {shown("typed") ? <Sample name="typed" fields={["username", "password"]} initial={{ username: "me@example.com", password: "correct-horse-42" }} /> : null}
     {shown("save") ? <Sample name="save" fields={[]} offer={{ username: "me@example.com", host }} /> : null}
-    {shown("plain") ? <Sample name="plain" fields={[]} /> : null}
+    {shown("plain") ? <Sample name="plain" fields={[]} live={false} /> : null}
+    {shown("live") ? <Sample name="live" fields={[]} live /> : null}
   </>;
 }
 
-function Sample({ name, fields, initial = {}, offer }: {
-  name: string; fields: InputKind[]; initial?: Partial<Record<InputKind, string>>; offer?: { username: string; host: string };
+function Sample({ name, fields, initial = {}, offer, live }: {
+  name: string; fields: InputKind[]; initial?: Partial<Record<InputKind, string>>; offer?: { username: string; host: string }; live?: boolean;
 }) {
   const t = useTokens();
   const copy = getAppCopy(useAppLocale()), labels = copy.interfaceTemplates.approvalRequest.signInHandoff;
@@ -38,9 +39,12 @@ function Sample({ name, fields, initial = {}, offer }: {
         <Button label={fields.length ? labels.submit : labels.done} onPress={noop} />
       </ButtonGroup>}>
       <BrowserHandoffForm labels={{ fields: labels.fields, savePrompt: labels.savePrompt, saveSignIn: copy.browser.saveSignIn, later: copy.browser.later }}
-        host={form ? host : undefined} details={form ? [] : [site, labels.onDesktop]}
+        host={form ? host : undefined} details={form ? [] : live === undefined ? [site, labels.onDesktop] : [site]}
         fields={fields} values={values} onChange={(kind, value) => setValues({ ...values, [kind]: value })}
         onSubmit={noop} offer={offer} onSave={noop} />
+      {live !== undefined ? <ButtonGroup>
+        <Button variant="secondary" label={labels.openScreen} onPress={noop} />
+      </ButtonGroup> : null}
     </DecisionCard>
   </View>;
 }

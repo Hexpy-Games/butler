@@ -1,5 +1,5 @@
 import { conversationAgentTabs } from "./conversationAgentTabs";
-import type { PageDialog } from "./BrowserDialog";
+import type { BrowserTab } from "./browserTab";
 import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
@@ -10,23 +10,7 @@ import { connectElementDrag, type ElementDragEvent } from "./elementDrag";
 import { publicBrowserOwner, relevantConversationTab } from "./browserOwnership";
 import { useBrowserShellState } from "./browserShellState";
 
-export interface BrowserTab {
-  popup?: { id: string; url: string }; dialog?: PageDialog | null; blockedPopup?: { url: string; site: string; reason: string } | null; opener?: string;
-  privacyFrozen?: boolean;
-  id: string; owner: string; url: string; title: string; favicon: string;
-  preview?: string; picking?: boolean; selectionCount?: number;
-  stills?: boolean; agent?: boolean; driven?: boolean; profile?: "signed_out" | "signed_in"; epoch?: number; holder?: "agent" | "user"; sticky?: boolean; waiting?: boolean; busy?: boolean; inUse?: boolean;
-  /** You took the tab over while a Butler turn held it; clears when that turn ends. */
-  paused?: boolean;
-  /** When Butler last worked in this tab (ms since epoch); absent if it never has. */
-  agentAt?: number;
-  status: "idle" | "loading" | "crashed"; canBack: boolean; canForward: boolean;
-  /** A sign-in step only the user can do (mfa, passkey, captcha, secure_keypad, unknown_form). */
-  signinStep?: string;
-  payStep?: string;
-  /** "로그인 저장" after a takeover sign-in; never carries the password. */
-  saveOffer?: { username: string; host: string };
-}
+export type { BrowserTab } from "./browserTab";
 export interface BrowserSnapshot {
   /** Saved tabs have finished loading; an empty list is authoritative only then. */
   restored: boolean; enabled: boolean; blocked: boolean; activeId: string | null; nativeCovered: boolean; focusRequest?: string; tabs: BrowserTab[];

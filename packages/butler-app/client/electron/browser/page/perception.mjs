@@ -145,13 +145,14 @@ export function semantic(element, discoverPointer = true) {
   const keypad = secureKeypad(element) || readonlyKeypad(element);
   // A field Butler filled from a saved card or profile stays hidden: no value, masked in screenshots.
   const vault = Boolean(globalThis.__butlerVaultFilled?.has(element));
-  const secure = vault || keypad || ["number", "cvc", "passport_number", "rrn"].includes(vaultKind(element)) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
+  const typed = Boolean(globalThis.__butlerUserTyped?.has(element)) || globalThis.__butlerTypedAll === true && /^(textbox|combobox)$/u.test(role);
+  const secure = vault || typed || keypad || ["number", "cvc", "passport_number", "rrn"].includes(vaultKind(element)) || /recaptcha|hcaptcha|captcha|transkey|nxkey|nprotect|anysign|wizvera/iu.test(page?.url ?? location.href) || /one-time-code/u.test(element.autocomplete ?? "") || type === "password" || /cc-number|cc-csc|cc-exp/u.test(element.autocomplete ?? "") || /card.?number|cvc|cvv|transkey|nxkey|nprotect|anysign|wizvera|(?:^|[ _-])(?:otp|mfa|2fa|verification.?code|auth.?code)(?:$|[ _-])/iu.test(`${element.id} ${element.className} ${element.getAttribute("name") ?? ""}`);
   let name = element.getAttribute("aria-label") || labelled.trim() || (globalThis.__butlerPerceptionCache?.labels ? globalThis.__butlerPerceptionCache.labels.get(element) : element.labels?.[0]?.textContent) || element.getAttribute("alt") || element.getAttribute("title") || visibleLabel(element) || element.getAttribute("placeholder") || "";
   name ||= globalThis.__butlerObservation?.accessibleNames?.get(element) ?? "";
   if (!name) { const b = rectangle(element); name = `icon ${Math.round(b.width)}×${Math.round(b.height)} at ${Math.round(b.x)},${Math.round(b.y)}${classHint(element)}`; }
   const parent = parentElementOf(element);
   const ad = /^(ads?[.-]|.*\.doubleclick\.)/iu.test(page?.hostname ?? location.hostname) || /^(광고|AD|Sponsored|스폰서)(?:\s|$)/iu.test(parent?.getAttribute("aria-label") ?? "") || /^(AD|광고)\b/u.test(parent?.childNodes?.[0]?.textContent?.trim() ?? "") || element.rel?.split(" ").includes("sponsored");
-  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, keypad, vault, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
+  return { role: role || (titled || graphic ? "element" : "button"), name: name.replace(/\s+/gu, " "), secure, keypad, vault, typed, ad: Boolean(ad), clickable, checked: Boolean(element.checked), preselected: Boolean(element.defaultChecked) };
 }
 /** Words from an unlabeled control's class names (e.g. "car" in "car car-disabled"),
  * a hint for what the icon is; state words and hash-like tokens are left out. */

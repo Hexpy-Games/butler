@@ -18,6 +18,7 @@ export async function frameWorlds(tab, { immediate = false } = {}) {
     const native=closed.hasClosedRoots || immediate && tab.view.webContents.isLoading() ? undefined : parent ? nativeFrameWorld(tab,id) : tab.view.webContents;
     if (!native && !closed.contextId) closed=await closedRoots(api,id,mainId,documents.get(sessionId));
     const contextId=closed.contextId;
+    if (!native && contextId && tab.userTyped) await api.sendCommand("Runtime.evaluate", { expression: "globalThis.__butlerTypedAll=true", contextId });
     const url=/^about:(blank|srcdoc)$/u.test(tree.frame.url)?parent?.url:tree.frame.url;
     const webFrame=parent?tab.nativeFrames.get(tab.contextNames.get(id)):tab.view.webContents.mainFrame;
     const frame={id,url,parent,sessionId,api,contextId,native,webFrame};frames.push(frame);

@@ -91,7 +91,7 @@ export function BrowserArea({ sessionId }: { sessionId?: string }) {
     <PageCard key={tab?.id ?? "empty"} panelId="browser-page" holder={browserHolder(tab)} hidden={empty || crashed || disabled}
       internal={empty && !disabled ? <NewTabPage /> : undefined}
       occluderSelector='[data-slot="nav-drop-label"]'
-      viewport={tab?.agent ? { width: 1280, height: 800 } : undefined}
+      viewport={tab?.phoneViewport ?? (tab?.agent ? { width: 1280, height: 800 } : undefined)}
       stillSrc={stillSrc} covered={state.nativeCovered || Boolean(tab?.dialog)} contentRef={setDialogContainer}
       band={<AgentControl tab={tab} />} reserveBand
       overlay={tab?.dialog && <BrowserDialog key={tab.dialog.id} tab={tab} container={dialogContainer} />}

@@ -647,6 +647,7 @@ export const enUsCopy: AppCopy = {
     outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed.", savedToLibrary: "Saved to Library.", saveFailed: "Could not save to Library." },
     library: { changeFailed: "Could not save the change." },
     automations: { nextRun: "Next run", lastRun: "Last run", deleteFailed: "Could not delete the schedule.", edit: "Edit", allRuns: "All runs" },
+    browserLive: { screen: "Browser screen", keyboard: "Keyboard", connecting: "Connecting…", ended: "Screen closed.", failed: "Couldn't open the screen." },
   },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
@@ -890,7 +891,7 @@ export const enUsCopy: AppCopy = {
       waitHandoff: reason => ({ sign_in: "Sign-in needed", secure_field: "Your input needed", secure_keypad: "Security keypad needs you", captcha: "CAPTCHA needs you" } as Record<string, string>)[reason] ?? "Needs you in the tab",
       payStep: reason => ({ secure_keypad: "Security keypad", app_auth: "Card app approval", otp: "Verification code", three_ds: "Card issuer check", captcha: "CAPTCHA" } as Record<string, string>)[reason] ?? "Check the payment page",
       payHandoff: "Payment needs you",
-      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", openTab: "Open to check", stop: "Stop task", done: "Done", fields: { username: "Username", password: "Password", otp: "Code" }, submit: "Enter", savePrompt: username => `Save the sign-in for ${username}?` },
+      signInHandoff: { eyebrow: "Browser", title: "Sign-in needs you", inTab: "Finish in the tab, then give it back to Butler", onDesktop: "Finish this on your computer", openTab: "Open to check", stop: "Stop task", done: "Done", fields: { username: "Username", password: "Password", otp: "Code" }, submit: "Enter", savePrompt: username => `Save the sign-in for ${username}?`, openScreen: "Open screen" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "Click", fill: "Fill", select: "Select", hover: "Hover over", scroll: "Scroll", drag: "Drag", press: "Press a key in", type: "Type into", wait: "Wait" };
         const target = role === "wait" ? "" : role === "focus" ? "the focused element" : name ? `the ‘${name}’ ${role}` : `the ${role}`;

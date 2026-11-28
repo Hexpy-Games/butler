@@ -44,8 +44,12 @@ export async function resolveFocus(tab, obs, key) {
 }
 
 export async function dispatchKey(tab, chord, target) {
-  const contents = tab.view.webContents;
   tab.expectedInputs = ["rawKeyDown", "keyDown", "char", "keyUp"].map(type => ({ type }));
+  await sendChord(tab, chord, target);
+}
+
+export async function sendChord(tab, chord, target) {
+  const contents = tab.view.webContents;
   if (await remoteKey(target, chord)) return;
   contents.sendInputEvent({ type: "keyDown", keyCode: chord.keyCode, modifiers: chord.modifiers });
   if (chord.char) contents.sendInputEvent({ type: "char", keyCode: chord.char, modifiers: chord.modifiers });

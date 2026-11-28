@@ -15,6 +15,7 @@ mod host;
 mod import;
 mod import_export;
 mod input;
+mod live;
 mod native_import;
 mod oneclick;
 mod password_undo;

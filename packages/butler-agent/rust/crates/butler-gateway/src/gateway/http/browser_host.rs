@@ -7,6 +7,9 @@ pub(super) mod fill;
 mod hand_back;
 pub(super) mod hidden;
 pub(super) mod input;
+mod live;
+mod live_view;
+pub(super) use live_view::route as live_route;
 mod pay;
 mod payment_scope;
 mod previews;
@@ -14,7 +17,7 @@ pub(super) mod reader;
 mod report;
 mod shots;
 pub(super) mod signed_in;
-pub(super) use hand_back::{give_back_on_message, hand_back_wait};
+pub(super) use hand_back::{give_back_on_message, hand_back_wait, open_hand_off};
 mod still_delivery;
 mod usage;
 use super::{Client, HttpError, HttpState};
@@ -46,6 +49,7 @@ pub(super) struct Hub(
     Slots,
     pub(super) tokio::sync::Notify,
     tokio::sync::Mutex<()>,
+    pub(super) live::Feeds,
 );
 /// Browser calls executing at once, sized to the machine; a call beyond them
 /// waits for a slot instead of being refused, on whichever browser serves it.
@@ -238,7 +242,7 @@ pub(super) async fn route(
             reply.deliver(&hub, body);
             super::json(StatusCode::OK, json!({"ok":true}))
         }
-        _ => Err(error(404, "not_found")),
+        _ => live::upload(&state, request).await,
     }
 }
 async fn attach(
@@ -346,7 +350,7 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     if !attached && let Some(headless) = state.headless.clone().filter(|h| h.enabled()) {
         // No App: Butler's own browser checks the output, same policy and shape.
         let value = headless.output_check(&args, &origin).await;
-        return super::json(StatusCode::OK, checked(&value, &args));
+        return super::json(StatusCode::OK, report::checked(&value, &args));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
@@ -370,33 +374,12 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     let result = tokio::select! {
         () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
         result = tokio::time::timeout(Duration::from_secs(8), receiver) => match result {
-            Ok(Ok(value)) => checked(&value, &args),
+            Ok(Ok(value)) => report::checked(&value, &args),
             Ok(Err(_)) => json!({"status":"unknown","reason":"browser_host_lost"}),
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
     super::json(StatusCode::OK, result)
-}
-
-/// An executor's check result as the tool reports it, whichever browser ran it.
-fn checked(value: &Value, args: &Value) -> Value {
-    if value["status"] == "ok" && !allowed_result_url(value, args) {
-        return json!({"status":"navigation_denied"});
-    }
-    let mut report = report::shape(value);
-    if args["include_image"] != true
-        && let Some(r) = report.as_object_mut()
-    {
-        r.remove("image");
-    }
-    if args["include_image"] == true
-        && report.get("image").is_none()
-        && report["status"] != "unknown"
-    {
-        report["status"] = json!("unknown");
-        report["reason"] = json!("image_unavailable");
-    }
-    report
 }
 
 pub(super) async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
@@ -429,15 +412,6 @@ impl Drop for PendingCall {
         }
         self.state.browser.2.notify_waiters();
     }
-}
-
-fn allowed_result_url(value: &Value, args: &Value) -> bool {
-    let parse = |v: &Value| v.as_str().and_then(|s| url::Url::parse(s).ok());
-    parse(&value["url"])
-        .zip(parse(&args["url"]))
-        .is_some_and(|(reported, expected)| {
-            reported.origin() == expected.origin() && reported.path().starts_with("/__o/")
-        })
 }
 
 mod assets;

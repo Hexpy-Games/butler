@@ -92,7 +92,10 @@ function createExecutor({ flushState, stills, executeBrowser, request }) {
       }
       result ??= frame.op === "output.check" ? await checkOutput(frame.args, frame.lease)
         : frame.op === "reader.render" ? await renderReader(frame.args)
-          : await executeBrowser?.({ ...frame, deliverStill: value => stills.deliver(frame.id, value) })
+          : await executeBrowser?.({ ...frame, deliverStill: value => stills.deliver(frame.id, value),
+              deliverLive: value => request(`/internal/browser-host/live/${encodeURIComponent(frame.args?.sub ?? "")}`,
+                { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) }),
+            })
             ?? { status: "unknown", reason: "unsupported_op" };
     }
     catch (error) {

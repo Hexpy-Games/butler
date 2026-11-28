@@ -65,6 +65,8 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/hooks/{id}", Handler::Hooks),
     ("/hooks/{id}/test", Handler::Hooks),
     ("/browser-stills/{id}", Handler::BrowserStills),
+    ("/browser/tabs/{id}/live", Handler::BrowserLive),
+    ("/browser/tabs/{id}/live/input", Handler::BrowserLive),
     ("/internal/browser-host", Handler::Browser),
     ("/internal/browser-host/downloads", Handler::Browser),
     ("/internal/browser-host/events", Handler::Browser),
@@ -362,6 +364,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/internal/browser-host/vault/{id}", Handler::Browser),
     ("/internal/browser-host/inputs/{id}", Handler::Browser),
     ("/internal/browser-host/results/{id}", Handler::Browser),
+    ("/internal/browser-host/live/{id}", Handler::Browser),
     ("/internal/browser-host/renders/{id}", Handler::Browser),
     ("/internal/browser-host/images/{id}", Handler::Browser),
 ];

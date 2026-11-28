@@ -16,10 +16,11 @@ import { shortId } from "./ids.mjs";
 import { MAX_TABS, USER_TABS, agentTabFits } from "./capacity.mjs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { attachNativeWorlds } from "./native-worlds.mjs";
+import { attachNativeWorlds, syncUserHeld } from "./native-worlds.mjs";
+import { PhoneLive } from "./phone-live.mjs";
 import { addressUrl, browsingEnabled, createLossBreaker, webUrl } from "./policy.mjs";
 import { createTabRestore } from "./restore.mjs";
-import { backgroundTab, controlTab, emulation, hearTab, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
+import { backgroundTab, controlTab, emulation, hearTab, pageBounds, wireAgentTab, executeBrowser, viewedTab } from "./agent.mjs";
 import { wireUserDialogs, publicDialog, prepareUserNavigation } from "./user-dialogs.mjs";
 import { popupHandler, allowPopup, syncPopup, closePopups, publishPopup } from "./popups.mjs";
 import { resolveDialog, requestClose } from "./dialogs.mjs";
@@ -51,6 +52,7 @@ class UserBrowser {
     this.getWindow = getWindow;
     this.viewRecovery = createViewRecovery(this);
     this.live = new BrowserLiveFrames(this);
+    this.phoneLive = new PhoneLive(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
     this.signinSuggest = new SignInSuggest(this);
@@ -68,7 +70,7 @@ class UserBrowser {
     const popups = new Map();
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
-      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
+      tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, phoneViewport: tab.phoneViewport ? { width: tab.phoneViewport.width, height: tab.phoneViewport.height } : undefined, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
         signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
@@ -88,7 +90,7 @@ class UserBrowser {
       this.focusRequest = undefined;
     }
   }
-  resetUse() { resetUse(this); }
+  resetUse() { resetUse(this); this.phoneLive.reset(); }
   trip() {
     this.resetUse();
     for (const tab of [...this.tabs.values()]) {
@@ -133,7 +135,7 @@ class UserBrowser {
     // returns beneath it and stays on screen for the rest of the drag.
     const held = this.pointer.captures(tab.id) && this.pointer.attached === win;
     if (tab.attached !== win) this.detach(tab);
-    tab.bounds = tab.slot;
+    tab.bounds = pageBounds(tab, tab.slot);
     attachView(tab, win, held ? win.contentView.children.indexOf(this.pointer.view) : -1, () => {
       const { x, y, width, height } = tab.bounds;
       const left = Math.round(x), top = Math.round(y);
@@ -338,7 +340,7 @@ class UserBrowser {
     if (op === "bounds") {
       if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width < 0 || value.height < 0) throw new Error("invalid_bounds");
       // The slot alone decides where the page shows; a hidden agent page is placed in its own viewport.
-      tab.slot = value; if (!tab.agent) tab.bounds = value;
+      tab.slot = value; if (!tab.agent) tab.bounds = pageBounds(tab, value);
       this.sync(tab); return;
     }
     if (op === "covered") { tab.covered = value === true; this.sync(tab); return; }
@@ -398,9 +400,9 @@ class UserBrowser {
       if(toGroupId==="mine" && peers.length>=USER_TABS) throw new Error("tab_budget_exhausted");
     }
     const previousOwner = tab.owner;
-    if (toGroupId !== tab.owner) this.downloads.cancelTab(tabId);
+    if (toGroupId !== tab.owner) { this.downloads.cancelTab(tabId); void this.phoneLive.stop(tabId); }
     if (toGroupId !== tab.owner) { void resolveDialog(this, tab, { accept: false }, "owner_changed"); closePopups(this, tab); }
-    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
+    if (toGroupId !== tab.owner) { closeUse(this, tab); tab.owner = toGroupId; tab.epoch++; tab.observation = null; tab.holder = toGroupId === "mine" ? "user" : "agent"; syncUserHeld(tab); if (toGroupId === "mine") hearTab(tab); tab.sticky = false; tab.waiting = false; tab.waitingTurn = null; tab.pausedTurns = null; tab.pointer = null; }
     const ordered = [...this.tabs.values()].filter((item) => item.id !== tabId);
     const peers = ordered.filter((item) => item.owner === tab.owner);
     const before = peers[Math.max(0, index)];
@@ -451,6 +453,7 @@ class UserBrowser {
   }
   async dispose() {
     this.disposing = true;
+    this.phoneLive.reset();
     this.viewRecovery.dispose();
     await this.drainStills();
     await disposeMarkingHost();

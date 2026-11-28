@@ -645,6 +645,7 @@ export const koKrCopy: AppCopy = {
     outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다.", savedToLibrary: "서랍에 저장했습니다.", saveFailed: "서랍에 저장하지 못했습니다." },
     library: { changeFailed: "변경하지 못했습니다." },
     automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다.", edit: "편집", allRuns: "모든 실행 기록" },
+    browserLive: { screen: "브라우저 화면", keyboard: "키보드", connecting: "연결하는 중…", ended: "화면이 닫혔습니다.", failed: "화면을 열 수 없습니다." },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
@@ -888,7 +889,7 @@ export const koKrCopy: AppCopy = {
       waitHandoff: reason => ({ sign_in: "로그인 필요", secure_field: "직접 입력 필요", secure_keypad: "보안 키패드 입력 필요", captcha: "보안 문자 입력 필요" } as Record<string, string>)[reason] ?? "직접 확인 필요",
       payStep: reason => ({ secure_keypad: "보안 키패드", app_auth: "카드사 앱 인증", otp: "인증번호", three_ds: "카드사 본인 인증", captcha: "보안 문자" } as Record<string, string>)[reason] ?? "결제 화면 확인",
       payHandoff: "결제 확인 필요",
-      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", openTab: "열어서 확인", stop: "작업 중지", done: "입력 완료", fields: { username: "아이디", password: "비밀번호", otp: "인증번호" }, submit: "입력", savePrompt: username => `${username} 로그인을 저장할까요?` },
+      signInHandoff: { eyebrow: "브라우저", title: "로그인 확인 필요", inTab: "탭에서 마친 뒤 버틀러에게 돌려주세요", onDesktop: "PC의 버틀러에서 확인해 주세요", openTab: "열어서 확인", stop: "작업 중지", done: "입력 완료", fields: { username: "아이디", password: "비밀번호", otp: "인증번호" }, submit: "입력", savePrompt: username => `${username} 로그인을 저장할까요?`, openScreen: "화면 열기" },
       browserStep: (action, role, name, frame) => {
         const actions: Record<string, string> = { click: "클릭", fill: "입력", select: "선택", hover: "가리키기", scroll: "스크롤", drag: "끌기", press: "키 누르기", type: "입력", wait: "기다리기" };
         const roles: Record<string, string> = { button: "버튼", link: "링크", textbox: "입력란", combobox: "선택란", focus: "현재 포커스에", document: "페이지에", wait: "" };

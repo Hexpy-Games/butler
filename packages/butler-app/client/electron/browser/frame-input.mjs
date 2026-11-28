@@ -24,6 +24,11 @@ const bits = modifiers => (modifiers ?? []).reduce((sum, name) => sum | (BITS[na
 export function mouseSender(tab, ...targets) {
   const contents = tab.view.webContents;
   if (!targets.some(target => target?.[REMOTE_FRAME])) return async input => contents.sendInputEvent(input);
+  return cdpMouse(tab);
+}
+
+export function cdpMouse(tab) {
+  const contents = tab.view.webContents;
   return input => {
     // A move with the button held carries it as a modifier in Electron's form.
     const held = (input.modifiers ?? []).includes("leftButtonDown");
