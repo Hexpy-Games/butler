@@ -12,6 +12,7 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
 
 import { HomeHeader, HOME_HEADER_ROW } from "@/conversation/HomeHeader";
+import { HomeSearch } from "@/conversation/HomeSearch";
 import { HomeShortcuts } from "@/conversation/HomeShortcuts";
 import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { RowActions } from "@/conversation/RowActions";
@@ -94,6 +95,8 @@ function Conversations() {
   const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mode, setMode] = useState<ListMode>(loadListMode);
+  const [query, setQuery] = useState("");
+  const searching = query.trim() !== "";
   const changeMode = (next: ListMode) => { setMode(next); saveListMode(next); };
   const sidebars = useCanonSidebars(useMemo(() => view?.projects.filter(project => !project.archived && !collapsed.has(`p:${project.id}`)).map(project => project.id) ?? [], [view, collapsed]));
   const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? withCanon(spaceTree(view), sidebars, appCopy.canon.backlog) : { children: new Map() }, [view, sidebars, appCopy]);
@@ -131,7 +134,8 @@ function Conversations() {
   const paddingHorizontal = t.length("--space-4");
   return <>
     <GlassBackdrop overlay={<HomeHeader scrollY={scrollY} title={copy.conversations.title} settingsLabel={appCopy.sidebar.settings} onSettings={() => router.push("/settings")} />}>
-    <Animated.FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="never"
+    <Animated.FlatList data={searching ? [] : rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="never"
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       ref={(node: FlatList<SpaceRow> | null) => { if (typeof edgeRef === "function") edgeRef(node); }}
       style={{ backgroundColor: t.color("--color-surface-base") }}
       contentContainerStyle={{ flexGrow: 1, paddingHorizontal, paddingTop: insets.top + HOME_HEADER_ROW, paddingBottom: insets.bottom + t.length("--control-hit-target") + 2 * t.length("--space-4") }}
@@ -152,14 +156,17 @@ function Conversations() {
             } : {})}
             trailing={collapsed.has(item.key) && unread.has(item.key) ? <UnreadDot label={copy.conversations.unread} /> : undefined} />}
       </View>}
-      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4") }}>
+      ListEmptyComponent={searching ? undefined : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4") }}>
         {view ? <Text tone="secondary">{copy.conversations.empty}</Text>
           : error ? <>
             <Text tone="danger">{copy.conversations.loadFailed}</Text>
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={<HomeShortcuts status={status} general={tree.general} mode={mode} onModeChange={changeMode} />}
+      ListHeaderComponent={<View style={{ paddingTop: t.length("--space-6"), gap: t.length("--space-4") }}>
+        <HomeSearch query={query} onQueryChange={setQuery} />
+        {searching ? null : <HomeShortcuts status={status} general={tree.general} mode={mode} onModeChange={changeMode} />}
+      </View>}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />

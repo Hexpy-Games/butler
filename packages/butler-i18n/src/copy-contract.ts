@@ -515,7 +515,7 @@ export interface MobileCopy {
     retry: string;
     earlier: string;
   };
-  home: { checking: string; connected: string; retry: string; pairAgain: string };
+  home: { checking: string; connected: string; retry: string; pairAgain: string; searchEmpty: string };
   settings: {
     title: string;
     computer: string;

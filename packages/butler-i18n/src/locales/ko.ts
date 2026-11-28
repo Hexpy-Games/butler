@@ -621,6 +621,7 @@ export const koKrCopy: AppCopy = {
       connected: "연결됨",
       retry: "다시 시도",
       pairAgain: "다시 연결",
+      searchEmpty: "검색 결과가 없습니다.",
     },
     settings: {
       title: "설정",
