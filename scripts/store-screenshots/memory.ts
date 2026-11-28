@@ -146,9 +146,7 @@ export async function frameMemory(page: ElectronPage, words: Demo, locale: Local
     const viewportTop = () => rect(scroll).top + scroll.clientTop;
     const position = (node, edge) => rect(node)[edge] - viewportTop() + scroll.scrollTop;
     const preferred = Math.max(0, Math.floor(position(instructionSection, 'top') - 16));
-    const needed = Math.ceil(position(facts, 'bottom') - scroll.clientHeight);
-    const limit = Math.floor(position(ruleRows[0], 'top') - 8);
-    const targetScrollTop = Math.max(0, Math.min(scroll.scrollHeight - scroll.clientHeight, Math.max(preferred, Math.min(needed, limit))));
+    const targetScrollTop = Math.max(0, Math.min(scroll.scrollHeight - scroll.clientHeight, preferred));
     scroll.scrollTo({ top: targetScrollTop, behavior: 'instant' });
     await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
     if (!scroll.isConnected || !facts.isConnected) throw new Error('Memory scroll container was replaced during capture');
