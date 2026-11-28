@@ -11,7 +11,7 @@ type Geometry = {
   contentBounds: Bounds;
 };
 type View = { theme: string; language: string; visibleTextLength: number };
-type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string };
+type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string; beforePixels?: object };
 
 const screenScript = join(import.meta.dir, "screen.ps1");
 const paint = "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))";
@@ -71,7 +71,6 @@ async function settle(app: App, bounds: Bounds) {
     ${windowSetup}
     await browserView()?.webContents.executeJavaScript(${JSON.stringify(paint)});
   })()`);
-  await app.page.expression("Promise.all([...document.querySelectorAll('[data-test-class=browser-step-still] img')].map(img => img.decode()))");
 }
 
 async function composite(app: App, path: string) {
@@ -103,12 +102,14 @@ async function composite(app: App, path: string) {
   })()`, false, 25_000);
 }
 
-async function pixels(app: App, path: string, facts: Facts) {
+async function pixels(app: App, path: string, facts: Facts, beforePixels?: (app: App) => Promise<object>) {
+  if (beforePixels) facts.beforePixels = await beforePixels(app);
   try {
     screen("-Mode", "Capture", "-Out", path);
     facts.method = "screen";
   } catch (error) {
     facts.screenError = app.safe(String(error));
+    if (beforePixels) facts.beforePixels = await beforePixels(app);
     await composite(app, path);
     facts.method = "capturePage";
   }
@@ -117,13 +118,17 @@ async function pixels(app: App, path: string, facts: Facts) {
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1920, 1080], "PNG dimensions");
 }
 
-export function shotRecorder(out: string, locale: Locale) {
+export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<string>) {
   mkdirSync(out, { recursive: true });
-  const facts = { ...locale, shots: [] as Facts[], stubRequests: {} as Record<string, number>, memoryModel: null as unknown, errors: [] as string[] };
+  const facts = { ...locale, selected: [...selected], shots: [] as Facts[], stubRequests: {
+    profile_import: 0, pattern_extraction: 0, pattern_proposal: 0, extract_profile_candidates: 0, other_memory_tasks: 0,
+  } as Record<string, number>, memoryModel: null as unknown, memoryRun: null as unknown, errors: [] as string[] };
   return {
     facts,
+    selected: (prefix: string) => selected.has(prefix),
     save: () => writeFileSync(join(out, "facts.json"), JSON.stringify(facts, null, 2) + "\n"),
-    async shot(name: string, app: App | undefined, prepare: () => Promise<void>) {
+    async shot(name: string, app: App | undefined, prepare: () => Promise<void>, beforePixels?: (app: App) => Promise<object>) {
+      if (!selected.has(name.slice(0, 2))) return;
       const entry: Facts = { name };
       facts.shots.push(entry);
       const path = join(out, `${name}.png`);
@@ -142,7 +147,7 @@ export function shotRecorder(out: string, locale: Locale) {
         })));
         assert.equal(entry.theme, locale.theme);
         assert.equal(entry.language?.split("-")[0], locale.language);
-        await pixels(app, path, entry);
+        await pixels(app, path, entry, beforePixels);
       } catch (error) {
         entry.error = app ? app.safe(String(error)) : String(error);
         rmSync(path, { force: true });

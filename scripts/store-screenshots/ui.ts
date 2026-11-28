@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import type { ElectronPage } from "../../tests/support/electron-page-cdp.ts";
 import { type App, type Locale, until, windowSetup } from "./app.ts";
-import type { demo } from "./demo.ts";
+import { getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
+import { demoModel, type Demo } from "./demo.ts";
 
 const buttons = "button, [role=button]";
 const sidebar = '[data-test-class="app-sidebar"]';
 const sidebarItems = `${sidebar} :is(button, [role=button], a, [role=treeitem])`;
 export const approval = '[data-test-class="composer-authority-decision"]';
-const instructions = '[data-settings-section-id="instructions"]';
 const approvalCode = '[data-slot="composer-decision-code"] pre';
 
 export function readApprovalCard(page: ElectronPage, allowLabel: string) {
@@ -85,7 +85,7 @@ export async function openChat(page: ElectronPage, title: string, prompt?: strin
   if (prompt) await textVisible(page, prompt);
 }
 
-export async function organized(page: ElectronPage, words: ReturnType<typeof demo>) {
+export async function organized(page: ElectronPage, words: Demo) {
   await openChat(page, words.A[0], words.A[1]);
   const table = '[data-test-class="message assistant"] table';
   await page.waitForFunction(table => Boolean(document.querySelector(table)), table);
@@ -96,7 +96,7 @@ export async function organized(page: ElectronPage, words: ReturnType<typeof dem
   }, table);
 }
 
-export async function pendingZip(page: ElectronPage, words: ReturnType<typeof demo>, locale: Locale) {
+export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale) {
   await openChat(page, words.B[0], words.B[1]);
   await page.waitForFunction(({ approval, approvalCode, command, label }) => {
     const panel = document.querySelector(approval);
@@ -105,16 +105,29 @@ export async function pendingZip(page: ElectronPage, words: ReturnType<typeof de
     return Boolean(bounds && bounds.width > 0 && bounds.top >= 0 && bounds.bottom <= innerHeight &&
       code && code.scrollWidth <= code.clientWidth + 1 && code.textContent?.trim() === command &&
       panel?.textContent?.includes(label));
-  }, { approval, approvalCode, command: words.zip, label: locale.language === "ko" ? "이번만 허용" : "Allow once" });
+  }, { approval, approvalCode, command: words.zip, label: getAppCopy(locale.locale).interfaceDetails.allowOnce });
 }
 
-export async function browserShot(app: App, words: ReturnType<typeof demo>) {
-  const { page } = app;
-  await openChat(page, words.C[0], words.C[1]);
+export async function assertModelChip(page: ElectronPage, locale: Locale) {
+  const chip = await page.evaluate(() => document.querySelector<HTMLElement>('[data-test-class="model-button"]')?.innerText ?? "");
+  assert(chip.includes(demoModel.display_name) && !chip.includes(reasoningEffortLabel("none", locale.locale)),
+    `Unexpected composer model chip: ${JSON.stringify(chip)}`);
+  return { modelChip: chip };
+}
+
+export async function openBrowserPane(page: ElectronPage) {
   const toggle = '[data-test-class="titlebar-browser-toggle"]';
-  if (!await page.expression("Boolean(document.querySelector('#butler-browser-area')?.getBoundingClientRect().width)")) {
+  const area = "#butler-browser-area";
+  if (!await page.expression(`Boolean(document.querySelector(${JSON.stringify(area)})?.getBoundingClientRect().width)`)) {
     await clickSelector(page, toggle);
   }
+  await page.waitForFunction(area => Boolean(document.querySelector(area)?.getBoundingClientRect().width), area);
+}
+
+export async function browserShot(app: App, words: Demo) {
+  const { page } = app;
+  await openChat(page, words.C[0], words.C[1]);
+  await openBrowserPane(page);
   await until(() => app.main.evaluate<boolean>(`(async () => {
     ${windowSetup}
     const contents = browserView()?.webContents;
@@ -125,25 +138,43 @@ export async function browserShot(app: App, words: ReturnType<typeof demo>) {
   })()`), "the Schedules manual in the visible Browser pane");
 }
 
-export async function schedulesShot(page: ElectronPage, words: ReturnType<typeof demo>) {
-  await click(page, words.navSchedules, sidebarItems);
-  for (const [title] of words.schedules) await textVisible(page, title);
+export async function assertBrowserStills(page: ElectronPage, locale: Locale) {
+  const copy = getAppCopy(locale.locale).browser;
+  const labels = [...Object.values(copy.stillFailure), copy.stillUnavailable];
+  let state = { images: 0, loaded: 0, pending: false, failure: null as string | null };
+  await until(async () => {
+    state = await page.expression<typeof state>(`(() => {
+      const stills = [...document.querySelectorAll('[data-test-class=browser-step-still]')];
+      const images = stills.flatMap(node => [...node.querySelectorAll('img')]);
+      const text = stills.filter(node => node.checkVisibility()).map(node => node.innerText).join(' ');
+      return {
+        images: images.length,
+        loaded: images.filter(img => img.complete && img.naturalWidth > 0).length,
+        pending: text.includes(${JSON.stringify(copy.stillPending)}),
+        failure: ${JSON.stringify(labels)}.find(label => text.includes(label)) ?? null,
+      };
+    })()`);
+    assert(!state.failure, `Chat C browser still failed: ${state.failure}`);
+    return state.images > 0 && state.loaded === state.images && !state.pending;
+  }, async () => `loaded chat C browser stills: ${JSON.stringify(state)}`);
+  return { browserStills: state.images };
 }
 
-export async function memoryShot(page: ElectronPage, words: ReturnType<typeof demo>, locale: Locale) {
-  const ko = locale.language === "ko";
-  await click(page, ko ? "설정" : "Settings");
-  await click(page, ko ? "기억" : "Memory");
-  await page.waitForFunction(({ instructions, rules }) => {
-    const section = document.querySelector<HTMLElement>(instructions);
-    const scroll = section?.closest<HTMLElement>('[data-test-class="settings-detail-scroll"]');
-    const chatCard = scroll?.querySelector('[data-settings-section-id="chat-memory"] [data-slot="form-section-card"]');
-    if (!section || !scroll || !chatCard?.getBoundingClientRect().width ||
-      !rules.every(rule => section.innerText.includes(rule))) return false;
-    const origin = scroll.getBoundingClientRect().top + scroll.clientTop - scroll.scrollTop;
-    const instructionsTop = section.getBoundingClientRect().top - origin;
-    const chatCardBottom = chatCard.getBoundingClientRect().bottom - origin;
-    scroll.scrollTo({ top: Math.max(0, Math.min(instructionsTop - 24, chatCardBottom - scroll.clientHeight + 24)), behavior: "instant" });
-    return true;
-  }, { instructions, rules: [...words.memory] });
+export async function schedulesShot(page: ElectronPage, words: Demo, locale: Locale) {
+  await click(page, words.navSchedules, sidebarItems);
+  const view = '[data-test-class="automations-view"]';
+  const general = getAppCopy(locale.locale).space.general;
+  await page.waitForFunction(({ view, titles }) => {
+    const text = document.querySelector<HTMLElement>(view)?.innerText ?? "";
+    return titles.every(title => text.includes(title));
+  }, { view, titles: words.schedules.map(([title]) => title) });
+  const rows = await page.expression<string[][]>(`[...document.querySelectorAll(${JSON.stringify(`${view} [data-slot=clickable]`)})]
+    .map(row => row.innerText.split('\\n').map(line => line.trim()).filter(Boolean))`);
+  assert.equal(rows.length, words.schedules.length, "Unexpected number of schedule rows");
+  assert(!rows.some(lines => lines.includes("General")), 'Schedule list shows the unlocalized target "General"');
+  for (const [index, [title]] of words.schedules.entries()) {
+    const target = index === 1 ? words.A[0] : general;
+    const row = rows.find(lines => lines[0] === title);
+    assert.equal(row?.at(-1), target, `Unexpected target for schedule ${JSON.stringify(title)}`);
+  }
 }

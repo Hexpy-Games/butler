@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import { bridgeBrowser, describeBrowser, latestBrowser } from "../../tests/support/browser-agent-stub.ts";
 import { startStubModel, type StubModelRequest } from "../../tests/support/native-app-server.ts";
 import type { Api, Locale } from "./app.ts";
+import { memoryReply } from "./memory-stub.ts";
 
 export const demoRoot = "C:\\Users\\Demo";
 const downloads = `${demoRoot}\\Downloads`;
@@ -21,11 +22,22 @@ const names = {
 const folders = { ko: ["문서", "표", "사진", "압축 파일"], en: ["Documents", "Spreadsheets", "Photos", "Archives"] };
 const extensions = [[".pdf", ".docx", ".pptx"], [".xlsx", ".csv"], [".jpg", ".png"], [".zip"]];
 
+export const demoModel = {
+  model_id: "stub", model_ref: "local/stub", display_name: "Qwen3 8B", platform: "lm_studio",
+  context_window_tokens: 128000, max_output_tokens: 8192, reasoning_budget_ratio: 0.25,
+};
+
 const copy = {
   ko: {
-    model: "로컬 모델", navSchedules: "예약 작업", newSchedule: "새 예약 작업", moveFiles: "파일 종류별로 이동", zipPhotos: "사진 압축",
+    navSchedules: "예약 작업", newSchedule: "새 예약 작업", moveFiles: "파일 종류별로 이동", zipPhotos: "사진 압축",
     zip: "사진_2026-11.zip",
     memory: ["보고서는 표로 정리하고 끝에 세 줄 요약을 붙인다.", "파일 이름은 '날짜_내용' 형식으로 짓는다."],
+    profileImport: "답은 짧고 정중하게 받는 것을 좋아합니다. 보고서는 표로 받고 싶습니다.",
+    profileSummary: "짧고 정중한 답을 선호합니다.",
+    patterns: [
+      ["파일 정리 맡기기", "다운로드와 사진 정리를 버틀러에게 맡깁니다."],
+      ["설명서 찾아보기", "버틀러 설명서에서 사용법을 찾아봅니다."],
+    ],
     D: ["보고서 작성 방식", "앞으로 보고서는 표로 정리하고 끝에 세 줄 요약을 붙여 주세요. 파일 이름은 날짜_내용 형식으로 지어 주세요.", "알겠습니다. 두 가지 모두 지침으로 저장했습니다."],
     C: ["예약 작업 만드는 법", "버틀러 설명서에서 예약 작업 만드는 방법을 찾아 주세요.", "설명서의 '예약 작업' 페이지에서 찾았습니다.\n\n1. 사이드바에서 **예약 작업**을 누릅니다.\n2. **새 예약 작업**을 누르고 제목과 프롬프트를 입력합니다.\n3. 대상 대화, 모델, 권한, 주기를 고릅니다.\n4. **저장**을 누르면 목록에 나타납니다."],
     A: ["다운로드 폴더 정리", "다운로드 폴더를 파일 종류별로 정리해 주세요.", "다운로드 폴더를 정리했습니다.\n\n| 폴더 | 파일 | 예 |\n|---|---|---|\n| 문서 | 5개 | 2026_여행_일정표.pdf |\n| 표 | 2개 | 2026_가계부.xlsx |\n| 사진 | 4개 | 가족사진_1102.jpg |\n| 압축 파일 | 1개 | 레시피_모음.zip |\n\n지운 파일은 없습니다."],
@@ -35,12 +47,20 @@ const copy = {
       ["다운로드 폴더 정리", "다운로드 폴더를 파일 종류별로 정리해 주세요."],
       ["주간 가계부 요약", "이번 주 가계부를 표로 요약해 주세요."],
       ["할 일 확인", "남은 할 일을 확인해 주세요."],
+      ["평일 업무 정리", "오늘 한 일을 세 줄로 정리해 주세요."],
+      ["월요일 주간 계획", "이번 주 할 일을 표로 정리해 주세요."],
     ],
   },
   en: {
-    model: "Local model", navSchedules: "Schedules", newSchedule: "New schedule", moveFiles: "Move files by type", zipPhotos: "Zip photos",
+    navSchedules: "Schedules", newSchedule: "New schedule", moveFiles: "Move files by type", zipPhotos: "Zip photos",
     zip: "photos_2026-11.zip",
     memory: ["Put reports in a table and end with a three-line summary.", "Name files as date_topic."],
+    profileImport: "I like short, polite answers. I want reports as tables.",
+    profileSummary: "Prefers short, polite answers.",
+    patterns: [
+      ["Hand off file cleanup", "Asks Butler to sort downloads and photos."],
+      ["Look things up in the manual", "Asks Butler to find how-tos in its manual."],
+    ],
     D: ["Report style", "From now on, put reports in a table and end with a three-line summary. Name files as date_topic.", "Got it. I saved both as instructions."],
     C: ["How to create a schedule", "Find how to create a schedule in the Butler manual.", "I found it on the manual's Schedules page.\n\n1. Click **Schedules** in the sidebar.\n2. Click **New schedule** and enter a title and a prompt.\n3. Choose the target chat, model, permission and frequency.\n4. Click **Save**; it appears in the list."],
     A: ["Tidy the Downloads folder", "Sort my Downloads folder by file type.", "I organized the Downloads folder.\n\n| Folder | Files | Example |\n|---|---|---|\n| Documents | 5 | 2026_trip_itinerary.pdf |\n| Spreadsheets | 2 | budget_2026.xlsx |\n| Photos | 4 | family_photo_1102.jpg |\n| Archives | 1 | recipes.zip |\n\nNothing was deleted."],
@@ -50,6 +70,8 @@ const copy = {
       ["Tidy Downloads", "Sort my Downloads folder by file type."],
       ["Weekly budget summary", "Summarize this week's budget in a table."],
       ["To-do check", "Check what is left on my to-do list."],
+      ["Weekday wrap-up", "Summarize what I did today in three lines."],
+      ["Monday plan", "Put this week's to-dos in a table."],
     ],
   },
 } as const;
@@ -71,7 +93,7 @@ export function demo(language: Language) {
   const zip = `Compress-Archive ${demoRoot}\\Pictures\\2026-11 ${demoRoot}\\Desktop\\${words.zip}`;
   return { ...words, organize, zip, zipName: words.zip, helpPath: language === "ko" ? "/help/" : "/en/help/" };
 }
-type Demo = ReturnType<typeof demo>;
+export type Demo = ReturnType<typeof demo>;
 
 function observationText(request: StubModelRequest) {
   const observation = latestBrowser(request, "obs");
@@ -121,6 +143,11 @@ export async function startDemoStub(words: Demo, counts: Record<string, number>)
     }));
   const conversation = (request: StubModelRequest) => request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0;
   const stub = await startStubModel(request => {
+    const hasTools = Array.isArray(request.body.tools) && request.body.tools.length > 0;
+    if (!hasTools) {
+      const reply = memoryReply(request, words, counts);
+      if (reply !== undefined) return reply;
+    }
     const chat = match(request) ?? (conversation(request) ? undefined : current);
     if (!chat) return "";
     counts[chat] = (counts[chat] ?? 0) + 1;
@@ -167,15 +194,18 @@ export function assertOrganized(language: Language) {
   }
 }
 
-export async function createSchedules(api: Api, language: Language) {
+export async function createSchedules(api: Api, language: Language, downloadsSession: string) {
   const tz = language === "ko" ? "Asia/Seoul" : "America/New_York";
   const cadence = [
     { schedule: { kind: "daily", time: "08:00", tz } },
     { schedule: { kind: "weekly", time: "18:00", weekdays: [5], tz } },
     { schedule: { kind: "weekly", time: "20:00", weekdays: [7], tz } },
     { interval_seconds: 7200 },
+    { schedule: { kind: "weekly", time: "18:30", weekdays: [1, 2, 3, 4, 5], tz } },
+    { schedule: { kind: "weekly", time: "09:00", weekdays: [1], tz } },
   ];
   for (const [index, [title, prompt_body]] of copy[language].schedules.entries()) {
-    await api("/automations", "POST", { title, prompt_body, target_session_id: "general", ...cadence[index] });
+    const target_session_id = index === 1 ? downloadsSession : "general";
+    await api("/automations", "POST", { title, prompt_body, target_session_id, ...cadence[index] });
   }
 }

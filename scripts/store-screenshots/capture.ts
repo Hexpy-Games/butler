@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeOnboardingComplete } from "../../tests/support/native-app-server.ts";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { type Api, type App, type Locale, locales, redact, startApp, until } from "./app.ts";
-import { assertOrganized, chatOrder, createSchedules, demo, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
+import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { shotRecorder } from "./shots.ts";
-import { approval, browserShot, click, firstRun, memoryShot, openChat, organized, pendingZip, readApprovalCard, schedulesShot, verifyTheme } from "./ui.ts";
+import { frameMemory, prepareMemory, type MemoryProgress } from "./memory.ts";
+import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
 type Stub = Awaited<ReturnType<typeof startDemoStub>>;
-type MemoryProgress = { state: string; reason?: string; bytes_done: number; bytes_total: number };
 type Authority = { request_ref: string; executable?: string; approval?: { operation?: { command?: string; tool?: string } } };
 type TurnView = { latest_turn?: { state: string; safe_error_code?: string }; authority_requests?: Authority[] };
 
@@ -43,6 +43,7 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
   const [title, text] = words[chat];
   const { session } = await api<{ session: { id: string } }>("/sessions", "POST", { kind: "chat", title });
   await openChat(app.page, title);
+  if (chat === "C") await openBrowserPane(app.page);
   stub.select(chat);
   await api("/messages", "POST", { chat_id: session.id, text, client_message_id: crypto.randomUUID() });
   const answered = new Set<string>();
@@ -81,6 +82,7 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
     if (pending) answered.add(pending.request_ref);
     return false;
   }, () => chatTimeout(app, chat, lastView), 120_000);
+  return session.id;
 }
 
 async function applyPending(api: Api, words: Words) {
@@ -92,29 +94,12 @@ async function applyPending(api: Api, words: Words) {
   }
 }
 
-async function awaitMemory(api: Api, started: number, initial: MemoryProgress | null) {
-  let memory = initial;
-  let lastError: string | undefined;
-  const deadline = started + 600_000;
-  do {
-    try {
-      const response = await api<{ memory_model?: MemoryProgress }>("/setup/readiness");
-      memory = response.memory_model ?? memory;
-      lastError = undefined;
-      if (memory && ["ready", "failed", "off"].includes(memory.state)) return memory;
-    } catch (error) { lastError = String(error); }
-    if (Date.now() >= deadline) break;
-    await Bun.sleep(Math.min(2000, deadline - Date.now()));
-  } while (Date.now() < deadline);
-  return { ...memory, state: memory?.state ?? "unknown", timedOut: true, lastError };
-}
-
-function configure(data: string, locale: Locale, words: Words, stub: Stub) {
+function configure(data: string, locale: Locale, stub: Stub) {
   writeOnboardingComplete(data);
   writeFileSync(join(data, "butler.config.json"), JSON.stringify({
     user: { language: locale.language },
-    system: { defaultModel: "local/demo" },
-    models: { local: [{ model_id: "demo", display_name: words.model, server_url: `http://127.0.0.1:${stub.port}`, context_window_tokens: 128000 }] },
+    system: { defaultModel: demoModel.model_ref },
+    models: { local: [{ ...demoModel, server_url: `http://127.0.0.1:${stub.port}` }] },
     metrics: { enabled: false },
   }));
 }
@@ -128,16 +113,25 @@ async function setupWorkspace(app: App, locale: Locale, shots: Recorder) {
   await api("/setup/butler-vault/decline", "POST");
   const settings = await api<{ access_mode: string }>("/settings");
   assert.equal(settings.access_mode, "ask_except_reads");
-  const memoryStarted = Date.now();
+  let memorySetupFailure: unknown;
+  if (shots.selected("06")) {
+    try { await enableMemory(api, shots); }
+    catch (error) { memorySetupFailure = error; }
+  }
+  await app.page.reload();
+  await verifyTheme(app.page, locale);
+  return { api, memorySetupFailure };
+}
+
+async function enableMemory(api: Api, shots: Recorder) {
+  await api("/personalization", "PATCH", { profiling: { mode: "basic" } });
   try {
     const reply = await api<{ memory_model?: MemoryProgress }>("/setup/memory-model", "POST", { enabled: true });
     shots.facts.memoryModel = reply.memory_model ?? null;
   } catch (error) {
-    shots.facts.memoryModel = { state: "request_failed", error: app.safe(String(error)) };
+    shots.facts.memoryModel = { state: "request_failed", error: redact(String(error)) };
+    throw error;
   }
-  await app.page.reload();
-  await verifyTheme(app.page, locale);
-  return { api, memoryStarted };
 }
 
 async function workspace(exe: string, out: string, locale: Locale, shots: Recorder) {
@@ -146,28 +140,30 @@ async function workspace(exe: string, out: string, locale: Locale, shots: Record
   const data = join(root, "data");
   let stub: Stub | undefined;
   let app: App | undefined;
-  let ready: Awaited<ReturnType<typeof setupWorkspace>> | undefined;
+  let setup: Awaited<ReturnType<typeof setupWorkspace>> | undefined;
+  const sessions = new Map<Chat, string>();
   let setupFailure: unknown;
   let ownsDemo = false;
   const chatFailures = new Map<Chat, unknown>();
   try {
     try {
       stub = await startDemoStub(words, shots.facts.stubRequests);
-      configure(data, locale, words, stub);
+      configure(data, locale, stub);
       mkdirSync(demoRoot); // Refuse to reuse an existing profile; delete only this run's fixture.
       ownsDemo = true;
       populateDemoFiles(locale.language);
       app = await startApp(exe, data, root, locale, out, "workspace");
-      ready = await setupWorkspace(app, locale, shots);
+      setup = await setupWorkspace(app, locale, shots);
+      const { api } = setup;
       for (const chat of chatOrder) {
         try {
-          await playChat(app, ready.api, locale, words, stub, chat);
-          if (chat === "D") await applyPending(ready.api, words);
+          sessions.set(chat, await playChat(app, api, locale, words, stub, chat));
+          if (chat === "D") await applyPending(api, words);
           if (chat === "A") assertOrganized(locale.language);
         } catch (error) { chatFailures.set(chat, error); }
       }
     } catch (error) { setupFailure = error; }
-    await workspaceShots(shots, app, ready, locale, words, chatFailures, setupFailure);
+    await workspaceShots(shots, app, setup, locale, words, sessions, chatFailures, setupFailure);
   } finally {
     try { await app?.stop(); }
     finally {
@@ -180,31 +176,33 @@ async function workspace(exe: string, out: string, locale: Locale, shots: Record
   }
 }
 
-async function workspaceShots(shots: Recorder, app: App | undefined, ready: Awaited<ReturnType<typeof setupWorkspace>> | undefined,
-  locale: Locale, words: Words, chatFailures: Map<Chat, unknown>, setupFailure: unknown) {
-  const take = (name: string, chat: Chat | undefined, prepare: (app: App, api: Api) => Promise<void>) =>
+async function workspaceShots(shots: Recorder, app: App | undefined,
+  setup: Awaited<ReturnType<typeof setupWorkspace>> | undefined, locale: Locale,
+  words: Words, sessions: Map<Chat, string>, chatFailures: Map<Chat, unknown>, setupFailure: unknown) {
+  const take = (name: string, dependencies: readonly Chat[], prepare: (app: App, api: Api) => Promise<void>,
+    beforePixels?: (app: App) => Promise<object>) =>
     shots.shot(name, app, async () => {
       if (setupFailure) throw setupFailure;
-      assert(app && ready, "Workspace setup did not finish");
-      if (chat && chatFailures.has(chat)) throw chatFailures.get(chat);
-      await prepare(app, ready.api);
-    });
-  await take("02-organize-files", "A", app => organized(app.page, words));
-  await take("03-ask-first", "B", app => pendingZip(app.page, words, locale));
-  await take("04-browser", "C", app => browserShot(app, words));
-  await take("05-schedules", undefined, async (app, api) => {
-    await createSchedules(api, locale.language);
-    await schedulesShot(app.page, words);
+      assert(app && setup, "Workspace setup did not finish");
+      for (const chat of dependencies) if (chatFailures.has(chat)) throw chatFailures.get(chat);
+      await prepare(app, setup.api);
+    }, beforePixels);
+  await take("02-organize-files", ["A"], app => organized(app.page, words));
+  await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), app => assertModelChip(app.page, locale));
+  await take("04-browser", ["C"], app => browserShot(app, words), app => assertBrowserStills(app.page, locale));
+  await take("05-schedules", ["A"], async (app, api) => {
+    const target = sessions.get("A");
+    assert(target, "Downloads chat did not return a session ID");
+    await createSchedules(api, locale.language, target);
+    await schedulesShot(app.page, words, locale);
   });
-  const memory = shots.facts.memoryModel as MemoryProgress | null;
-  if (ready && memory?.state !== "request_failed") {
-    shots.facts.memoryModel = await awaitMemory(ready.api, ready.memoryStarted, memory);
-  }
-  await take("06-memory", "D", app => memoryShot(app.page, words, locale));
+  await take("06-memory", chatOrder, (app, api) => {
+    if (setup?.memorySetupFailure) throw setup.memorySetupFailure;
+    return prepareMemory(app, api, words, locale, shots.facts);
+  }, app => frameMemory(app.page, words, locale));
 }
 
-async function captureLocale(exe: string, out: string, locale: Locale) {
-  const shots = shotRecorder(out, locale);
+async function captureFirstRun(exe: string, out: string, locale: Locale, shots: Recorder) {
   const root = mkdtempSync(join(tmpdir(), "store-shots-setup-"));
   let app: App | undefined;
   let startupFailure: unknown;
@@ -224,20 +222,29 @@ async function captureLocale(exe: string, out: string, locale: Locale) {
       shots.save();
     }
   }
-  try { await workspace(exe, out, locale, shots); }
-  catch (error) { shots.facts.errors.push(redact(String(error))); }
+}
+
+async function captureLocale(exe: string, out: string, locale: Locale, selected: ReadonlySet<string>) {
+  const shots = shotRecorder(out, locale, selected);
+  if (selected.has("01")) await captureFirstRun(exe, out, locale, shots);
+  try {
+    if ([...selected].some(prefix => prefix !== "01")) await workspace(exe, out, locale, shots);
+  } catch (error) { shots.facts.errors.push(redact(String(error))); }
   finally { shots.save(); }
   for (const shot of shots.facts.shots) console.log(`${locale.locale} ${shot.name}: ${shot.error ? "FAILED (see facts.json)" : shot.method}`);
-  return shots.facts.errors.length > 0 || shots.facts.shots.length !== 6 || shots.facts.shots.some(shot => Boolean(shot.error));
+  return shots.facts.errors.length > 0 || shots.facts.shots.length !== selected.size ||
+    shots.facts.shots.some(shot => Boolean(shot.error));
 }
 
 const [appDirectory, outputDirectory] = process.argv.slice(2);
 assert(process.platform === "win32" && appDirectory && outputDirectory, "Usage on Windows: bun capture.ts <app-dir> <out-dir>");
 const executable = resolve(appDirectory, "Butler.exe");
 assert(existsSync(executable), "Butler.exe was not found");
+const selected = new Set(readFileSync(join(import.meta.dir, "shots"), "utf8").split(/\r?\n/u).map(line => line.trim()).filter(Boolean));
+assert([...selected].every(prefix => /^0[1-6]$/u.test(prefix)), "shots must list prefixes 01 through 06");
 let failed = false;
 for (const locale of locales) {
-  try { failed = await captureLocale(executable, resolve(outputDirectory, locale.locale), locale) || failed; }
+  try { failed = await captureLocale(executable, resolve(outputDirectory, locale.locale), locale, selected) || failed; }
   catch {
     // Details written to the locale's artifacts are redacted before upload.
     console.error(`${locale.locale} capture did not finish. See the locale artifacts.`);
