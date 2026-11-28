@@ -3,7 +3,7 @@ import { DoneIconButton, Download, IconButton, Library, Pencil } from "@/butler-
 import { answerActionFailed, runAnswerAction } from "../conversation/answerBlockActions";
 import { useComposerStore } from "../conversation/composerStore";
 import { saveLibrary } from "../browser/libraryStore";
-import { assetSource, type ImageAsset } from "./imageApi";
+import { assetSource, importImageAsset, type ImageAsset } from "./imageApi";
 import { openImageEditor } from "./imageEditorState";
 import { useImageModelReady } from "./imageSettingsState";
 
@@ -22,15 +22,21 @@ export async function downloadGeneratedImage(asset: ImageAsset) {
     document.body.append(link); link.click(); link.remove();
   }
 }
-export function GeneratedImageActions({ asset, session, title }: { asset: ImageAsset; session: string; title: string }) {
+export function ImageEditButton({ session, asset, fileId }: { session: string; asset?: ImageAsset; fileId?: string }) {
   useAppLocale();
   const ready = useImageModelReady();
   const readOnly = useComposerStore(s => s.accessMode) === "read_only";
   const copy = appCopy.conversation.imageTools;
-  const blocks = appCopy.conversation.answerBlocks;
   const reason = readOnly ? copy.readOnly : !ready ? copy.noModel : undefined;
+  return <IconButton label={reason ?? copy.edit} aria-label={copy.edit} disabled={Boolean(reason)}
+    onClick={() => runAnswerAction(async () => openImageEditor(session, asset ?? await importImageAsset(session, fileId!)))}><Pencil size="sm" /></IconButton>;
+}
+export function GeneratedImageActions({ asset, session, title }: { asset: ImageAsset; session: string; title: string }) {
+  useAppLocale();
+  const copy = appCopy.conversation.imageTools;
+  const blocks = appCopy.conversation.answerBlocks;
   return <>
-    <IconButton label={reason ?? copy.edit} aria-label={copy.edit} disabled={Boolean(reason)} onClick={() => openImageEditor(session, asset)}><Pencil size="sm" /></IconButton>
+    <ImageEditButton session={session} asset={asset} />
     <DoneIconButton key={asset.id} icon={<Library size="sm" />} label={blocks.saveToLibrary} doneLabel={blocks.savedToLibrary}
       announce={false} onAction={() => saveGeneratedImage(asset, session, title)} onError={answerActionFailed} />
     <IconButton label={copy.download} onClick={() => runAnswerAction(() => downloadGeneratedImage(asset))}><Download size="sm" /></IconButton>

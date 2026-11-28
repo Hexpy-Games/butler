@@ -16,6 +16,9 @@ export interface ImageModel {
 export interface ImageSettings { selected: ImageSelection | null; models: ImageModel[]; registered: string[] }
 export const getImageSettings = () => api<ImageSettings>("/settings/image-model");
 export const getImageMeta = (id: string, signal?: AbortSignal) => api<ImageAsset>(`/message-assets/${encodeURIComponent(id)}/meta`, { signal });
+export const importImageAsset = (session: string, fileId: string) => api<ImageAsset>(
+  `/message-assets/import?session=${encodeURIComponent(session)}&file=${encodeURIComponent(fileId)}`, { method: "POST" },
+);
 export const getImageVersions = (id: string, signal?: AbortSignal) => api<ImageAsset[]>(`/message-assets/${encodeURIComponent(id)}/versions`, { signal });
 export function assetSource(asset: Pick<ImageAsset, "image_url">, width?: number, download = false): string {
   const src = gatewayImageSource(asset.image_url)!;

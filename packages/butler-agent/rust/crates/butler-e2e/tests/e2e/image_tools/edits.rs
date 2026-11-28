@@ -203,6 +203,64 @@ async fn attached_images_import_losslessly_as_original_parents() -> Result<(), H
     f.finish().await
 }
 #[tokio::test]
+async fn delivered_image_file_imports_as_editor_parent() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let f = Fixture::start(Access::FullAccess, "openai").await?;
+    std::fs::write(
+        f.s.sandbox.chat_folder("general")?.join("source.png"),
+        png(false),
+    )?;
+    f.script(
+        "Deliver the picture",
+        vec![call(
+            "deliver",
+            "deliver_files",
+            &json!({"files":[{"path":"source.png"}]}),
+        )],
+    );
+    f.run("Deliver the picture").await?;
+    let messages = f.s.gw.messages("general").await?;
+    let file = messages
+        .iter()
+        .filter(|message| message["role"] == "assistant" && message["status"] == "delivered")
+        .flat_map(|message| message["attachments"].as_array().into_iter().flatten())
+        .find(|file| file["kind"] == "image" && file["deliverable"] == true)
+        .expect("model-delivered image attachment");
+    let file_id = file["file_id"].as_str().unwrap();
+    let imported =
+        f.s.gw
+            .post(
+                &format!("/message-assets/import?session=general&file={file_id}"),
+                json!({}),
+            )
+            .await?;
+    assert_eq!(imported.status, 200, "{}", imported.text);
+    let meta = imported.data();
+    let image = meta["id"].as_str().unwrap();
+    assert!(image.starts_with("img_"));
+    assert_eq!(meta["kind"], "original");
+    assert!(meta["image_url"].as_str().unwrap().contains("signature="));
+
+    f.script(
+        "Edit delivered picture",
+        vec![call(
+            "edit",
+            "edit_image",
+            &json!({"image":image,"prompt":"Paint it gold"}),
+        )],
+    );
+    let sent = f.s.gw
+        .post("/messages", json!({"chat_id":"general","text":"Edit delivered picture","image_edit":{"image":image},"client_message_id":uuid::Uuid::new_v4().to_string()}))
+        .await?;
+    let turn = f.s.gw.accepted_turn(sent.data()).await?;
+    delivered(&f.s, "general", &turn).await?;
+    let output = f.output("edit");
+    assert_eq!(output["status"], "ok", "{output}");
+    assert_eq!(output["parent"], image);
+    f.finish().await
+}
+
+#[tokio::test]
 async fn drawer_image_from_another_chat_is_found_and_edited() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let f = Fixture::start(Access::Auto, "openai").await?;
