@@ -348,12 +348,22 @@ async fn reply_image_of_workspace_file_is_attached() -> Result<(), HarnessError>
     let setup = Setup::new("DELIVERABLE-REPLY-IMAGE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    let out = setup.sandbox.chat_folder("general")?.join("out");
-    std::fs::create_dir_all(&out)?;
-    std::fs::write(out.join("pic.png"), butler_e2e::e2e::media::noise_png(2, 2))?;
+    let png = butler_e2e::e2e::media::noise_png(2, 2)
+        .iter()
+        .map(|byte| format!("\\{byte:03o}"))
+        .collect::<Vec<_>>()
+        .concat();
+    let command = format!("mkdir -p out && printf '{png}' > out/pic.png");
     let mut reply = done();
     reply["content"][0]["text"] = json!("![pic](out/pic.png) ![gone](out/missing.png)");
-    *script.steps.lock().unwrap() = [reply].into();
+    *script.steps.lock().unwrap() = [
+        call(
+            "run_command",
+            json!({"command":command,"state_effect":"mutation","summary":"Create requested files"}),
+        ),
+        reply,
+    ]
+    .into();
     let s = setup.start().await?;
     let (_, turn) = run_turn(&s, &script, "Show the picture.").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");

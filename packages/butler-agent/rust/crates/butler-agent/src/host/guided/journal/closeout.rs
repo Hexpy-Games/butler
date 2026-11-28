@@ -85,7 +85,8 @@ pub(super) async fn collect(
 
 /// A workspace file the reply shows as a Markdown image is declared by that
 /// reply, as if it were passed to deliver_files. Failing targets and files
-/// already attached are skipped.
+/// already attached as deliverables are skipped. A working entry for the same
+/// file is replaced.
 pub(super) async fn shown_files(
     mut closeout: JournalCloseout,
     content: &str,
@@ -101,20 +102,21 @@ pub(super) async fn shown_files(
         return closeout;
     }
     for value in tools.shown_files(targets).await {
-        if closeout.artifacts.len() >= 12 {
-            break;
-        }
         let Some(artifact) = artifacts::final_artifact(&value) else {
             continue;
         };
-        if closeout.artifacts.iter().any(|existing| {
+        if let Some(index) = closeout.artifacts.iter().position(|existing| {
             existing.safe_path_label == artifact.safe_path_label
                 || existing.source.as_deref() == Some(&artifact.safe_path_label)
         }) {
-            continue;
+            if !closeout.artifacts[index].deliverable {
+                closeout.artifacts[index] = artifact;
+            }
+        } else if closeout.artifacts.len() < 12 {
+            closeout.artifacts.push(artifact);
         }
-        closeout.artifacts.push(artifact);
     }
+    closeout.artifacts.sort_by_key(|a| !a.deliverable);
     closeout
 }
 
