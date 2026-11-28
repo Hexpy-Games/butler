@@ -318,9 +318,12 @@ async fn mem_03_bootstrap_does_not_hold_service_readiness() -> Result<(), Harnes
 #[path = "memory/first_write.rs"]
 mod first_write;
 
-/// Existing partial memory and typed sources retain the rebuild path untouched.
+#[path = "memory/earlier_conversations.rs"]
+mod earlier_conversations;
+
+/// A folder that holds earlier sources gets an empty generation; the sources stay untouched.
 #[tokio::test]
-async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError> {
+async fn mem_04_existing_folder_starts_with_empty_memory() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     for relative in [
         "cognition/memory/partial",
@@ -333,22 +336,78 @@ async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError
         std::fs::write(&source, b"existing source")?;
         let mut s = setup.start().await?;
         s.restart().await?;
+        let memory = s.sandbox.data.join("cognition/memory");
+        let descriptor = memory.join("active-generation.json");
+        let intent_path = memory.join("fresh-initialization.json");
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !descriptor.exists() || intent_path.exists() {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "fresh generation publication or reservation retirement missing"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
+        assert!(
+            memory
+                .join("generations")
+                .join(active["generation_id"].as_str().unwrap())
+                .join("graph.sqlite")
+                .exists()
+        );
         assert_eq!(std::fs::read(&source)?, b"existing source");
-        assert!(
-            !s.sandbox
-                .data
-                .join("cognition/memory/active-generation.json")
-                .exists()
-        );
-        assert!(
-            !s.sandbox
-                .data
-                .join("cognition/consolidation/locks/consolidation.lock.coord.sqlite")
-                .exists()
-        );
         s.finish().await?;
     }
-    Ok(())
+
+    const LEGACY: &str = "00000000-0000-4000-8000-000000000001";
+    let setup = Setup::new("MEM-04")?;
+    let memory = setup.sandbox.data.join("cognition/memory");
+    let descriptor = memory.join("active-generation.json");
+    let manifest = memory
+        .join("generations")
+        .join(LEGACY)
+        .join("manifest.json");
+    let graph = memory.join("db/graph.sqlite");
+    let legacy_manifest = include_str!(
+        "../../../butler-memory/src/cognition/generation/fixtures/format/legacy-manifest.json"
+    )
+    .replace("<LEGACY>", LEGACY)
+    .replace("<LEGACY_SNAPSHOT>", "legacy-snapshot");
+    std::fs::create_dir_all(manifest.parent().unwrap())?;
+    std::fs::create_dir_all(graph.parent().unwrap())?;
+    std::fs::write(
+        &descriptor,
+        include_str!(
+            "../../../butler-memory/src/cognition/generation/fixtures/format/legacy-descriptor.json"
+        )
+        .replace("<LEGACY>", LEGACY),
+    )?;
+    std::fs::write(&manifest, &legacy_manifest)?;
+    std::fs::write(&graph, b"legacy graph")?;
+    let mut s = setup.start().await?;
+    s.restart().await?;
+    let intent_path = memory.join("fresh-initialization.json");
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !descriptor.exists() || intent_path.exists() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "fresh generation publication or reservation retirement missing"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let active: Value = serde_json::from_slice(&std::fs::read(&descriptor)?)?;
+    let generation = active["generation_id"].as_str().unwrap();
+    assert_ne!(generation, LEGACY);
+    let current: Value = serde_json::from_slice(&std::fs::read(
+        memory
+            .join("generations")
+            .join(generation)
+            .join("manifest.json"),
+    )?)?;
+    assert_eq!(current["format"], "v2");
+    assert_eq!(std::fs::read(&manifest)?, legacy_manifest.as_bytes());
+    assert_eq!(std::fs::read(&graph)?, b"legacy graph");
+    s.finish().await
 }
 
 #[path = "memory/backup_restore.rs"]
@@ -364,6 +423,8 @@ mod compact;
 mod context_reference;
 #[path = "memory/hook_context.rs"]
 mod hook_context;
+#[path = "memory/linked_copies.rs"]
+mod linked_copies;
 #[path = "memory/reset_vectors.rs"]
 mod reset_vectors;
 

@@ -171,6 +171,15 @@ impl GraphRecallReader {
         adjacency::load(self.connection()?, input, node_id, limit, offset)
     }
 
+    pub(in crate::cognition) fn linked_copies(
+        &self,
+        input: &RecallRequest,
+        node_id: &str,
+        limit: usize,
+    ) -> CognitionResult<(Vec<String>, bool)> {
+        adjacency::linked_copies(self.connection()?, input, node_id, limit)
+    }
+
     pub(in crate::cognition) fn mentions_for_nodes(
         &self,
         input: &RecallRequest,

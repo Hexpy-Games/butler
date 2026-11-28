@@ -1,5 +1,7 @@
 //! Source-qualified graph expansion pages inside the pinned snapshot.
 
+use std::collections::{HashSet, VecDeque};
+
 use rusqlite::{Connection, params_from_iter, types::Value};
 
 use crate::cognition::{
@@ -9,10 +11,66 @@ use crate::cognition::{
 
 use super::{db_error, scope};
 
+/// Relations graph expansion follows.
+const EXPANSION: &str = "'related_to','depends_on','likes','dislikes','decided','has_subject','has_object',\
+ 'condition_member','belongs_to','co_occurred','identity_match','same_claim'";
+/// The model-inferred "same thing" link.
+const IDENTITY: &str = "'identity_match'";
+
 pub(super) fn load(
     db: &Connection,
     input: &RecallRequest,
     node_id: &str,
+    limit: usize,
+    offset: usize,
+) -> CognitionResult<EligibleAdjacency> {
+    page(db, input, node_id, EXPANSION, limit, offset)
+}
+
+/// Every node joined to `node_id` by identity links eligible for this
+/// request, at any distance, nearest first. `true` when `limit` cut the walk.
+pub(super) fn linked_copies(
+    db: &Connection,
+    input: &RecallRequest,
+    node_id: &str,
+    limit: usize,
+) -> CognitionResult<(Vec<String>, bool)> {
+    let mut copies = Vec::new();
+    let mut seen = HashSet::from([node_id.to_owned()]);
+    let mut queue = VecDeque::from([node_id.to_owned()]);
+    while let Some(node) = queue.pop_front() {
+        let mut offset = 0;
+        loop {
+            let links = page(db, input, &node, IDENTITY, 256, offset)?;
+            for edge in &links.edges {
+                let other = if edge.source_node_id == node {
+                    &edge.target_node_id
+                } else {
+                    &edge.source_node_id
+                };
+                if !seen.insert(other.clone()) {
+                    continue;
+                }
+                if copies.len() >= limit {
+                    return Ok((copies, true));
+                }
+                copies.push(other.clone());
+                queue.push_back(other.clone());
+            }
+            if !links.truncated {
+                break;
+            }
+            offset += links.edges.len();
+        }
+    }
+    Ok((copies, false))
+}
+
+fn page(
+    db: &Connection,
+    input: &RecallRequest,
+    node_id: &str,
+    relations: &str,
     limit: usize,
     offset: usize,
 ) -> CognitionResult<EligibleAdjacency> {
@@ -30,8 +88,7 @@ pub(super) fn load(
       JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
       JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
       WHERE (e.source_node_id=? OR e.target_node_id=?) AND e.status='active'
-        AND e.rel_type IN ('related_to','depends_on','likes','dislikes','decided','has_subject','has_object',
-          'condition_member','belongs_to','co_occurred','identity_match','same_claim')
+        AND e.rel_type IN ({})
         AND (e.valid_from IS NULL OR julianday(e.valid_from)<=julianday(?))
         AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))
         AND (e.claim_node_id IS NULL OR {}) AND {}
@@ -48,6 +105,7 @@ pub(super) fn load(
         CASE WHEN e.source_node_id=? THEN e.target_node_id ELSE e.source_node_id END,e.edge_id
       LIMIT {} OFFSET {}
     ",
+        relations,
         claim.sql,
         source.sql,
         dependency.sql,

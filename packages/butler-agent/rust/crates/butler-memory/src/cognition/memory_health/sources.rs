@@ -5,13 +5,13 @@ use std::{
     collections::HashSet,
     fs::{self, File},
     io::{BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use rusqlite::OpenFlags;
 use serde::Deserialize;
 
-use crate::cognition::{CognitionPathEnvironment, CognitionResult};
+use crate::cognition::{CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle};
 use crate::coordination::{CognitionWriteCoordinator, ConsolidationLockState};
 use butler_core::js_date;
 
@@ -51,8 +51,8 @@ enum Stems {
     Skip,
 }
 
-/// Counts and times of the legacy file-based memory stores.
-struct LegacyStores {
+/// Counts and times of the store that serves recall: the active generation, or the legacy file-based store when no generation serves.
+struct StoreCounts {
     hot_cache_files: usize,
     rule_files: usize,
     transcript_files: usize,
@@ -82,12 +82,12 @@ pub(super) fn read(
     now: i64,
     profile: Option<&ProfileCoverageHealth>,
 ) -> CognitionResult<MemoryHealthReport> {
-    let stores = LegacyStores::read(data_root, paths, now)?;
+    let serving = super::serving::read(data_root, paths, now, profile);
+    let stores = StoreCounts::read(data_root, paths, now, &serving)?;
     let maintenance =
         maintenance::read(&paths.cognition_root(data_root).join("consolidation"), now)?;
     let mut diagnostics = diagnostics(&stores, &maintenance);
     let gate = writer_gate(coordinator, &paths.consolidation_lock(data_root));
-    let serving = super::serving::read(data_root, paths, now, profile);
     let failed_vectors = serving.stages.node_vectors.failed + serving.stages.episode_vectors.failed;
     if let Some(count) = serving.memories_without_vectors.filter(|count| *count > 0) {
         let status = if memory_model_off(&data_root.join("butler.config.json")) {
@@ -122,11 +122,23 @@ pub(super) fn read(
     })
 }
 
-impl LegacyStores {
-    fn read(data_root: &Path, paths: &CognitionPathEnvironment, now: i64) -> CognitionResult<Self> {
+impl StoreCounts {
+    fn read(
+        data_root: &Path,
+        paths: &CognitionPathEnvironment,
+        now: i64,
+        serving: &ServingHealth,
+    ) -> CognitionResult<Self> {
         let memory_root = paths.memory_root(data_root);
-        let hot = scan_files(&memory_root.join("hot"), ".md", None, Stems::Skip)?;
-        let hot_topics = scan_files(&memory_root.join("hot/topics"), ".md", None, Stems::Skip)?;
+        let generation = crate::cognition::resolve_active_generation(data_root, paths)
+            .ok()
+            .filter(|handle| {
+                serving.available
+                    && serving.generation_id.as_deref() == Some(handle.generation_id.as_str())
+            });
+        let (hot_root, graph, chunks) = sources(&memory_root, generation.as_ref());
+        let hot = scan_files(&hot_root, ".md", None, Stems::Skip)?;
+        let hot_topics = scan_files(&hot_root.join("topics"), ".md", None, Stems::Skip)?;
         let rules = scan_files(
             &memory_root.join("rules"),
             ".md",
@@ -140,14 +152,27 @@ impl LegacyStores {
             .iter()
             .filter(|name| !projects.stems.contains(&sanitize_project_memory_id(name)))
             .count();
-        let vector_stats = read_vector_stats(&memory_root.join("db/vector-stats.json"));
-        let graph = memory_root.join("db/graph.sqlite");
-        let newest_hot_cache_ms = max_option(hot.newest_mtime_ms, hot_topics.newest_mtime_ms);
-        let ingestion_lag_ms = match (transcripts.newest_mtime_ms, vector_stats.updated_at_ms) {
-            (Some(transcript), Some(vector)) if transcript != 0 && vector != 0 => {
-                Some(transcript.saturating_sub(vector).max(0))
+        let vector_stats = if generation.is_some() {
+            VectorStats {
+                count: Some(
+                    (serving.stages.episode_vectors.complete + serving.stages.node_vectors.complete)
+                        as f64,
+                ),
+                updated_at_ms: None,
             }
-            _ => None,
+        } else {
+            read_vector_stats(&memory_root.join("db/vector-stats.json"))
+        };
+        let newest_hot_cache_ms = max_option(hot.newest_mtime_ms, hot_topics.newest_mtime_ms);
+        let ingestion_lag_ms = if generation.is_some() {
+            serving.oldest_pending_age_ms
+        } else {
+            match (transcripts.newest_mtime_ms, vector_stats.updated_at_ms) {
+                (Some(transcript), Some(vector)) if transcript != 0 && vector != 0 => {
+                    Some(transcript.saturating_sub(vector).max(0))
+                }
+                _ => None,
+            }
         };
         Ok(Self {
             hot_cache_files: hot.count + hot_topics.count,
@@ -163,7 +188,7 @@ impl LegacyStores {
             queue_backlog: count_jsonl(&memory_root.join("queue/sync.jsonl")),
             dead_letter_count: count_jsonl(&memory_root.join("queue/dead-letter.jsonl")),
             vector_stats,
-            memory_chunks: count_sqlite_rows(&memory_root.join("metadata.sqlite"), "memory_chunks"),
+            memory_chunks: count_sqlite_rows(&chunks, "memory_chunks"),
             graph_entities: count_sqlite_rows(&graph, "memory_nodes"),
             graph_edges: count_sqlite_rows(&graph, "edges"),
             graph_mentions: count_sqlite_rows(&graph, "memory_evidence"),
@@ -175,8 +200,25 @@ impl LegacyStores {
     }
 }
 
+fn sources(
+    memory_root: &Path,
+    generation: Option<&MemoryGenerationHandle>,
+) -> (PathBuf, PathBuf, PathBuf) {
+    let hot_root =
+        generation.map_or_else(|| memory_root.join("hot"), |handle| handle.root.join("hot"));
+    let graph = generation.map_or_else(
+        || memory_root.join("db/graph.sqlite"),
+        |handle| handle.graph_path.clone(),
+    );
+    let chunks = generation.map_or_else(
+        || memory_root.join("metadata.sqlite"),
+        |handle| handle.graph_path.clone(),
+    );
+    (hot_root, graph, chunks)
+}
+
 /// Human-readable problems, in the source's order.
-fn diagnostics(stores: &LegacyStores, maintenance: &MaintenanceState) -> Vec<String> {
+fn diagnostics(stores: &StoreCounts, maintenance: &MaintenanceState) -> Vec<String> {
     let mut diagnostics = Vec::new();
     if stores.stale {
         diagnostics.push("hot cache is stale or missing".into());
@@ -246,7 +288,7 @@ fn writer_gate(coordinator: &CognitionWriteCoordinator, lock_path: &Path) -> Wri
 }
 
 fn dimensions(
-    stores: &LegacyStores,
+    stores: &StoreCounts,
     maintenance: &MaintenanceState,
     serving: &ServingHealth,
     gate: &WriterGate,
@@ -294,7 +336,7 @@ fn dimensions(
 }
 
 fn summary(
-    stores: LegacyStores,
+    stores: StoreCounts,
     maintenance: MaintenanceState,
     serving: ServingHealth,
     gate: WriterGate,

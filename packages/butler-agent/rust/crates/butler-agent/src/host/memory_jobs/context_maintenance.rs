@@ -59,12 +59,14 @@ pub(crate) struct ContextMaintenance {
 }
 
 impl ContextMaintenance {
+    /// Daily jobs stop with the service, so a run in flight at shutdown never settles.
     pub(in crate::host) fn for_cognition(
         data: &std::path::Path,
         output: &ToolOutput,
         metrics: &Arc<MetricFiles>,
         timezone: &Arc<DateParser>,
         daily: &Arc<DailyCognitionJobs>,
+        shutdown: &CancellationToken,
     ) -> Arc<Self> {
         Arc::new(Self::new(
             data.to_owned(),
@@ -72,6 +74,7 @@ impl ContextMaintenance {
             metrics.clone(),
             timezone.clone(),
             daily.clone(),
+            shutdown.child_token(),
         ))
     }
 
@@ -81,6 +84,7 @@ impl ContextMaintenance {
         metrics: Arc<MetricFiles>,
         timezone: Arc<DateParser>,
         daily_cognition: Arc<DailyCognitionJobs>,
+        cancellation: CancellationToken,
     ) -> Self {
         Self {
             data_root,
@@ -88,7 +92,7 @@ impl ContextMaintenance {
             metrics,
             timezone,
             daily_cognition,
-            cancellation: CancellationToken::new(),
+            cancellation,
             task: Mutex::new(None),
         }
     }

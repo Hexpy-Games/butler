@@ -3,7 +3,7 @@ use super::*;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::test]
-async fn daily_lock_held_runs_configured_and_counts_as_done() -> Result<(), HarnessError> {
+async fn daily_lock_held_runs_configured_and_is_recorded_as_skipped() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = setup(false).await?;
     s.agent.terminate().await?;
@@ -44,7 +44,12 @@ async fn daily_lock_held_runs_configured_and_counts_as_done() -> Result<(), Harn
     .expect("contended daily run did not complete");
     let completed = marker(&s).unwrap();
     assert_eq!(completed["lastRunDate"], &NOW[..10]);
-    assert_eq!(completed["status"], "ok", "{completed}");
+    assert_eq!(completed["skipped"]["reason"], "busy", "{completed}");
+    assert_eq!(completed["skipped"]["date"], &NOW[..10]);
+    assert!(
+        completed["status"].is_null() && completed["lastRunAt"].is_null(),
+        "{completed}"
+    );
     assert_eq!(calls(&s), 0);
     assert!(general_briefing(&s.sandbox.data).is_none());
     let logs = s.sandbox.data.join("cognition/consolidation/logs");
@@ -61,7 +66,7 @@ async fn daily_lock_held_runs_configured_and_counts_as_done() -> Result<(), Harn
             .iter()
             .map(|event| event["phase"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["catchup", "consolidate", "optimize", "health"]
+        ["catchup", "optimize", "health"]
     );
     assert!(
         events.iter().all(|event| event["status"] == "ok"),
@@ -77,6 +82,6 @@ async fn daily_lock_held_runs_configured_and_counts_as_done() -> Result<(), Harn
     assert_eq!(marker(&s).unwrap(), completed);
     assert_eq!(std::fs::read(summary)?, before);
     assert_eq!(calls(&s), 0);
-    eprintln!("DAILY-LOCK-HELD configured=4 briefing=0 day_done=true");
+    eprintln!("DAILY-LOCK-HELD configured=3 briefing=0 day_done=true skipped=busy");
     s.finish().await
 }

@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::{
     CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
-    ConfiguredCycleService, CycleService, CycleStatus, GraphConsolidationService, KnowHowService,
+    ConfiguredCycleService, CycleService, CycleStatus, KnowHowService,
     LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, PatternRepository,
     ProjectCapsuleService, RunCycle, VectorOptimizeService, active_memory_descriptor_exists,
     resolve_active_generation,
@@ -35,6 +35,15 @@ pub(in crate::host) struct DailyCognitionJobs {
     legacy: LegacySessionSync,
     standing: super::standing::StandingFacts,
     pub(in crate::host) gate: Arc<super::consolidation::ConsolidationRunGate>,
+}
+
+/// How far a consolidation run got.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::host) enum CycleRun {
+    /// Every part ran.
+    Full,
+    /// Another writer held the lock, so the generic cycle did not run.
+    GenericSkipped,
 }
 
 pub(in crate::host) struct DailyCognitionOwners {
@@ -157,6 +166,7 @@ impl DailyCognitionJobs {
         output: &butler_runtime::context::ToolOutput,
         metrics: &Arc<MetricFiles>,
         timezone: &Arc<DateParser>,
+        shutdown: &CancellationToken,
     ) -> Arc<super::context_maintenance::ContextMaintenance> {
         super::context_maintenance::ContextMaintenance::for_cognition(
             &self.data_root,
@@ -164,6 +174,7 @@ impl DailyCognitionJobs {
             metrics,
             timezone,
             self,
+            shutdown,
         )
     }
 
@@ -203,7 +214,7 @@ impl DailyCognitionJobs {
         run_id: String,
         started_ms: i64,
         cancellation: &CancellationToken,
-    ) -> Result<(), crate::host::HostError> {
+    ) -> Result<CycleRun, crate::host::HostError> {
         if cancellation.is_cancelled() {
             return Err("memory_write_aborted".into());
         }
@@ -251,7 +262,11 @@ impl DailyCognitionJobs {
             configured.failed_phases.join(","),
         );
         if completed {
-            Ok(())
+            Ok(if generic.status == CycleStatus::LockHeld {
+                CycleRun::GenericSkipped
+            } else {
+                CycleRun::Full
+            })
         } else {
             Err("scheduled_consolidation_completed_with_errors".into())
         }
@@ -286,11 +301,6 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())?;
         let phases = Arc::new(ConfiguredPhases {
             consumer: self.consumer.clone(),
-            consolidate: GraphConsolidationService::new(
-                self.data_root.clone(),
-                self.paths.clone(),
-                self.coordinator.clone(),
-            ),
             optimize: VectorOptimizeService::new(
                 self.data_root.clone(),
                 self.paths.clone(),
@@ -303,7 +313,6 @@ impl DailyCognitionJobs {
                 self.coordinator.clone(),
             ),
             generation_id: generation.generation_id,
-            activation_decay_d: config.activation_decay_d,
             project_capsule_refresh_limit: config.project_capsule_refresh_limit,
         });
         ConfiguredCycleService::new(self.data_root.clone(), self.paths.clone(), phases)
