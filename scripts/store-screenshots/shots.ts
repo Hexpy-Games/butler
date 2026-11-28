@@ -142,8 +142,13 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
         assert(app, "Butler did not launch");
         const geometry = await focus(app);
         Object.assign(entry, geometry);
-        await closeToasts(app);
-        await settle(app, geometry.contentBounds);
+        // A toast can arrive while the frame settles (run 46126644309, en-US #2); close it and settle again.
+        for (let attempt = 0; ; attempt++) {
+          await closeToasts(app);
+          await settle(app, geometry.contentBounds);
+          if (!await app.page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(visibleToast)}))`)) break;
+          assert(attempt < 2, "A toast kept appearing before capture");
+        }
         const view: View = await app.page.evaluate(() => ({
           theme: document.body.classList.contains("theme-dark") ? "dark" : "light",
           language: document.documentElement.lang,
