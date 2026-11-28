@@ -1,14 +1,11 @@
 //! Source-compatible legacy hot-cache indexing for the public maintenance command.
 
-mod import;
 mod legacy_graph;
 mod receipts;
 #[cfg(test)]
 mod receipts_pin;
 mod rules;
 mod transcript_index;
-
-pub use import::extract_legacy_import_transcript;
 
 use crate::cognition::CognitionCode;
 use std::{

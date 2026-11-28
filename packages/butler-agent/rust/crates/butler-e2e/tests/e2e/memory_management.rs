@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 const ORPHAN: &str = "00000000-0000-4000-8000-000000000333";
 const RETIRED: &str = "00000000-0000-4000-8000-000000000444";
+const MIGRATED: &str = "00000000-0000-4000-8000-000000000555";
 
 fn sql_count(path: &Path, sql: &str) -> i64 {
     sqlite::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -86,6 +87,7 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     assert_eq!(result["bytes_reclaimed"], orphan_bytes.unwrap_or(0));
     assert!(!memory.join(format!("generations/{ORPHAN}")).exists());
     assert!(!memory.join(format!("generations/{RETIRED}")).exists());
+    assert!(!memory.join(format!("generations/{MIGRATED}")).exists());
     assert!(!generation.join("qualification").exists());
     assert!(!generation.join("source-snapshot-deadbeef").exists());
     assert_eq!(
@@ -348,6 +350,14 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
     )?;
     std::fs::write(retired.join("manifest.json"), json!({"schema":"butler.memory-generation.v2",
         "generation_id":RETIRED,"state":"retired","canonical_snapshot_path":"source-snapshot/runtime/conversation-store.sqlite"}).to_string())?;
+    let migrated = memory.join(format!("generations/{MIGRATED}"));
+    std::fs::create_dir_all(&migrated)?;
+    std::fs::write(migrated.join("graph.sqlite"), vec![3; 4096])?;
+    let manifest_path = generation.join("manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&std::fs::read(&manifest_path)?)?;
+    manifest["schema_migration"] = json!({"schema":"butler.memory-schema-migration.v1",
+        "kind":"active_storage_format_upgrade","generation_id":MIGRATED,"at":"2026-09-13T00:00:00.000Z"});
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest)?)?;
     for artifact in ["qualification", "source-snapshot-deadbeef"] {
         std::fs::create_dir_all(generation.join(artifact))?;
         std::fs::write(generation.join(artifact).join("detached"), vec![2; 4096])?;
@@ -360,9 +370,10 @@ fn seed_dormant(s: &Scenario) -> Result<CleanupFixture, HarnessError> {
         &memory.join(format!("generations/{ORPHAN}")),
     )?
     .zip(tree_bytes(&retired)?)
+    .zip(tree_bytes(&migrated)?)
     .zip(tree_bytes(&generation.join("qualification"))?)
     .zip(tree_bytes(&generation.join("source-snapshot-deadbeef"))?)
-    .map(|(((a, b), c), d)| a + b + c + d);
+    .map(|((((a, b), c), d), e)| a + b + c + d + e);
     Ok(CleanupFixture {
         memory,
         generation,
