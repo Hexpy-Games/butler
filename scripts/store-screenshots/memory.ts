@@ -11,10 +11,13 @@ type Consolidation = {
   last_run: { at: string; status: string; trigger: string; message?: string } | null;
 };
 type Inventory = {
-  operation?: { phase: string } | null;
-  kinds: { kind: string; health: { queueBacklog?: number; serving?: { oldest_pending_age_ms?: number | null } } }[];
+  kinds: { kind: string; health: Record<string, unknown> }[];
 };
 type Facts = { memoryModel: unknown; memoryRun: unknown };
+export type MemoryDiagnostics = {
+  consolidation?: Consolidation;
+  ui?: Awaited<ReturnType<typeof readRunNow>>;
+};
 
 const instructions = '[data-settings-section-id="instructions"]';
 const patterns = '[data-settings-section-id="noticed-patterns"]';
@@ -33,18 +36,40 @@ async function awaitMemory(api: Api, facts: Facts) {
   }, "embedding model readiness", 600_000);
 }
 
-async function waitForMemoryIdle(api: Api) {
-  await until(async () => {
-    if ((await api<Consolidation>("/memory/consolidation")).active) return false;
-    // Inventory measurement acquires the memory writer lease and reports work in the sync queue.
-    const inventory = await api<Inventory>("/memory/inventory/check", "POST", {}).catch((error: unknown) => {
-      if (String(error).endsWith("returned HTTP 409")) return null;
-      throw error;
-    });
-    if (!inventory || (inventory.operation && !["complete", "failed", "cancelled"].includes(inventory.operation.phase))) return false;
-    const health = inventory.kinds.find(card => card.kind === "automatic")?.health;
-    return health?.queueBacklog === 0 && health.serving?.oldest_pending_age_ms == null;
-  }, "idle memory sync and consolidation", 90_000);
+async function waitForMemoryIdle(api: Api, diagnostics: MemoryDiagnostics, deadline: number) {
+  return until(async () => {
+    const status = diagnostics.consolidation = await api<Consolidation>("/memory/consolidation");
+    return status.active === null && status;
+  }, "no active memory consolidation", Math.min(60_000, deadline - Date.now()));
+}
+
+function readRunNow(page: ElectronPage) {
+  return page.expression<{ runNowAriaLabel: string | null; visibleToasts: string[] }>(`({
+    runNowAriaLabel: document.querySelector(${JSON.stringify(runButton)})?.getAttribute("aria-label") ?? null,
+    visibleToasts: [...document.querySelectorAll('[data-sonner-toast][data-visible="true"]')].map(toast => toast.innerText),
+  })`);
+}
+
+export async function memoryTimeout(error: unknown, app: App | undefined, api: Api | undefined,
+  facts: Facts, diagnostics: MemoryDiagnostics) {
+  if (!/timed out|timeout|did not become ready/iu.test(String(error))) return error;
+  const [consolidation, ui] = await Promise.all([
+    api?.<Consolidation>("/memory/consolidation").catch(() => diagnostics.consolidation),
+    app ? readRunNow(app.page).catch(() => diagnostics.ui) : diagnostics.ui,
+  ]);
+  // Measuring inventory takes the writer lease, so sample it only after a timeout.
+  const inventory = await api?.<Inventory>("/memory/inventory/check", "POST", {}).catch((cause: unknown) => ({
+    error: app?.safe(String(cause)) ?? String(cause),
+  }));
+  const snapshot = {
+    consolidation: consolidation ?? diagnostics.consolidation ?? null,
+    automaticHealth: inventory && "kinds" in inventory ? inventory.kinds.find(card => card.kind === "automatic")?.health ?? null : null,
+    inventoryCheckError: inventory && "error" in inventory ? inventory.error : null,
+    runNowAriaLabel: ui?.runNowAriaLabel ?? null,
+    visibleToasts: ui?.visibleToasts ?? null,
+  };
+  facts.memoryRun = { result: facts.memoryRun, timeout: snapshot };
+  return new Error(`${error instanceof Error ? error.message : String(error)}. Memory diagnostics: ${JSON.stringify(snapshot)}`, { cause: error });
 }
 
 async function resetMemoryView(page: ElectronPage, locale: Locale) {
@@ -54,44 +79,42 @@ async function resetMemoryView(page: ElectronPage, locale: Locale) {
   await click(page, copy.memory, settingsNav);
 }
 
-async function runConsolidation(app: App, api: Api, locale: Locale) {
+async function runConsolidation(app: App, api: Api, locale: Locale, diagnostics: MemoryDiagnostics) {
   const { page } = app;
   const copy = getAppCopy(locale.locale).settings.memory;
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 300_000;
   let retries = 0;
   while (Date.now() < deadline) {
-    await waitForMemoryIdle(api);
-    const before = (await api<Consolidation>("/memory/consolidation")).last_run?.at;
+    const before = (await waitForMemoryIdle(api, diagnostics, deadline)).last_run?.at;
+    if (Date.now() >= deadline) break;
     await click(page, copy.runNow, runButton);
     const result = await until<NonNullable<Consolidation["last_run"]> | "busy">(async () => {
-      const status = await page.evaluate(() => ({
-        button: document.querySelector('[data-setting-id="consolidation-run"] button')?.getAttribute("aria-label"),
-        toast: [...document.querySelectorAll<HTMLElement>('[data-sonner-toast][data-visible="true"]')].map(toast => toast.innerText).join("\n"),
-      }));
-      const { active, last_run: last } = await api<Consolidation>("/memory/consolidation");
+      const ui = diagnostics.ui = await readRunNow(page);
+      const { active, last_run: last } = diagnostics.consolidation = await api<Consolidation>("/memory/consolidation");
       if (!active && last && last.at !== before && last.trigger === "manual") return last;
-      assert(!status.toast.includes(copy.consolidationFailed), "Memory consolidation failed in Settings");
+      assert(!ui.visibleToasts.some(toast => toast.includes(copy.consolidationFailed)), "Memory consolidation failed in Settings");
       // useConsolidation sets this disabled label only for the POST's writer-busy 409.
-      return !active && status.button === `${copy.runNow}. ${copy.inUse}` && "busy";
-    }, "completion of the Run now action", Math.max(200, deadline - Date.now()));
+      return !active && ui.runNowAriaLabel === `${copy.runNow}. ${copy.inUse}` && "busy";
+    }, "completion of the Run now action", deadline - Date.now());
     if (result !== "busy") {
       assert.equal(result.status, "ok", result.message ?? "Memory consolidation failed");
       return { ...result, writerBusyRetries: retries };
     }
     retries++;
+    if (Date.now() >= deadline) break;
     await resetMemoryView(page, locale);
   }
-  throw new Error("Memory consolidation kept returning writer-busy HTTP 409");
+  throw new Error(`Timed out running memory consolidation after ${retries} writer-busy retries`);
 }
 
-export async function prepareMemory(app: App, api: Api, words: Demo, locale: Locale, facts: Facts) {
+export async function prepareMemory(app: App, api: Api, words: Demo, locale: Locale, facts: Facts, diagnostics: MemoryDiagnostics) {
   const imported = await api<{ stable_entry_count: number }>("/personalization/profile-import", "POST", { text: words.profileImport });
   assert(imported.stable_entry_count >= 1, "Profile import returned no stable entries");
   await awaitMemory(api, facts);
   const copy = getAppCopy(locale.locale);
   await click(app.page, copy.sidebar.settings);
   await click(app.page, copy.settings.sections.memory, settingsNav);
-  facts.memoryRun = await runConsolidation(app, api, locale);
+  facts.memoryRun = await runConsolidation(app, api, locale, diagnostics);
   await resetMemoryView(app.page, locale);
   await app.page.waitForFunction(({ instructions, patterns, profile, storage, rules, titles, entries, notMeasured }) => {
     const contains = (selector: string, texts: readonly string[]) =>

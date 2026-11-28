@@ -8,7 +8,7 @@ import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { type Api, type App, type Locale, locales, redact, startApp, until } from "./app.ts";
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { shotRecorder } from "./shots.ts";
-import { frameMemory, prepareMemory, type MemoryProgress } from "./memory.ts";
+import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
 import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
@@ -180,13 +180,13 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
   setup: Awaited<ReturnType<typeof setupWorkspace>> | undefined, locale: Locale,
   words: Words, sessions: Map<Chat, string>, chatFailures: Map<Chat, unknown>, setupFailure: unknown) {
   const take = (name: string, dependencies: readonly Chat[], prepare: (app: App, api: Api) => Promise<void>,
-    beforePixels?: (app: App) => Promise<object>) =>
+    beforePixels?: (app: App) => Promise<object>, onFailure?: (error: unknown) => Promise<unknown>) =>
     shots.shot(name, app, async () => {
       if (setupFailure) throw setupFailure;
       assert(app && setup, "Workspace setup did not finish");
       for (const chat of dependencies) if (chatFailures.has(chat)) throw chatFailures.get(chat);
       await prepare(app, setup.api);
-    }, beforePixels);
+    }, beforePixels, onFailure);
   await take("02-organize-files", ["A"], app => organized(app.page, words));
   await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), app => assertModelChip(app.page, locale));
   await take("04-browser", ["C"], app => browserShot(app, words), app => assertBrowserStills(app.page, locale));
@@ -196,10 +196,12 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
     await createSchedules(api, locale.language, target);
     await schedulesShot(app.page, words, locale);
   });
+  const diagnostics: MemoryDiagnostics = {};
   await take("06-memory", chatOrder, (app, api) => {
     if (setup?.memorySetupFailure) throw setup.memorySetupFailure;
-    return prepareMemory(app, api, words, locale, shots.facts);
-  }, app => frameMemory(app.page, words, locale));
+    return prepareMemory(app, api, words, locale, shots.facts, diagnostics);
+  }, app => frameMemory(app.page, words, locale),
+    error => memoryTimeout(error, app, setup?.api, shots.facts, diagnostics));
 }
 
 async function captureFirstRun(exe: string, out: string, locale: Locale, shots: Recorder) {

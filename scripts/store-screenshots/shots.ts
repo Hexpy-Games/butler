@@ -127,7 +127,8 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
     facts,
     selected: (prefix: string) => selected.has(prefix),
     save: () => writeFileSync(join(out, "facts.json"), JSON.stringify(facts, null, 2) + "\n"),
-    async shot(name: string, app: App | undefined, prepare: () => Promise<void>, beforePixels?: (app: App) => Promise<object>) {
+    async shot(name: string, app: App | undefined, prepare: () => Promise<void>,
+      beforePixels?: (app: App) => Promise<object>, onFailure?: (error: unknown) => Promise<unknown>) {
       if (!selected.has(name.slice(0, 2))) return;
       const entry: Facts = { name };
       facts.shots.push(entry);
@@ -149,7 +150,8 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
         assert.equal(entry.language?.split("-")[0], locale.language);
         await pixels(app, path, entry, beforePixels);
       } catch (error) {
-        entry.error = app ? app.safe(String(error)) : String(error);
+        const failure = onFailure ? await onFailure(error).catch(() => error) : error;
+        entry.error = app ? app.safe(String(failure)) : String(failure);
         rmSync(path, { force: true });
         try {
           const failed = join(out, `${name}-FAILED.png`);
