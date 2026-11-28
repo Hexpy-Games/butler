@@ -23,7 +23,7 @@ const PREFIX: &str = "<!-- butler-standing ";
 /// Provenance text injected above the sheet.
 const USER_HEADER: &str = "What Butler knows about the user, kept by Butler from earlier chats. It can be out of date; check with the user or recall_memory before relying on it for anything that matters. Use it to understand what the user refers to; do not bring it up unprompted.";
 /// Stable instructions for maintaining the sheet.
-const USER_INSTRUCTIONS: &str = "You keep a short fact sheet about one person, the user of a personal assistant, so the assistant always knows the lasting facts of their life without looking them up. You receive the current sheet with its size in bytes, and new statements the user made in chats, oldest first, each with its date. Return only the full updated sheet, in the user's main language, as Markdown bullet lines under a few headings of your choice.
+const USER_INSTRUCTIONS: &str = "You keep a short fact sheet about one person, the user of a personal assistant, so the assistant always knows the lasting facts of their life without looking them up. You receive today's date, the current sheet with its size in bytes, and new statements the user made in chats, each with its date. The statements are sorted by date, but one may be older than what the sheet already reflects: judge what is newer by the date, never by the order. A mark like ×12 after the date says in how many conversations the statement's subject has come up so far. A note in parentheses at the end of a statement, such as (until …), is the period the user gave for it. Return only the full updated sheet, in the user's main language, as Markdown bullet lines under a few headings of your choice.
 Keep what will probably still be true and useful months from now: who the user is, where they live and work, the people and animals in their life and what each name refers to (kind, species, sex, relation, dates), what they own or run, their ongoing projects, hobbies and routines, and lasting preferences.
 Write one fact per line as a short phrase, at most about 60 Korean, Chinese or Japanese characters or 120 English letters: name the thing and say what it is, without background, reasons or story. For example: \"Mango: female tabby cat, adopted March 2024\". When several names plainly refer to the same thing, put them on one line. A project gets one line that says what it is.
 Leave out:
@@ -33,9 +33,10 @@ Leave out:
 - secrets: passwords, keys, account numbers, ID numbers;
 - health, medical and mental-health details, money troubles, legal disputes and similar private matters, unless the user explicitly asked for that to be remembered.
 Carry every line of the current sheet forward unchanged unless a new statement corrects it or space runs out. A later statement overrides an earlier one. When something ended (a pet died, a plan was dropped, the user moved), keep one line that says so with its date instead of deleting it. Record only what the statements say; never guess or generalize. If the new statements add nothing lasting, return the current sheet unchanged.
-Keep the sheet under 3,000 UTF-8 bytes. A Korean, Chinese or Japanese character is 3 bytes, so that is about 1,000 such characters or 3,000 English letters. When a new fact would take the sheet past that, first shorten wordy lines, then drop the least lasting and least useful lines.";
+Each time, also read the current sheet against today's date: rewrite or remove a line whose stated time has passed, such as a plan dated in the past or a state that was said to be temporary.
+Keep the sheet under 3,000 UTF-8 bytes. A Korean, Chinese or Japanese character is 3 bytes, so that is about 1,000 such characters or 3,000 English letters. When a new fact would take the sheet past that, first shorten wordy lines, then drop the least lasting and least useful lines; keep lines about subjects that come up often.";
 const PROJECT_HEADER: &str = "What Butler keeps about this project from earlier chats in it. It can be out of date; check the workspace or recall_memory before relying on it for anything that matters.";
-const PROJECT_INSTRUCTIONS: &str = "You keep a short page about one project that the user of a personal assistant works on with it, so the assistant starts every chat in this project knowing where things stand. You receive today's date, the current page with its size in bytes, and new statements from this project's chats. Each statement carries its date, who said it (user or assistant) and its kind. The statements are sorted by date, but one may be older than what the page already reflects: judge what is newer by the date, never by the order. Return only the full updated page, in the user's main language, as Markdown bullet lines under five headings in this order, with the headings written in that language: what it is; decisions; lessons; current state; open questions.
+const PROJECT_INSTRUCTIONS: &str = "You keep a short page about one project that the user of a personal assistant works on with it, so the assistant starts every chat in this project knowing where things stand. You receive today's date, the current page with its size in bytes, and new statements from this project's chats. Each statement carries its date, who said it (user or assistant) and its kind. A note in parentheses at the end of a statement, such as (until …), is the period the speaker gave for it. The statements are sorted by date, but one may be older than what the page already reflects: judge what is newer by the date, never by the order. Return only the full updated page, in the user's main language, as Markdown bullet lines under five headings in this order, with the headings written in that language: what it is; decisions; lessons; current state; open questions.
 What it is: one to three lines that say what the project is and what it is for.
 Decisions: what the user chose or approved, or what was adopted and actually done. One decision per line, with its date. A proposal by the assistant that the user did not take up is not a decision. A promise by the assistant about what it will do next is not a decision. When a later statement reverses or replaces a decision, rewrite the line to the new decision and name the replaced choice in a few words in parentheses, so the dropped choice is not proposed again.
 Lessons: what was tried and failed or worked, with the reason, when it would matter again.
@@ -350,12 +351,7 @@ fn next_batch(
     let mut lines = String::new();
     let mut taken = 0;
     for row in rows.iter().take(BATCH_ROWS) {
-        let statement = row
-            .statement
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let line = format!("[{}] {statement}", row.label);
+        let line = row.line();
         if !lines.is_empty() {
             if lines.len() + 1 + line.len() > BATCH_BYTES {
                 break;
@@ -476,7 +472,7 @@ pub fn prompt(page: &Page, previous: &str, lines: &str, today: &str) -> String {
     };
     match page {
         Page::User => format!(
-            "Current sheet ({n} bytes; keep it under 3,000):\n{previous}\n\nNew statements by the user, oldest first:\n{lines}"
+            "Today is {today}.\nCurrent sheet ({n} bytes; keep it under 3,000):\n{previous}\n\nNew statements by the user:\n{lines}"
         ),
         Page::Project(_) => format!(
             "Today is {today}.\nCurrent page ({n} bytes; keep it under 3,000):\n{previous}\n\nNew statements from this project's chats:\n{lines}"
