@@ -3,6 +3,7 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { readFileSync } from "node:fs";
 import { type Page } from "playwright";
 import { LEGACY_FIRST_RUN_STORAGE_KEY, legacyFirstRunCompleteRecord } from "../../packages/butler-app/client/ui/src/app/onboarding";
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server";
 import { registerSecondModel } from "../support/second-stub-model.ts";
@@ -69,7 +70,12 @@ try {
   assert(data.automations[0]?.model === stubB, `form saved the chosen model: ${data.automations[0]?.model}`);
   assert(JSON.stringify(data.automations[0]?.schedule) === JSON.stringify({ kind: "daily", time: "08:00", weekdays: [], tz: "Asia/Seoul" }), `form saved local 08:00 recurrence: ${JSON.stringify(data.automations[0]?.schedule)}`);
   await page.getByRole("button", { name: "Back to schedules", exact: true }).click();
-  await page.getByText("Daily eight", { exact: true }).click();
+  const savedTitle = page.getByText("Daily eight", { exact: true });
+  await savedTitle.waitFor();
+  const savedRow = savedTitle.locator("../../..");
+  assert(await savedRow.getByText(getAppCopy("en-US").space.general, { exact: true }).isVisible()
+    && await savedRow.getByText("General", { exact: true }).count() === 0, "the saved schedule row shows the localized chat name");
+  await savedTitle.click();
   await modelTrigger.getByText(/Stub B/u).waitFor();
   await modelTrigger.click();
   await page.getByRole("option", { name: "Model default Follows the target chat's model.", exact: true }).click();
