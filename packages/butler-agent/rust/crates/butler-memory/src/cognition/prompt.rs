@@ -75,25 +75,33 @@ impl CognitionPromptReader {
             .await
     }
 
-    /// The project's memory capsule.
+    /// The project's page.
     pub async fn project_capsule(
         &self,
         project: Option<String>,
     ) -> CognitionResult<Option<String>> {
-        let root = self.environment.memory_root(&self.data_root);
+        let root = self.data_root.clone();
+        let environment = self.environment.clone();
         self.owner
-            .run(move || memory::project(&root, project.as_deref()))
+            .run(move || {
+                Ok(memory::project_page(
+                    &root,
+                    &environment,
+                    project.as_deref(),
+                ))
+            })
             .await
     }
 
-    /// Whether the project's memory capsule exists.
+    /// Whether the project's page exists.
     pub async fn project_capsule_status(
         &self,
         project: Option<String>,
     ) -> CognitionResult<CapsulePresence> {
-        let root = self.environment.memory_root(&self.data_root);
+        let root = self.data_root.clone();
+        let environment = self.environment.clone();
         self.owner
-            .run(move || memory::status(&root, project.as_deref()))
+            .run(move || memory::project_page_status(&root, &environment, project.as_deref()))
             .await
     }
 

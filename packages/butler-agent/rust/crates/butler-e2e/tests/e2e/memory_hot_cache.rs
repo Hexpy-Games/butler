@@ -241,7 +241,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     assert_eq!(cycle["status"], "ok", "{cycle}");
     until(|| {
         std::fs::read_to_string(generation.join("hot/standing.md"))
-            .is_ok_and(|text| text.contains("\"v\":2"))
+            .is_ok_and(|text| text.contains("\"v\":3"))
     })
     .await;
     let logs = s.sandbox.data.join("cognition/consolidation/logs");

@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 impl MemoryManagement {
-    /// Reads only the selected capsule and its indexed conversation rows.
+    /// Reads only the selected page and its indexed conversation rows.
     pub async fn project(
         &self,
         project_id: String,
@@ -14,15 +14,20 @@ impl MemoryManagement {
             safety::validate(&root, &paths)?;
             safety::cancelled(&cancellation)?;
             let memory = paths.memory_root(&root);
-            let capsule = crate::cognition::capsule_path(&memory, &project_id);
-            crate::cognition::ensure_data_authority(&root, &[&capsule]).map_err(io::Error::other)?;
-            let measured = measurement::files(&capsule, &cancellation)?;
-            let exists = capsule.try_exists()?;
-            let summary = if exists { measured.bytes } else { None };
-            let mut view = json!({"project_id":project_id,"summary_bytes":summary,"updated_at":measured.latest});
-            if exists && summary.is_none() && let Some(view) = view.as_object_mut() { view.remove("summary_bytes"); }
+            let mut view = json!({"project_id":project_id,"summary_bytes":null,"updated_at":null});
             if memory.join("active-generation.json").exists() {
                 let active = safety::active(&root, &paths)?;
+                let page = crate::cognition::StandingPage::Project(project_id.clone()).path(&active.root);
+                crate::cognition::ensure_data_authority(&root, &[&page]).map_err(io::Error::other)?;
+                let measured = measurement::files(&page, &cancellation)?;
+                if page.try_exists()? && let Some(view) = view.as_object_mut() {
+                    if let Some(bytes) = measured.bytes {
+                        view.insert("summary_bytes".into(), json!(bytes));
+                    } else {
+                        view.remove("summary_bytes");
+                    }
+                    view.insert("updated_at".into(), json!(measured.latest));
+                }
                 let db = butler_platform::sqlite::open_with_flags(&active.graph_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(io::Error::other)?;
                 let count: u64 = db.query_row("SELECT COUNT(*) FROM memory_chunks c WHERE c.project_id=?1 AND c.status='active' AND EXISTS(SELECT 1 FROM memory_chunk_sources s WHERE s.episode_id=c.memory_chunk_id AND s.revision=c.current_revision AND s.source_kind='conversation' AND s.origin_kind IN ('user_input','assistant_public'))", [&project_id], |r| r.get(0)).map_err(io::Error::other)?;
                 if let Some(view) = view.as_object_mut() { view.insert("conversations".into(), json!(count)); }

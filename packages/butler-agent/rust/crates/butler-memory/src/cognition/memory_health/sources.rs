@@ -147,11 +147,8 @@ impl StoreCounts {
         )?;
         let transcripts = scan_files(&data_root.join("transcripts"), ".jsonl", None, Stems::Skip)?;
         let task_entries = scan_files(&memory_root.join("tasks"), ".md", None, Stems::Skip)?;
-        let projects = scan_files(&memory_root.join("projects"), ".md", None, Stems::Collect)?;
-        let missing_projects = read_registered_projects(&data_root.join("butler.config.json"))
-            .iter()
-            .filter(|name| !projects.stems.contains(&sanitize_project_memory_id(name)))
-            .count();
+        let (projects, missing_projects, project_failures) =
+            project_health(data_root, &memory_root, generation.as_ref())?;
         let vector_stats = if generation.is_some() {
             VectorStats {
                 count: Some(
@@ -182,9 +179,7 @@ impl StoreCounts {
             project_capsules: projects.count,
             missing_projects,
             newest_project_capsule_ms: projects.newest_mtime_ms,
-            project_failures: read_project_failures(
-                &memory_root.join("projects").join(".refresh-failures.jsonl"),
-            ),
+            project_failures,
             queue_backlog: count_jsonl(&memory_root.join("queue/sync.jsonl")),
             dead_letter_count: count_jsonl(&memory_root.join("queue/dead-letter.jsonl")),
             vector_stats,
@@ -198,6 +193,31 @@ impl StoreCounts {
                 .is_none_or(|updated| now.saturating_sub(updated) > STALE_AFTER_MS),
         })
     }
+}
+
+fn project_health(
+    data_root: &Path,
+    memory_root: &Path,
+    generation: Option<&MemoryGenerationHandle>,
+) -> CognitionResult<(FileStats, usize, ProjectFailures)> {
+    if let Some(handle) = generation {
+        let projects = scan_files(&handle.root.join("hot/projects"), ".md", None, Stems::Skip)?;
+        return Ok((
+            projects,
+            0,
+            ProjectFailures {
+                count: 0,
+                latest_at: None,
+            },
+        ));
+    }
+    let projects = scan_files(&memory_root.join("projects"), ".md", None, Stems::Collect)?;
+    let missing = read_registered_projects(&data_root.join("butler.config.json"))
+        .iter()
+        .filter(|name| !projects.stems.contains(&sanitize_project_memory_id(name)))
+        .count();
+    let failures = read_project_failures(&memory_root.join("projects/.refresh-failures.jsonl"));
+    Ok((projects, missing, failures))
 }
 
 fn sources(

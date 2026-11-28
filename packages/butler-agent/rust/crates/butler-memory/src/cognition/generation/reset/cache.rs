@@ -2,6 +2,7 @@
 use std::{collections::HashSet, fs, io, io::Write, path::Path};
 
 pub(super) fn copy(old: &Path, new: &Path) -> io::Result<()> {
+    copy_pages(old, new)?;
     let db = butler_platform::sqlite::open_with_flags(
         new.join("graph.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -28,6 +29,41 @@ pub(super) fn copy(old: &Path, new: &Path) -> io::Result<()> {
         |file| file.write_all(body.as_bytes()),
         |error| error,
     )
+}
+
+/// Carries the model-kept pages over byte for byte. A page whose sources did
+/// not survive is refused by its own source counts and rebuilt by the next fold.
+fn copy_pages(old: &Path, new: &Path) -> io::Result<()> {
+    let mut files = vec![std::path::PathBuf::from("hot/standing.md")];
+    match fs::read_dir(old.join("hot/projects")) {
+        Ok(entries) => {
+            for entry in entries {
+                let name = entry?.file_name();
+                if Path::new(&name).extension().is_some_and(|ext| ext == "md") {
+                    files.push(Path::new("hot/projects").join(name));
+                }
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    for relative in files {
+        let body = match fs::read(old.join(&relative)) {
+            Ok(body) => body,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
+        };
+        let target = new.join(&relative);
+        if let Some(parent) = target.parent() {
+            butler_platform::secure_fs::create_private_dir_all(parent)?;
+        }
+        butler_platform::secure_fs::replace_private(
+            &target,
+            |file| file.write_all(&body),
+            |error| error,
+        )?;
+    }
+    Ok(())
 }
 
 fn rebind_receipts(db: &rusqlite::Connection, old: &Path, new: &Path) -> io::Result<()> {

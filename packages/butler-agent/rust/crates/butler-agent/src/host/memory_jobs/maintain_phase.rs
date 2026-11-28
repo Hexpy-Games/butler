@@ -7,16 +7,14 @@ use tokio_util::sync::CancellationToken;
 
 use butler_memory::cognition::{
     ConfiguredPhase, ConfiguredPhaseExecutor, ConfiguredPhaseFuture, MemoryHealthService,
-    MemorySyncConsumer, ProjectCapsuleService, VectorOptimizeOutcome, VectorOptimizeService,
+    MemorySyncConsumer, VectorOptimizeOutcome, VectorOptimizeService,
 };
 
 pub(in crate::host) struct ConfiguredPhases {
     pub consumer: Arc<MemorySyncConsumer>,
     pub optimize: VectorOptimizeService,
-    pub capsules: Arc<ProjectCapsuleService>,
     pub health: MemoryHealthService,
     pub generation_id: String,
-    pub project_capsule_refresh_limit: usize,
 }
 
 impl ConfiguredPhaseExecutor for ConfiguredPhases {
@@ -66,23 +64,12 @@ impl ConfiguredPhaseExecutor for ConfiguredPhases {
                     })
                 }
                 ConfiguredPhase::Health => {
-                    let capsules = self
-                        .capsules
-                        .refresh_registered(
-                            self.project_capsule_refresh_limit,
-                            cancellation,
-                            deadline_at_epoch_ms,
-                        )
-                        .await?;
                     let report = self.health.read().await?;
                     Ok(json!({
                         "memory_chunks_count":report.memory_chunks_count,
                         "vector_rows_count":report.vector_rows_count,
                         "maintenance_status":report.maintenance_status.as_str(),
                         "diagnostics_count":report.diagnostics_count,
-                        "project_capsules_considered":capsules.considered,
-                        "project_capsules_refreshed":capsules.refreshed,
-                        "project_capsule_failures":capsules.failed.len(),
                     }))
                 }
             }

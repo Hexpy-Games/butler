@@ -35,8 +35,8 @@ use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
 use boundary::setup;
 use butler_ledger::project_ledger::{ProjectLedger, ProjectWork};
+use butler_memory::cognition::MemoryRecall;
 use butler_memory::cognition::{CognitionPromptReader, ExactMemoryQuery};
-use butler_memory::cognition::{MemoryRecall, ProjectCapsuleService};
 use butler_memory::profile::ProfileService;
 use butler_models::models::ModelConfigurationClock;
 use butler_runtime::context::{
@@ -136,11 +136,6 @@ impl AgentRuntime {
         let memory_acquisition =
             memory_bootstrap::acquisition(&paths.data_root, &embedding, &memory_sync).await;
         startup.phase("defaults_observer_and_memory_consumer");
-        let capsule_service = Arc::new(ProjectCapsuleService::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
-            coordinator.clone(),
-        ));
         let cognition = Arc::new(CognitionPromptReader::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
@@ -181,7 +176,6 @@ impl AgentRuntime {
             coordinator: coordinator.clone(),
             metrics: metric_files.clone(),
             consumer: memory_sync.consumer(),
-            capsules: capsule_service,
             provider: models.provider.clone(),
             configuration: models.configuration.clone(),
             profile: profile.clone(),
