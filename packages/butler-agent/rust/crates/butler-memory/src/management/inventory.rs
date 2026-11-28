@@ -1,4 +1,4 @@
-use super::{MemoryCard, MemoryInventory, measurement::files};
+use super::{MemoryCard, MemoryInventory, measurement::files, safety};
 use crate::cognition::CognitionPathEnvironment;
 use rusqlite::{OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
@@ -43,7 +43,14 @@ pub(super) fn measure(
     let mut result = unknown(revision);
     let memory = paths.memory_root(root);
     let pinned = files(&memory.join("rules"), token)?;
-    let projects = files(&memory.join("projects"), token)?;
+    let projects = if memory.join("active-generation.json").exists() {
+        files(
+            &safety::active(root, paths)?.root.join("hot/projects"),
+            token,
+        )?
+    } else {
+        files(&memory.join("projects"), token)?
+    };
     let profile = files(&root.join("cognition/profile"), token)?;
     let mut automatic_bytes = Some(0_u64);
     for child in [
@@ -70,7 +77,7 @@ pub(super) fn measure(
                 card.allocated_bytes = projects.bytes;
                 card.item_count = Some(projects.markdown);
                 card.content_updated_at = projects.latest.clone();
-                card.health = json!({"refresh_failures_allocated_bytes": files(&memory.join("projects/.refresh-failures.jsonl"), token)?.bytes});
+                card.health = json!({});
             }
             "profile" => {
                 card.allocated_bytes = profile.bytes;

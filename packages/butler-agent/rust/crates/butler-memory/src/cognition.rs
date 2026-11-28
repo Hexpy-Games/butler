@@ -10,10 +10,13 @@ mod configured_cycle;
 mod configured_projects;
 mod consolidation;
 mod standing;
+pub(crate) use standing::legacy_capsule_path;
 pub use standing::{
-    Batch as StandingBatch, INSTRUCTIONS as STANDING_INSTRUCTIONS, MAX_BYTES as STANDING_MAX_BYTES,
-    Sheet as StandingSheet, batch as standing_batch, prompt as standing_prompt,
-    shorten_prompt as standing_shorten_prompt, start as standing_start, write as write_standing,
+    Batch as StandingBatch, MAX_BYTES as STANDING_MAX_BYTES, Page as StandingPage,
+    Pass as StandingPass, Sheet as StandingSheet, Start as StandingStart, batch as standing_batch,
+    discard as discard_standing, projects as standing_projects, prompt as standing_prompt,
+    prune as prune_standing, shorten_prompt as standing_shorten_prompt, start as standing_start,
+    write as write_standing,
 };
 mod continuity;
 pub use continuity::{
@@ -49,7 +52,6 @@ pub use patterns::{
     PatternError, PatternEvent, PatternExtractionService, PatternFuture, PatternInput,
     PatternInputSource, PatternRepository,
 };
-mod project_capsule;
 mod prompt;
 mod recall;
 mod registration;
@@ -128,7 +130,6 @@ pub use memory_recall::{RecallMetric, RecallMetricSink};
 pub use migration::CognitionNamespaceMigrationService;
 pub use mutable_paths::ensure_data_authority;
 pub use paths::{CognitionPathEnvironment, explicit_memory_rules_root};
-pub use project_capsule::ProjectCapsuleService;
 pub use prompt::{CapsulePresence, CognitionPromptReader};
 pub(crate) use recall::RecallRequest;
 pub use registration::RegisterTypedSourceInput;
@@ -158,8 +159,6 @@ pub(crate) type PhaseExecutionFuture<'a> = Pin<
             + 'a,
     >,
 >;
-
-pub(crate) use project_capsule::capsule_path;
 
 mod admission;
 

@@ -1,7 +1,7 @@
-//! Hot-cache, continuity and capsule text for prompts.
+//! Hot-cache, continuity and project page text for prompts.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
@@ -37,51 +37,66 @@ pub(super) fn continuity(memory_root: &Path, session: &str) -> CognitionResult<O
     Ok((!text.is_empty()).then(|| format!("{}\n\n{text}", crate::cognition::continuity::HEADER)))
 }
 
-pub(super) fn capsule_path(memory_root: &Path, project: Option<&str>) -> Option<PathBuf> {
-    let project = butler_core::public_text::trim_js_whitespace(project?);
-    if project.is_empty() {
-        return None;
-    }
-    let mut safe = String::with_capacity(project.len());
-    for character in project.chars() {
-        if matches!(character, '/' | '\\' | '\0') {
-            safe.push('_');
-        } else {
-            safe.push(character);
-        }
-    }
-    Some(memory_root.join("projects").join(format!("{safe}.md")))
+/// The project's page in the active generation; absent when there is no
+/// page, no project, or the generation is unavailable or changing.
+pub(super) fn project_page(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
+    project: Option<&str>,
+) -> Option<String> {
+    read_project_page(data_root, environment, project).unwrap_or(None)
 }
 
-pub(super) fn project(
-    memory_root: &Path,
+fn read_project_page(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
     project: Option<&str>,
 ) -> CognitionResult<Option<String>> {
-    let Some(path) = capsule_path(memory_root, project) else {
+    let Some(project) = project
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|project| !project.is_empty())
+    else {
         return Ok(None);
     };
-    let Some(text) = optional_text(&path)? else {
+    if !environment
+        .memory_root(data_root)
+        .join("active-generation.json")
+        .exists()
+    {
         return Ok(None);
-    };
-    let filtered = text
-        .split('\n')
-        .map(|line| line.strip_suffix('\r').unwrap_or(line))
-        .filter(|line| {
-            !line.contains("generation-hot-cache:") && !line.contains("project-hot-cache:")
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let filtered = butler_core::public_text::trim_js_whitespace(&filtered);
-    Ok((!filtered.is_empty()).then(|| filtered.to_owned()))
+    }
+    let generation = resolve_active_generation(data_root, environment)?;
+    let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
+    let page = standing::current(
+        &graph,
+        &generation.root,
+        &standing::Page::Project(project.to_owned()),
+    );
+    graph.close()?;
+    page
 }
 
-pub(super) fn status(
-    memory_root: &Path,
+/// Whether the project has a page file in the active generation.
+pub(super) fn project_page_status(
+    data_root: &Path,
+    environment: &CognitionPathEnvironment,
     project: Option<&str>,
 ) -> CognitionResult<CapsulePresence> {
-    let Some(path) = capsule_path(memory_root, project) else {
+    let Some(project) = project
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|project| !project.is_empty())
+    else {
         return Ok(CapsulePresence::Skipped);
     };
+    if !environment
+        .memory_root(data_root)
+        .join("active-generation.json")
+        .exists()
+    {
+        return Ok(CapsulePresence::Missing);
+    }
+    let generation = resolve_active_generation(data_root, environment)?;
+    let path = standing::Page::Project(project.to_owned()).path(&generation.root);
     match fs::metadata(path) {
         Ok(_) => Ok(CapsulePresence::Present),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(CapsulePresence::Missing),
@@ -115,7 +130,10 @@ fn read_generation_hot_cache(
     // Both parts use one fresh graph snapshot while background writes advance.
     let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
     let mut content = Vec::new();
-    if let Some(sheet) = standing::current(&graph, &generation.root).ok().flatten() {
+    if let Some(sheet) = standing::current(&graph, &generation.root, &standing::Page::User)
+        .ok()
+        .flatten()
+    {
         content.push(sheet);
     }
     let recent = if !entries.is_empty()
