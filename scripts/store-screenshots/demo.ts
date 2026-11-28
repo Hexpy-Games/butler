@@ -53,7 +53,7 @@ const copy = {
   },
   en: {
     navSchedules: "Schedules", newSchedule: "New schedule", moveFiles: "Move files by type", zipPhotos: "Zip photos",
-    zip: "photos_2026-11.zip",
+    zip: "nov_photos.zip",
     memory: ["Put reports in a table and end with a three-line summary.", "Name files as date_topic."],
     profileImport: "I like short, polite answers. I want reports as tables.",
     profileSummary: "Prefers short, polite answers.",

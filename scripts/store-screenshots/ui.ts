@@ -10,6 +10,8 @@ const sidebar = '[data-test-class="app-sidebar"]';
 const sidebarItems = `${sidebar} :is(button, [role=button], a, [role=treeitem])`;
 export const approval = '[data-test-class="composer-authority-decision"]';
 const approvalCode = '[data-slot="composer-decision-code"] pre';
+const request = '[data-test-class~="message"][data-test-class~="user"]';
+const modelButton = '[data-test-class="model-button"]';
 export const storeTextSize = "larger" as const;
 export const storeScale = textSizeFactor(storeTextSize);
 
@@ -146,8 +148,9 @@ async function clickSidebar(page: ElectronPage, label: string) {
       const clickable = nodes.some(node => {
         const { left, top, width, height } = node.getBoundingClientRect();
         const x = left + width / 2, y = top + height / 2;
+        // The row's label can sit beside the matched button (run 46135405598); any sidebar hit counts.
         return width > 0 && x >= 0 && x < innerWidth && y >= 0 && y < innerHeight &&
-          node.contains(document.elementFromPoint(x, y));
+          Boolean(node.closest("#butler-left-sidebar")?.contains(document.elementFromPoint(x, y)));
       });
       if (!clickable) nodes.find(node => node.getBoundingClientRect().width > 0)?.scrollIntoView({ block: "nearest" });
       return clickable;
@@ -171,11 +174,74 @@ export async function openChat(page: ElectronPage, title: string, prompt?: strin
 export async function organized(page: ElectronPage, words: Demo) {
   await openChat(page, words.A[0], words.A[1]);
   const table = '[data-test-class="message assistant"] table';
-  const request = '[data-test-class~="message"][data-test-class~="user"]';
   await page.waitForFunction(table => Boolean(document.querySelector(table)), table);
   // Show the request and the whole result table together.
   await page.expression(`document.querySelector(${JSON.stringify(request)}).scrollIntoView({ block: 'start', behavior: 'instant' })`);
   await waitInViewport(page, { selector: request }, { selector: table });
+}
+
+const requestSelectors = { request, approval, modelButton, buttons };
+type RequestFrame = { requestTop: number; scrollerTop: number; panelBottom: number };
+
+function requestFrame({ selectors, mode }: { selectors: typeof requestSelectors; mode: "scroll" | "check" | "measure" }) {
+  const message = [...document.querySelectorAll(selectors.request)].at(-1);
+  let scroll = message?.parentElement;
+  while (scroll && (!(getComputedStyle(scroll).overflowY === "auto" || getComputedStyle(scroll).overflowY === "scroll") ||
+    scroll.scrollHeight <= scroll.clientHeight)) scroll = scroll.parentElement;
+
+  const rect = (node: Element | null | undefined) => {
+    if (!node) return null;
+    const { top, right, bottom, left } = node.getBoundingClientRect();
+    return { top, right, bottom, left };
+  };
+  const bubble = rect(message);
+  const bounds = rect(scroll);
+  const scroller = scroll && bounds ? {
+    top: bounds.top + scroll.clientTop, left: bounds.left + scroll.clientLeft,
+    bottom: bounds.top + scroll.clientTop + scroll.clientHeight,
+    right: bounds.left + scroll.clientLeft + scroll.clientWidth,
+  } : null;
+  if (mode === "scroll") {
+    if (scroll && bubble && scroller) {
+      const difference = scroller.top + 16 - bubble.top;
+      if (difference > 0) scroll.scrollTo({ top: scroll.scrollTop - difference, behavior: "instant" });
+    }
+    return null;
+  }
+
+  const panelNode = document.querySelector(selectors.approval);
+  const panel = rect(panelNode);
+  const model = rect(document.querySelector(selectors.modelButton));
+  const panelButtons = [...(panelNode?.querySelectorAll(selectors.buttons) ?? [])]
+    .filter(button => button.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })).map(rect);
+  const inside = (box: ReturnType<typeof rect>, area: NonNullable<ReturnType<typeof rect>>) =>
+    box && box.right > box.left && box.bottom > box.top && box.left >= area.left &&
+    box.top >= area.top && box.right <= area.right && box.bottom <= area.bottom;
+  const viewport = { top: 0, left: 0, right: innerWidth, bottom: innerHeight };
+  const frame: RequestFrame | null = bubble && scroller && panel && inside(bubble, scroller) &&
+    inside(bubble, viewport) && bubble.bottom <= panel.top && inside(panel, viewport) &&
+    panelButtons.every(button => inside(button, viewport)) && inside(model, viewport)
+    ? { requestTop: bubble.top, scrollerTop: scroller.top, panelBottom: panel.bottom } : null;
+  return mode === "check" ? frame : { frame, bubble, scroller, panel, panelButtons, modelButton: model, innerHeight };
+}
+
+export function frameRequest(page: ElectronPage) {
+  return page.expression<null>(`(${requestFrame})(${JSON.stringify({ selectors: requestSelectors, mode: "scroll" })})`);
+}
+
+export async function requestFramed(page: ElectronPage): Promise<RequestFrame> {
+  const measure = `(${requestFrame})(${JSON.stringify({ selectors: requestSelectors, mode: "measure" })})`;
+  let cause: unknown;
+  try {
+    await page.waitForFunction(requestFrame, { selectors: requestSelectors, mode: "check" });
+  } catch (error) {
+    cause = error;
+  }
+  const measured = await page.expression<{ frame: RequestFrame | null }>(measure).catch(() => null);
+  if (cause || !measured?.frame) {
+    throw new Error(`Chat request framing failed: ${JSON.stringify(measured)}`, { cause });
+  }
+  return measured.frame;
 }
 
 export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale) {
@@ -188,10 +254,12 @@ export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale
       code && code.scrollWidth <= code.clientWidth + 1 && code.textContent?.trim() === command &&
       panel?.textContent?.includes(label));
   }, { approval, approvalCode, command: words.zip, label: getAppCopy(locale.locale).interfaceDetails.allowOnce });
+  await frameRequest(page);
+  await requestFramed(page);
 }
 
 export async function assertModelChip(page: ElectronPage, locale: Locale) {
-  await waitInViewport(page, { selector: '[data-test-class="model-button"]' });
+  await waitInViewport(page, { selector: modelButton });
   const chip = await page.evaluate(() => document.querySelector<HTMLElement>('[data-test-class="model-button"]')?.innerText ?? "");
   assert(chip.includes(demoModel.display_name) && !chip.includes(reasoningEffortLabel("none", locale.locale)),
     `Unexpected composer model chip: ${JSON.stringify(chip)}`);

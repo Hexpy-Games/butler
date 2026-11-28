@@ -9,7 +9,7 @@ import { type Api, type App, type Locale, locales, redact, startApp, until } fro
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { focus, shotRecorder } from "./shots.ts";
 import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
-import { approval, assertBrowserStills, assertDesktopLayout, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, storeScale, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
+import { approval, assertBrowserStills, assertDesktopLayout, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, requestFramed, schedulesShot, storeScale, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
@@ -82,6 +82,7 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
     if (pending) answered.add(pending.request_ref);
     return false;
   }, () => chatTimeout(app, chat, lastView), 120_000);
+  if (chat === "C") await assertBrowserStills(app.page, locale); // Let the page still save before leaving chat C.
   return session.id;
 }
 
@@ -194,7 +195,9 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
       }
     }, beforePixels, onFailure);
   await take("02-organize-files", ["A"], app => organized(app.page, words));
-  await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), app => assertModelChip(app.page, locale));
+  await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), async app => ({
+    ...(await assertModelChip(app.page, locale)), requestFramed: await requestFramed(app.page),
+  }));
   await take("04-browser", ["C"], app => browserShot(app, words), app => assertBrowserStills(app.page, locale));
   await take("05-schedules", ["A"], async (app, api) => {
     const target = sessions.get("A");
