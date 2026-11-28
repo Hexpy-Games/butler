@@ -254,7 +254,11 @@ impl JournalPort for Fixture {
     ) -> PortFuture<'a, Option<ToolOutcome>> {
         Box::pin(async move { Ok(self.outcomes.lock().unwrap().get(&call.id).cloned()) })
     }
-    fn closeout<'a>(&'a self, _: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout> {
+    fn closeout<'a>(
+        &'a self,
+        _: GuidedInvocation<'a>,
+        _: &'a str,
+    ) -> PortFuture<'a, JournalCloseout> {
         Box::pin(async {
             Ok(JournalCloseout {
                 outputs: Vec::new(),

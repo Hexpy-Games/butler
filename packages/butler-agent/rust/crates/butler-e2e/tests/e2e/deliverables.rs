@@ -340,3 +340,33 @@ async fn drawer_document_from_another_chat_is_read_by_library_id() -> Result<(),
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn reply_image_of_workspace_file_is_attached() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("DELIVERABLE-REPLY-IMAGE")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    let mut reply = done();
+    reply["content"][0]["text"] = json!("![pic](out/pic.svg) ![gone](out/missing.png)");
+    *script.steps.lock().unwrap() = [
+        write(
+            "out/pic.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"2\"/>",
+        ),
+        reply,
+    ]
+    .into();
+    let s = setup.start().await?;
+    let (_, turn) = run_turn(&s, &script, "Show the picture.").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let message = last(&s).await?;
+    let files = message["attachments"].as_array().unwrap();
+    assert_eq!(files.len(), 1, "{message}");
+    assert_eq!(files[0]["safe_name"], "pic.svg");
+    assert_eq!(files[0]["deliverable"], true);
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

@@ -247,8 +247,13 @@ pub trait JournalPort: Send + Sync {
         result: &'a ToolResult,
     ) -> PortFuture<'a, Option<ToolOutcome>>;
 
-    /// The artifacts and changes the turn produced.
-    fn closeout<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout>;
+    /// The artifacts and changes the turn produced. `content` is the final
+    /// reply text (empty when the turn suspends).
+    fn closeout<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        content: &'a str,
+    ) -> PortFuture<'a, JournalCloseout>;
 }
 
 /// What the journal contributes to the final payload.

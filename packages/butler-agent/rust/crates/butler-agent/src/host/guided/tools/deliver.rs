@@ -30,6 +30,33 @@ pub(super) async fn execute(
     .await;
     encoded(&result.unwrap_or_else(|_| unavailable("")))
 }
+
+impl GuidedTools {
+    /// Files a final reply shows as Markdown images, checked and staged exactly
+    /// like `deliver_files` paths. Targets that fail the check are skipped.
+    pub(crate) async fn shown_files(&self, labels: Vec<String>) -> Vec<Value> {
+        let workspace = self.active_workspace_path();
+        let data = self.binding.butler_data.clone();
+        let turn = self.binding.turn_id.clone();
+        let inventory = self
+            .binding
+            .workspace_reference
+            .as_ref()
+            .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
+        let lease = secure_fs::StageScope::for_operation(&data, &turn);
+        tokio::task::spawn_blocking(move || {
+            let _lease = lease;
+            let inventory = inventory.unwrap_or_else(|| secure_fs::SecretInventory::cached(&data));
+            labels
+                .iter()
+                .filter_map(|label| checked(&workspace, &data, &turn, label, &inventory))
+                .collect()
+        })
+        .await
+        .unwrap_or_default()
+    }
+}
+
 fn unavailable(path: &str) -> Value {
     json!({"ok":false,"error":"deliver_file_unavailable","path":path,"message":UNAVAILABLE})
 }

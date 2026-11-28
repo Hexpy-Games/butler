@@ -17,6 +17,7 @@ pub(crate) struct GuidedJournal {
     journal: Arc<ToolJournalRepository>,
     activity: Arc<GuidedActivity>,
     subsessions: butler_turn::btcc::SqliteSubsessionRepository,
+    tools: Arc<crate::host::GuidedTools>,
 }
 
 impl GuidedJournal {
@@ -25,12 +26,14 @@ impl GuidedJournal {
         journal: Arc<ToolJournalRepository>,
         activity: Arc<GuidedActivity>,
         subsessions: butler_turn::btcc::SqliteSubsessionRepository,
+        tools: Arc<crate::host::GuidedTools>,
     ) -> Self {
         Self {
             turn_id,
             journal,
             activity,
             subsessions,
+            tools,
         }
     }
 
@@ -130,7 +133,11 @@ impl JournalPort for GuidedJournal {
         })
     }
 
-    fn closeout<'a>(&'a self, invocation: GuidedInvocation<'a>) -> PortFuture<'a, JournalCloseout> {
+    fn closeout<'a>(
+        &'a self,
+        invocation: GuidedInvocation<'a>,
+        content: &'a str,
+    ) -> PortFuture<'a, JournalCloseout> {
         Box::pin(async move {
             self.check_turn(invocation)?;
             let workspace = invocation
@@ -152,19 +159,18 @@ impl JournalPort for GuidedJournal {
                 .pointer("/executionPolicy/role")
                 .and_then(serde_json::Value::as_str)
                 == Some("steward");
-            if result.is_none() && !workers {
-                return closeout::handoff(closeout::without_pictured(own), &self.turn_id).await;
-            }
-            let child = self
-                .subsessions
-                .delivered_files(invocation.turn.session_id.clone(), result, workers)
-                .await
-                .map_err(BtccError::from)?;
-            closeout::handoff(
-                closeout::without_pictured(closeout::merge_files(child, own)),
-                &self.turn_id,
-            )
-            .await
+            let merged = if result.is_none() && !workers {
+                own
+            } else {
+                let child = self
+                    .subsessions
+                    .delivered_files(invocation.turn.session_id.clone(), result, workers)
+                    .await
+                    .map_err(BtccError::from)?;
+                closeout::merge_files(child, own)
+            };
+            let merged = closeout::shown_files(merged, content, &self.tools).await;
+            closeout::handoff(closeout::without_pictured(merged), &self.turn_id).await
         })
     }
 }
