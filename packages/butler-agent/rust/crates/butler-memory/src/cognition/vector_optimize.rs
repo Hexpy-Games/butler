@@ -34,10 +34,6 @@ pub enum VectorOptimizeOutcome {
     },
     /// The run finished.
     Metrics {
-        /// Caches compacted (always 0; kept for the legacy report).
-        caches_compacted: usize,
-        /// Summaries re-embedded (always 0; kept for the legacy report).
-        summaries_re_embedded: usize,
         /// Vectors of removed units deleted.
         vectors_pruned: usize,
         /// Whether the table files were compacted.
@@ -132,8 +128,6 @@ impl VectorOptimizeService {
         };
         self.coordinator.invalidate_inventory();
         Ok(VectorOptimizeOutcome::Metrics {
-            caches_compacted: 0,
-            summaries_re_embedded: 0,
             vectors_pruned,
             lancedb_compacted,
         })

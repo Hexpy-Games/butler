@@ -9,10 +9,10 @@ impl ConfiguredPhaseExecutor for PhaseFixture {
         _: &'a CancellationToken,
     ) -> ConfiguredPhaseFuture<'a> {
         Box::pin(async move {
-            if phase == ConfiguredPhase::Consolidate {
+            if phase == ConfiguredPhase::Optimize {
                 Err(CognitionError::relayed(
-                    "fixture_consolidate_failed",
-                    "fixture_consolidate_failed",
+                    "fixture_optimize_failed",
+                    "fixture_optimize_failed",
                 ))
             } else {
                 Ok(json!({"phase_effect":phase.name()}))
@@ -48,8 +48,8 @@ async fn missing_generation_skips_and_phase_failure_remains_in_daily_report() {
         .await
         .expect("report phase failure");
     assert_eq!(completed.exit_code, 0);
-    assert_eq!(completed.phases_run, 3);
-    assert_eq!(completed.failed_phases, ["consolidate"]);
+    assert_eq!(completed.phases_run, 2);
+    assert_eq!(completed.failed_phases, ["optimize"]);
     let summary = std::fs::read_to_string(root.join("cognition/consolidation/run-summary.jsonl"))
         .expect("read summary");
     assert_eq!(

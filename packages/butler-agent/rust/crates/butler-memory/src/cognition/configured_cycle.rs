@@ -1,4 +1,4 @@
-//! The four source-configured memory maintenance phases and their durable report.
+//! The source-configured memory maintenance phases and their durable report.
 
 use crate::lenient::JsonField;
 use crate::lenient::set_field;
@@ -39,8 +39,6 @@ pub trait ConfiguredPhaseExecutor: Send + Sync {
 pub enum ConfiguredPhase {
     /// Catch up on unprojected conversation sources.
     Catchup,
-    /// Consolidate memory.
-    Consolidate,
     /// Optimize the vector store.
     Optimize,
     /// Record memory health.
@@ -48,16 +46,10 @@ pub enum ConfiguredPhase {
 }
 
 impl ConfiguredPhase {
-    const ALL: [Self; 4] = [
-        Self::Catchup,
-        Self::Consolidate,
-        Self::Optimize,
-        Self::Health,
-    ];
+    const ALL: [Self; 3] = [Self::Catchup, Self::Optimize, Self::Health];
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Catchup => "catchup",
-            Self::Consolidate => "consolidate",
             Self::Optimize => "optimize",
             Self::Health => "health",
         }
@@ -71,11 +63,6 @@ pub struct ConfiguredCycleOptions {
     pub enabled: bool,
     /// Time budget for the whole cycle, in milliseconds.
     pub total_budget_ms: u64,
-    /// Parsed for parity with the source config, which records these soft
-    /// subphase budgets but never enforces or emits them.
-    pub subphase_budgets_ms: [u64; 4],
-    /// Activation decay applied by consolidation.
-    pub activation_decay_d: f64,
     /// Project capsules refreshed per cycle at most.
     pub project_capsule_refresh_limit: usize,
 }
@@ -89,17 +76,9 @@ impl ConfiguredCycleOptions {
             .unwrap_or(Value::Null);
         let config = &raw.field("cognition").field("consolidationCycle");
         let number = |key: &str, default| config[key].as_u64().unwrap_or(default);
-        let sub = &config["subPhaseBudgetsMs"];
         Self {
             enabled: config["enabled"] != false,
             total_budget_ms: number("totalBudgetMs", 600_000),
-            subphase_budgets_ms: [
-                sub["catchup"].as_u64().unwrap_or(120_000),
-                sub["consolidate"].as_u64().unwrap_or(240_000),
-                sub["optimize"].as_u64().unwrap_or(180_000),
-                sub["health"].as_u64().unwrap_or(60_000),
-            ],
-            activation_decay_d: config["activationDecayD"].as_f64().unwrap_or(0.5),
             project_capsule_refresh_limit: usize::try_from(
                 number("projectCapsuleRefreshLimit", 20).min(usize::MAX as u64),
             )
@@ -270,6 +249,17 @@ async fn append_summary(
         json!(now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     );
     append(data_root, root.join("run-summary.jsonl"), event).await
+}
+
+/// Appends one event to today's cycle log, for work that runs after the configured phases.
+pub async fn append_cycle_event(
+    data_root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+    event: Value,
+) -> CognitionResult<()> {
+    let root = paths.cognition_root(data_root).join("consolidation");
+    ensure_data_authority(data_root, &[&root])?;
+    append_event(data_root.to_owned(), root, event).await
 }
 
 async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionResult<()> {

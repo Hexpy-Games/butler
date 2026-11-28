@@ -68,14 +68,7 @@
       "enabled": true,
       "scheduleCron": "0 4 * * *",
       "totalBudgetMs": 600000,
-      "subPhaseBudgetsMs": {
-        "catchup": 120000,
-        "consolidate": 240000,
-        "optimize": 180000,
-        "health": 60000
-      },
       "diskQuotaMb": 2048,
-      "activationDecayD": 0.5,
       "activationPruneFloor": -3.0,
       "hotCacheCompactThresholdBytes": 32768,
       "logRetentionDays": 7

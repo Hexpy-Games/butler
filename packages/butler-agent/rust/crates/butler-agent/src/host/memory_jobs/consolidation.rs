@@ -1,6 +1,6 @@
 //! Process-owned consolidation admission, receipts and serialized durable results.
 use super::{
-    daily::DailyCognitionJobs,
+    daily::{CycleRun, DailyCognitionJobs},
     daily_schedule::{iso_at, read_state, write_state},
 };
 use crate::host::HostError;
@@ -198,40 +198,48 @@ impl ConsolidationRunGate {
         let result = daily.consolidation_cycle(id, started, cancellation).await;
         let _admission = self.admission.lock().await;
         // Shutdown preserves the scheduled intent, including its original run id and start.
-        if result.is_err() && cancellation.is_cancelled() {
-            return result;
+        // A writer wait ended by shutdown reports busy, so only a full run is recorded then.
+        if cancellation.is_cancelled() && !matches!(result, Ok(CycleRun::Full)) {
+            return result.map(|_| ());
         }
         let mut state = self.state().await?.unwrap_or(json!({}));
-        state["lastRunAt"] = json!(iso_at(started));
-        state["status"] = json!(if result.is_ok() { "ok" } else { "error" });
-        state["trigger"] = receipt["trigger"].clone();
-        state["runId"] = receipt["operation_id"].clone();
-        state["late"] = json!(receipt["late"].as_bool().unwrap_or(false));
-        state["scheduledAt"] = receipt["scheduledAt"].clone();
+        if matches!(result, Ok(CycleRun::GenericSkipped)) {
+            // The last full run stays the last run; the skipped parts run next time.
+            state["skipped"] = json!({"at":iso_at(started),"date":day,"reason":"busy"});
+        } else {
+            state["lastRunAt"] = json!(iso_at(started));
+            state["status"] = json!(if result.is_ok() { "ok" } else { "error" });
+            state["trigger"] = receipt["trigger"].clone();
+            state["runId"] = receipt["operation_id"].clone();
+            state["late"] = json!(receipt["late"].as_bool().unwrap_or(false));
+            state["scheduledAt"] = receipt["scheduledAt"].clone();
+            state
+                .as_object_mut()
+                .ok_or("scheduler_state_invalid")?
+                .remove("message");
+            if let Err(error) = &result {
+                state["message"] = json!(error.message());
+            }
+        }
         if receipt["trigger"] == "scheduled" {
             state["scheduledHandledAtMs"] = json!(started);
         }
-        state
-            .as_object_mut()
-            .ok_or("scheduler_state_invalid")?
-            .remove("message");
         if let Some(day) = day {
             state["lastRunDate"] = json!(day);
-        }
-        if let Err(error) = &result {
-            state["message"] = json!(error.message());
         }
         let persisted = self.persist(state).await;
         let mut terminal = receipt;
         terminal["sequence"] = json!(2);
-        terminal["phase"] = json!(if result.is_ok() && persisted.is_ok() {
-            "complete"
-        } else {
-            "failed"
-        });
+        terminal["phase"] = json!(
+            if matches!(result, Ok(CycleRun::Full)) && persisted.is_ok() {
+                "complete"
+            } else {
+                "failed"
+            }
+        );
         self.publish(terminal).await;
         persisted?;
-        result
+        result.map(|_| ())
     }
 }
 

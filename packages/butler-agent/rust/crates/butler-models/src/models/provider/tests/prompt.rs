@@ -143,6 +143,10 @@ async fn anthropic_prompt_serializes_registered_default_output() {
         .unwrap();
     let request = server.await.unwrap();
     assert_eq!(result.text, "done");
+    let reported = result.usage.expect("anthropic prompt usage");
+    assert_eq!(reported.prompt_tokens, Some(3.0));
+    assert_eq!(reported.output_tokens, 2.0);
+    assert_eq!(reported.total_tokens, Some(5.0));
     let offset = request
         .windows(4)
         .position(|bytes| bytes == b"\r\n\r\n")

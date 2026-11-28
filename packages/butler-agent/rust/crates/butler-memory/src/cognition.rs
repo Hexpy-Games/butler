@@ -31,7 +31,6 @@ pub(crate) mod generation;
 mod generation_vectors;
 pub use generation_vectors::{requeue_vectors, vectors_pending_since};
 mod graph;
-mod graph_consolidation;
 mod hot_cache;
 mod knowhow_store;
 mod lance_maintenance;
@@ -86,7 +85,7 @@ pub use completion::{
 };
 pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
-    ConfiguredPhaseExecutor, ConfiguredPhaseFuture,
+    ConfiguredPhaseExecutor, ConfiguredPhaseFuture, append_cycle_event,
 };
 pub(crate) use configured_projects::{registered_project_names, registered_projects};
 pub use consolidation::{
@@ -115,7 +114,6 @@ pub use generation::{
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GRAPH_BUSY_TIMEOUT, GraphProgress, JobOutcome, StageState, StageStatus};
-pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
 pub use knowhow_store::FeedbackTarget;
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};

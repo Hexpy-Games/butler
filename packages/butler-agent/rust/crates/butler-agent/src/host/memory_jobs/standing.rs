@@ -1,5 +1,5 @@
 //! Daily folds of global user statements into a standing-fact sheet.
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
 
 use butler_memory::{
     cognition::{self, CognitionPathEnvironment},
@@ -9,6 +9,7 @@ use butler_models::models::{
     ModelProvider, PromptUsageAttribution, ProviderPromptLifecycle, ProviderPromptPort,
     ProviderPromptRequest,
 };
+use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::host::HostError;
@@ -18,6 +19,53 @@ pub(in crate::host) struct StandingFacts {
     paths: CognitionPathEnvironment,
     profile: Arc<ProfileService>,
     provider: Arc<ModelProvider>,
+}
+
+/// What one refresh did, for the cycle log.
+#[derive(Default)]
+struct FoldEffect {
+    calls: u64,
+    prompt_tokens: f64,
+    output_tokens: f64,
+    sources_before: u64,
+    sources_after: u64,
+    text_before: String,
+    text_after: String,
+}
+
+impl FoldEffect {
+    fn event(&self, error: Option<&HostError>, duration: Duration) -> Value {
+        let before: HashSet<_> = self
+            .text_before
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect();
+        let after: HashSet<_> = self
+            .text_after
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect();
+        let mut event = json!({
+            "phase": "standing_facts",
+            "status": if error.is_some() { "error" } else { "ok" },
+            "duration_ms": duration.as_millis(),
+            "metrics": {
+                "calls": self.calls,
+                "prompt_tokens": self.prompt_tokens,
+                "output_tokens": self.output_tokens,
+                "sources_folded": self.sources_after.saturating_sub(self.sources_before),
+                "lines_added": after.difference(&before).count(),
+                "lines_removed": before.difference(&after).count(),
+                "bytes": self.text_after.len(),
+            },
+        });
+        if let Some(error) = error {
+            event["error"] = json!({"name": error.message()});
+        }
+        event
+    }
 }
 
 impl StandingFacts {
@@ -33,6 +81,25 @@ impl StandingFacts {
     pub(in crate::host) async fn refresh(
         &self,
         cancellation: &CancellationToken,
+    ) -> Result<(), HostError> {
+        let started = std::time::Instant::now();
+        let mut effect = FoldEffect::default();
+        let result = self.fold(cancellation, &mut effect).await;
+        if effect.calls > 0 {
+            let event = effect.event(result.as_ref().err(), started.elapsed());
+            if let Err(error) =
+                cognition::append_cycle_event(&self.data_root, &self.paths, event).await
+            {
+                butler_core::diagnostic!("[standing-facts] event {}", error.code());
+            }
+        }
+        result
+    }
+
+    async fn fold(
+        &self,
+        cancellation: &CancellationToken,
+        effect: &mut FoldEffect,
     ) -> Result<(), HostError> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -50,6 +117,10 @@ impl StandingFacts {
         else {
             return Ok(());
         };
+        effect.sources_before = sheet.sources;
+        effect.sources_after = sheet.sources;
+        effect.text_before = sheet.text.clone();
+        effect.text_after = sheet.text.clone();
         loop {
             if cancellation.is_cancelled() {
                 return Ok(());
@@ -66,13 +137,17 @@ impl StandingFacts {
             };
             let model = self.profile.read_extractor_model().await.map_err(failure)?;
             let prompt = cognition::standing_prompt(&previous.text, &batch.lines);
-            let mut text = self.summarize(&model, &prompt, cancellation).await?;
+            let mut text = self
+                .summarize(&model, &prompt, cancellation, effect)
+                .await?;
             for _ in 0..3 {
                 if text.len() <= cognition::STANDING_MAX_BYTES {
                     break;
                 }
                 let prompt = cognition::standing_shorten_prompt(&text);
-                text = self.summarize(&model, &prompt, cancellation).await?;
+                text = self
+                    .summarize(&model, &prompt, cancellation, effect)
+                    .await?;
             }
             if text.len() > cognition::STANDING_MAX_BYTES {
                 return Err(HostError::new("standing_facts_reply_invalid"));
@@ -89,6 +164,8 @@ impl StandingFacts {
             else {
                 return Ok(());
             };
+            effect.sources_after = published.sources;
+            effect.text_after = published.text.clone();
             sheet = published;
         }
     }
@@ -122,12 +199,14 @@ impl StandingFacts {
         model: &butler_memory::profile::ProfilingExtractorModelSnapshot,
         prompt: &str,
         cancellation: &CancellationToken,
+        effect: &mut FoldEffect,
     ) -> Result<String, HostError> {
         let effort: butler_models::models::ReasoningEffort =
             serde_json::from_value(serde_json::Value::String(model.reasoning_effort.clone()))
                 .map_err(failure)?;
         let root = self.data_root.to_string_lossy();
         let attribution = PromptUsageAttribution::for_phase("standing_facts");
+        effect.calls += 1;
         let reply = self
             .provider
             .run_prompt(
@@ -150,6 +229,15 @@ impl StandingFacts {
             )
             .await
             .map_err(failure)?;
+        if let Some(usage) = reply.usage {
+            let prompt_tokens = usage.prompt_tokens.unwrap_or(0.0);
+            if prompt_tokens.is_finite() && prompt_tokens >= 0.0 {
+                effect.prompt_tokens += prompt_tokens;
+            }
+            if usage.output_tokens.is_finite() && usage.output_tokens >= 0.0 {
+                effect.output_tokens += usage.output_tokens;
+            }
+        }
         let text = reply.text.trim();
         if text.is_empty() {
             return Err(HostError::new("standing_facts_reply_invalid"));
