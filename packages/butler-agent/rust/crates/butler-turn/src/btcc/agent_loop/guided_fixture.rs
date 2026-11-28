@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::{future::Future, pin::Pin};
 
 use serde_json::json;
@@ -291,6 +292,12 @@ impl WorkPort for Fixture {
         _: u32,
     ) -> PortFuture<'a, CandidateDisposition> {
         Box::pin(async move {
+            if self.work_error.load(Ordering::SeqCst) {
+                return Err(BtccError::relayed(
+                    "project_work_runtime_ownership_conflict",
+                    "x",
+                ));
+            }
             Ok(self
                 .candidates
                 .lock()
@@ -304,7 +311,15 @@ impl WorkPort for Fixture {
         _invocation: GuidedInvocation<'a>,
         content: &'a str,
     ) -> PortFuture<'a, String> {
-        Box::pin(async move { Ok(content.into()) })
+        Box::pin(async move {
+            if self.work_error.load(Ordering::SeqCst) {
+                return Err(BtccError::relayed(
+                    "project_work_runtime_ownership_conflict",
+                    "x",
+                ));
+            }
+            Ok(content.into())
+        })
     }
     fn final_state<'a>(&'a self, _: GuidedInvocation<'a>) -> PortFuture<'a, WorkFinalState> {
         Box::pin(async move {
