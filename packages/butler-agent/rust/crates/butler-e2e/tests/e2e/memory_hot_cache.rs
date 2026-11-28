@@ -296,6 +296,8 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         text.contains("You keep a short fact sheet about one person")
             && text.contains("] My preferred garden flower is the blue iris.")
             && text.contains("Current sheet (0 bytes; keep it under 3,000)")
+            && text.contains(&format!("Today is {}.", &NOW[..10]))
+            && text.contains("judge what is newer by the date")
     }));
     assert_eq!(
         box_snapshot(&box_root)?,
