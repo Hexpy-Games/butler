@@ -134,5 +134,17 @@ async fn settings_keys_select_and_route_each_hosted_provider() -> Result<(), Har
     ] {
         register(&s, provider, model, effort, connected.insert(provider)).await?;
     }
+    let controls =
+        s.gw.patch(
+            "/sessions/general/controls",
+            json!({"model":"upstage/solar-pro4"}),
+        )
+        .await?;
+    assert_eq!(
+        controls.data()["controls"]["model"],
+        "upstage/solar-pro-4",
+        "{}",
+        controls.text
+    );
     s.finish().await
 }

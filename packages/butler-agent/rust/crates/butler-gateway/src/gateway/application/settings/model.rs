@@ -157,6 +157,7 @@ pub(super) fn selectable<'a>(
     models
         .iter()
         .find(|item| item.runtime_supported && (item.model_ref == value || item.model_id == value))
+        .or_else(|| find_unique(value, models).filter(|m| m.runtime_supported))
 }
 
 fn resolve_runtime<'a>(
