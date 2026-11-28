@@ -19,10 +19,11 @@ async function focusedFrame(tab) {
 }
 
 /** Once the page has taken a shorter viewport (≤ 500 ms), scrolls the focused text field to its middle: the phone keyboard opened over the rest. */
-async function revealFocus(tab, height) {
+async function revealFocus(browser, tab, height) {
   const page = tab.view.webContents;
   await page.executeJavaScriptInIsolatedWorld(9001, [{ code: `innerHeight === ${Number(height)} || new Promise(done => { addEventListener("resize", () => done(true), { once: true }); setTimeout(() => done(false), 500); })` }]);
   const frame = await focusedFrame(tab);
+  if (!(tab.holder === "user" && browser.phoneLive.feeds.has(tab.id) && tab.phoneViewport?.height === height)) return;
   await (frame?.world ?? page).executeJavaScriptInIsolatedWorld(9001, [{ code: REVEAL }]);
 }
 
@@ -80,7 +81,7 @@ export async function applyEvents(browser, tab, events) {
           setPhoneViewport(browser, tab, { width: event.width, height: event.height, dpr: event.dpr });
           ({ width, height } = tab.view.getBounds());
           if (!width || !height) return { status: "refused", reason: "live_unavailable" };
-          if (previous?.width === event.width && event.height < previous.height) void revealFocus(tab, event.height).catch(() => {});
+          if (previous?.width === event.width && event.height < previous.height) void revealFocus(browser, tab, event.height).catch(() => {});
           break;
         }
         default:
