@@ -101,12 +101,10 @@ impl StandingFacts {
                 return Ok(None);
             }
             let generation = cognition::resolve_active_generation(&data_root, &paths)?;
+            let projects = cognition::standing_projects(&generation.graph_path)?;
+            cognition::prune_standing(&generation.root, &projects)?;
             let mut pages = vec![StandingPage::User];
-            pages.extend(
-                cognition::standing_projects(&generation.graph_path)?
-                    .into_iter()
-                    .map(StandingPage::Project),
-            );
+            pages.extend(projects.into_iter().map(StandingPage::Project));
             Ok::<_, cognition::CognitionError>(Some((generation, pages)))
         })
         .await

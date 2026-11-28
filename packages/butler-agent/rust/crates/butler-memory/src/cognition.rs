@@ -15,7 +15,8 @@ pub use standing::{
     Batch as StandingBatch, MAX_BYTES as STANDING_MAX_BYTES, Page as StandingPage,
     Pass as StandingPass, Sheet as StandingSheet, Start as StandingStart, batch as standing_batch,
     discard as discard_standing, projects as standing_projects, prompt as standing_prompt,
-    shorten_prompt as standing_shorten_prompt, start as standing_start, write as write_standing,
+    prune as prune_standing, shorten_prompt as standing_shorten_prompt, start as standing_start,
+    write as write_standing,
 };
 mod continuity;
 pub use continuity::{

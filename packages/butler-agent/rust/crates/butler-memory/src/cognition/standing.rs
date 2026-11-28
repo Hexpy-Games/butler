@@ -1,6 +1,7 @@
 //! Model-kept pages of a generation: the user's standing-fact sheet and one
 //! page per project. The memory model folds new statements into a page.
 use std::{
+    collections::HashSet,
     fs, io,
     io::Write,
     path::{Path, PathBuf},
@@ -269,6 +270,33 @@ fn write_file(path: &Path, sheet: &Sheet, model: &str) -> io::Result<()> {
 pub fn discard(root: &Path, page: &Page) -> io::Result<()> {
     remove(&page.path(root))?;
     remove(&page.build_path(root))
+}
+
+/// Deletes the page files of projects that are no longer listed: their
+/// memory is gone, so their pages must not outlive it.
+pub fn prune(root: &Path, projects: &[String]) -> CognitionResult<()> {
+    let keep: HashSet<String> = projects
+        .iter()
+        .map(|id| format!("{}.md", file_stem(id)))
+        .collect();
+    for directory in [
+        root.join("hot/projects"),
+        root.join("hot/building/projects"),
+    ] {
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(failure(error)),
+        };
+        for entry in entries {
+            let name = entry.map_err(failure)?.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.ends_with(".md") && !keep.contains(name) {
+                remove(&directory.join(name)).map_err(failure)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn remove(path: &Path) -> io::Result<()> {
