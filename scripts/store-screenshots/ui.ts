@@ -133,13 +133,17 @@ export async function firstRun(app: App, locale: Locale) {
   })));
 }
 
-async function clickSidebar(page: ElectronPage, label: string) {
-  // The app collapses the sidebar beside an open browser pane (run 46134374438); close the pane like a user.
+export async function closeBrowserPane(page: ElectronPage) {
   const area = "#butler-browser-area";
   if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(area)})?.getBoundingClientRect().width)`)) {
     await clickSelector(page, '[data-test-class="titlebar-browser-toggle"]');
     await page.waitForFunction(area => !document.querySelector(area)?.getBoundingClientRect().width, area);
   }
+}
+
+async function clickSidebar(page: ElectronPage, label: string) {
+  // The app collapses the sidebar beside an open browser pane (run 46134374438); close the pane like a user.
+  await closeBrowserPane(page);
   try {
     await page.waitForFunction(({ label, sidebarItems }) => {
       const nodes = [...document.querySelectorAll(sidebarItems)].filter(node =>
@@ -246,14 +250,22 @@ export async function requestFramed(page: ElectronPage): Promise<RequestFrame> {
 
 export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale) {
   await openChat(page, words.B[0], words.B[1]);
-  await page.waitForFunction(({ approval, approvalCode, command, label }) => {
-    const panel = document.querySelector(approval);
-    const bounds = panel?.getBoundingClientRect();
-    const code = panel?.querySelector(approvalCode);
-    return Boolean(bounds && bounds.width > 0 && bounds.top >= 0 && bounds.bottom <= innerHeight &&
-      code && code.scrollWidth <= code.clientWidth + 1 && code.textContent?.trim() === command &&
-      panel?.textContent?.includes(label));
-  }, { approval, approvalCode, command: words.zip, label: getAppCopy(locale.locale).interfaceDetails.allowOnce });
+  try {
+    await page.waitForFunction(({ approval, approvalCode, command, label }) => {
+      const panel = document.querySelector(approval);
+      const bounds = panel?.getBoundingClientRect();
+      const code = panel?.querySelector(approvalCode);
+      return Boolean(bounds && bounds.width > 0 && bounds.top >= 0 && bounds.bottom <= innerHeight &&
+        code && code.scrollWidth <= code.clientWidth + 1 && code.textContent?.trim() === command &&
+        panel?.textContent?.includes(label));
+    }, { approval, approvalCode, command: words.zip, label: getAppCopy(locale.locale).interfaceDetails.allowOnce });
+  } catch (error) {
+    const box = (selector: string) => `(r => r && [r.left, r.top, r.right, r.bottom].map(Math.round))(document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect())`;
+    const seen = await page.expression(`({ panel: ${box(approval)}, workspace: ${box('[data-test-class="workspace"]')},
+      browserArea: ${box("#butler-browser-area")}, innerWidth,
+      code: (c => c && { scrollWidth: c.scrollWidth, clientWidth: c.clientWidth })(document.querySelector(${JSON.stringify(`${approval} ${approvalCode}`)})) })`).catch(() => null);
+    throw new Error(`Approval card check failed: ${JSON.stringify(seen)}`, { cause: error });
+  }
   await frameRequest(page);
   await requestFramed(page);
 }

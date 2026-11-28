@@ -9,7 +9,7 @@ import { type Api, type App, type Locale, locales, redact, startApp, until } fro
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { focus, shotRecorder } from "./shots.ts";
 import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
-import { approval, assertBrowserStills, assertDesktopLayout, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, requestFramed, schedulesShot, storeScale, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
+import { approval, assertBrowserStills, assertDesktopLayout, assertModelChip, browserShot, click, closeBrowserPane, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, requestFramed, schedulesShot, storeScale, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
@@ -82,7 +82,11 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
     if (pending) answered.add(pending.request_ref);
     return false;
   }, () => chatTimeout(app, chat, lastView), 120_000);
-  if (chat === "C") await assertBrowserStills(app.page, locale); // Let the page still save before leaving chat C.
+  if (chat === "C") {
+    await assertBrowserStills(app.page, locale); // Let the page still save before leaving chat C.
+    // Chats created while the pane kept the sidebar collapsed came late to the sidebar (run 46136156001).
+    await closeBrowserPane(app.page);
+  }
   return session.id;
 }
 
