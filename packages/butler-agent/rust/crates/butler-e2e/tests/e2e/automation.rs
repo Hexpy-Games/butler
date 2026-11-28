@@ -214,3 +214,36 @@ async fn auto_01_cli_runs_an_app_automation() -> Result<(), HarnessError> {
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
     s.finish().await
 }
+
+/// AUTO-03 — A schedule whose target chat was deleted reports no target title.
+#[tokio::test]
+async fn auto_03_deleted_target_has_no_label() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("AUTO-03")?.start().await?;
+    let session = s.gw.post("/sessions", json!({"kind": "chat"})).await?;
+    assert_eq!(session.status, 201, "{}", session.text);
+    let chat = session.data()["session"]["id"].as_str().unwrap();
+    let created =
+        s.gw.post(
+            "/automations",
+            json!({
+                "title": "Numbers",
+                "prompt_body": NUMBERS,
+                "target_session_id": chat,
+                "interval_seconds": 3600,
+            }),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let id = created.data()["automation"]["id"].as_str().unwrap();
+    let summary = listed(&s, id).await?.expect("automation listed");
+    assert!(summary["target_label"].is_string(), "{summary}");
+
+    let deleted =
+        s.gw.delete(&format!("/sessions/{chat}?permanent=true"))
+            .await?;
+    assert_eq!(deleted.status, 200, "{}", deleted.text);
+    let summary = listed(&s, id).await?.expect("automation still listed");
+    assert_eq!(summary.get("target_label"), Some(&Value::Null), "{summary}");
+    s.finish().await
+}

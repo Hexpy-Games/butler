@@ -51,7 +51,8 @@ pub struct AutomationSummary {
     pub state: String,
     pub target_kind: String,
     pub target_session_id: String,
-    pub target_label: String,
+    /// The target chat's title; null once that chat is deleted.
+    pub target_label: Option<String>,
     pub interval_seconds: i64,
     pub schedule_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]

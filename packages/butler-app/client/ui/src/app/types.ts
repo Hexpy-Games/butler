@@ -1888,7 +1888,7 @@ export interface AutomationSummary {
   id: string;
   title: string;
   target_session_id: string;
-  target_label: string;
+  target_label: string | null;
   state: string;
   interval_seconds?: number;
   schedule_type?: string;
