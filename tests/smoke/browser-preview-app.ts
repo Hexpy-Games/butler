@@ -76,6 +76,12 @@ try {
     ...[["index.html", readFileSync(resolve("tests/fixtures/browser/preview/index.html"), "utf8")],
       ["main.js", readFileSync(resolve("tests/fixtures/browser/preview/main.js"), "utf8")], ["serve.mjs", runner]].map(([file, content]) =>
       () => ({ name: "write_file", arguments: { path: `preview-fixture/${file}`, content, create_parents: true } })),
+  ]);
+  await send("Write the preview fixture");
+  await delivered();
+  // Full access starts previews without asking (PERM-03); the exact-approval flow runs under ask_first.
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ access_mode: "ask_first" }) });
+  stub.set([
     () => ({ name: "tool_describe", arguments: { ids: ["native:preview_start", "native:preview_stop"] } }),
     () => bridgeBrowser("preview_start", { command: "bun serve.mjs", cwd: "preview-fixture", port }),
   ]);
