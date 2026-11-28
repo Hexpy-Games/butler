@@ -131,13 +131,28 @@ export async function firstRun(app: App, locale: Locale) {
   })));
 }
 
-export async function openChat(page: ElectronPage, title: string, prompt?: string) {
+async function clickSidebar(page: ElectronPage, label: string) {
   // The app collapses the sidebar beside an open browser pane; a user opens it with the titlebar toggle.
   const language = await page.evaluate(() => document.documentElement.lang);
   const show = getAppCopy(appLocaleFromLanguage(language)).titlebar.showLeftPanel;
   const toggle = `button[aria-label=${JSON.stringify(show)}]`;
   if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(toggle)}))`)) await click(page, show, toggle);
-  await click(page, title, sidebarItems);
+  await page.waitForFunction(({ label, sidebarItems }) => {
+    const node = [...document.querySelectorAll(sidebarItems)].find(node =>
+      (node.getAttribute("aria-label") || node.textContent)?.trim() === label);
+    if (!node) return false;
+    node.scrollIntoView({ block: "nearest" });
+    const { left, top, width, height } = node.getBoundingClientRect();
+    const x = left + width / 2;
+    const y = top + height / 2;
+    return width > 0 && x >= 0 && x < innerWidth && y >= 0 && y < innerHeight &&
+      node.contains(document.elementFromPoint(x, y));
+  }, { label, sidebarItems });
+  await page.clickText(label, sidebarItems);
+}
+
+export async function openChat(page: ElectronPage, title: string, prompt?: string) {
+  await clickSidebar(page, title);
   if (prompt) await textVisible(page, prompt);
 }
 
@@ -220,7 +235,7 @@ export async function assertBrowserStills(page: ElectronPage, locale: Locale) {
 }
 
 export async function schedulesShot(page: ElectronPage, words: Demo, locale: Locale) {
-  await click(page, words.navSchedules, sidebarItems);
+  await clickSidebar(page, words.navSchedules);
   const view = '[data-test-class="automations-view"]';
   const general = getAppCopy(locale.locale).space.general;
   const rowSelector = `${view} [data-slot=clickable]`;
