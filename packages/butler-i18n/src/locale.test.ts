@@ -168,3 +168,10 @@ test("reasoning effort labels localize provider levels and safely title-case fut
   expect(levels.map((value) => reasoningEffortLabel(value, "en-US")))
     .toEqual(["None", "Minimal", "Low", "Medium", "High", "Very high", "Max", "Medium", "Ultra High", "ToString"]);
 });
+
+// test-category: pure-logic
+test("English counts use the singular for one", () => {
+  const memory = getAppCopy("en-US").settings.memory;
+  expect([memory.patternDays(1), memory.patternMonths(1), memory.patternCount(1)]).toEqual(["Last 1 day", "Last 1 month", "1 time"]);
+  expect([memory.patternDays(2), memory.patternCount(2)]).toEqual(["Last 2 days", "2 times"]);
+});
