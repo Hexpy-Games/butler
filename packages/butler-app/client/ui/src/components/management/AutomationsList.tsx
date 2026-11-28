@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { hintScheduleLogin } from "@/app/loginSettings";
 import { scheduleFrequency, scheduleNextRun, scheduleState } from "@/app/scheduleLabels";
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import { useAppLocale } from "@/app/copy.ts";
 import {
   Button,
@@ -62,7 +63,7 @@ export function AutomationsList({
               <ListRow
                 icon={isAccessMode(automation.access_mode) ? accessModeIcon(automation.access_mode) : undefined}
                 title={automation.title}
-                description={automation.target_label}
+                description={sessionDisplayTitle({ id: automation.target_session_id, title: automation.target_label })}
                 meta={[
                   scheduleState(automation.state),
                   scheduleFrequency(automation),

@@ -1887,6 +1887,7 @@ export interface AutomationSummary {
   browser_payment?: boolean;
   id: string;
   title: string;
+  target_session_id: string;
   target_label: string;
   state: string;
   interval_seconds?: number;
