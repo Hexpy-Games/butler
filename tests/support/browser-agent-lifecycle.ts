@@ -20,7 +20,7 @@ export async function browserArchiveCheck(app: App, url: string, evidence: strin
   await app.call("hide");
   await waitBrowser(() => app.main(`(()=>{const t=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(tab)});
     return !t.slot?.visible && !t.attached && !t.detachWait && !t.attachWait})()`), "browser slot teardown published and view detached");
-  await app.main(`(()=>{const browser=globalThis.browserAgentSubject,t=browser.tabs.get(${JSON.stringify(tab)});browser.detach(t);t.bounds={x:0,y:0,width:700,height:500,scale:1,visible:false}})()`);
+  await app.main(`(()=>{const browser=globalThis.browserAgentSubject,t=browser.tabs.get(${JSON.stringify(tab)});browser.detach(t);t.slot={x:0,y:0,width:700,height:500,scale:1,visible:false}})()`);
   const admin=JSON.parse(await Bun.file(join(app.gateway.butlerData,"app/runtime/auth/local-admin.json")).text()).secret as string;
   const listed=await app.gateway.api<{tabs:Array<{id:string}>}>("/internal/browser/calls",{method:"POST",headers:{"x-butler-admin":admin},body:JSON.stringify({op:"tabs.list",session,args:{}})});
   assert.ok(listed.tabs.some(item=>item.id===tab));
