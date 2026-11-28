@@ -40,7 +40,7 @@ function screen(...args: string[]) {
   assert.equal(result.exitCode, 0, result.stderr.toString().trim() || "Screen command failed");
 }
 
-async function focus(app: App) {
+export async function focus(app: App) {
   return app.main.evaluate<Geometry>(`(() => {
     ${windowSetup}
     const { bounds, size, scaleFactor } = screen.getPrimaryDisplay();
@@ -65,6 +65,8 @@ async function settle(app: App, bounds: Bounds) {
   // The desktop cursor may be unavailable in a headless session. CDP also clears renderer hover.
   try { screen("-Mode", "Pointer", "-X", String(bounds.x + point.x), "-Y", String(bounds.y + point.y)); } catch {}
   await app.page.movePointer(point.x, point.y);
+  // A real pointer user sees no keyboard focus ring.
+  await app.page.expression(`(document.activeElement?.matches(':focus-visible') && document.activeElement.blur(), true)`);
   await app.page.waitForFunction(() => !document.querySelector("[data-slot=tooltip-content]"));
   await app.page.expression(`(async () => { await document.fonts.ready; await ${paint}; })()`);
   await app.page.waitForFunction(timeBasedFiniteAnimationsSettled);

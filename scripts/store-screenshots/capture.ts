@@ -7,7 +7,7 @@ import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/sr
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { type Api, type App, type Locale, locales, redact, startApp, until } from "./app.ts";
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
-import { shotRecorder } from "./shots.ts";
+import { focus, shotRecorder } from "./shots.ts";
 import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
 import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
 
@@ -122,6 +122,7 @@ async function setupWorkspace(app: App, locale: Locale, shots: Recorder) {
   await app.page.reload();
   await verifyTheme(app.page, locale);
   await verifyTextSize(app.page);
+  await focus(app); // Play the chats at the 1920x1080 layout the shots use.
   return { api, memorySetupFailure };
 }
 
