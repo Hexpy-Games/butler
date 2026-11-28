@@ -923,6 +923,7 @@ export const enUsCopy: AppCopy = {
       createWorktree: "Create a worktree for this conversation?",
       switchFolder: "Move the working folder?",
       chatFolder: "Chat folder",
+      commandFolder: folder => `Runs in: ${folder}`,
       generic: "Allow this action?",
       more: count => `+${count} more`,
       risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },

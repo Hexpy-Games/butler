@@ -1,7 +1,8 @@
 // test-category: pure-logic
 import { expect, test } from "bun:test";
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { AnsweredUserQuestions, ConversationMessage } from "../../../butler-protocol/src/index.ts";
-import { answerWire, normalizeApprovalCard, withQuestionAnswers } from "./approval";
+import { answerWire, approvalRequestView, normalizeApprovalCard, withQuestionAnswers } from "./approval";
 
 test("normalizeApprovalCard rejects invalid records and maps a command approval", () => {
   const record = { request_ref: "request", category: "command", reason: "Run the command", executable: "echo", command_count: 1,
@@ -9,6 +10,10 @@ test("normalizeApprovalCard rejects invalid records and maps a command approval"
   expect(normalizeApprovalCard({ ...record, category: "ask_user" })).toBeNull();
   expect(normalizeApprovalCard({ ...record, reason: "" })).toBeNull();
   expect(normalizeApprovalCard(record)).toMatchObject({ requestRef: "request", category: "command", approval: { actionKind: "run_command" } });
+  const ran = normalizeApprovalCard({ ...record, approval: { ...record.approval, examples: ["ls"],
+    operation: { tool: "run_command", access: "change", targets: ["@chat-folder"], command: "ls" } } })!;
+  expect(approvalRequestView(ran, getAppCopy("en-US")).details).toEqual([{ code: "ls" }, "Runs in: Chat folder"]);
+  expect(approvalRequestView(ran, getAppCopy("ko-KR")).details).toEqual([{ code: "ls" }, "실행 위치: 대화 폴더"]);
 });
 
 test("answerWire maps a single-choice pick and a text answer", () => {

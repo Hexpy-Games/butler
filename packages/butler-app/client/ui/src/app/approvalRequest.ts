@@ -184,7 +184,7 @@ export function approvalRequestView(
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...actionDetails(approval, actionKind, card, copy)],
-    pathDetails: operation?.targets.map(target => chatFolderShown(target, copy.chatFolder)) ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
+    pathDetails: operation ? operationTargets(operation, copy) : [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
     ruleText,
@@ -231,6 +231,11 @@ function actionDetails(approval: ApprovalSummary, kind: ApprovalActionKind,
 /** Kinds whose own sentence names the action better than a tool label. */
 const SENTENCE_KINDS: ReadonlySet<string> = new Set(["web_request", "manage_schedule"]);
 
+/** An operation's targets as shown; a command's target is the folder it runs in. */
+function operationTargets(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): string[] {
+  return operation.targets.map(target => chatFolderShown(target, copy.chatFolder)).map(target => operation.command ? copy.commandFolder(target) : target);
+}
+
 /** The exact operation, as the local decision shows it. */
 function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, copy: ApprovalRequestCopy): ApprovalDetail[] {
   if (operation.image) {
@@ -240,7 +245,7 @@ function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, 
       `${c.qualityLabel}: ${image.quality === "auto" ? c.default : quality}`, `${c.prompt}: ${image.prompt}`];
   }
   return [...(operation.command ? [{ code: operation.command }] : []),
-    ...operation.targets.map(target => chatFolderShown(target, copy.chatFolder)).map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+    ...operationTargets(operation, copy).map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
     ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
     ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
     ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))];

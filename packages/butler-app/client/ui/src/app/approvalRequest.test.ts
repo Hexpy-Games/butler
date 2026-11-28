@@ -74,6 +74,10 @@ test("the sentence quotes the workspace label, spaces and all, and drops what is
   const bare = summary("use_connector", { targets: [{ kind: "connector", path: "notion" }] });
   expect(approvalRequestView(card(bare), en).title).toBe("Use notion?");
   expect(approvalRequestView(card(summary("use_connector")), ko).title).toBe("연결된 도구를 사용할까요?");
+  const ran = normalizeApprovalSummary({ action_kind: "run_command", examples: ["ls"],
+    operation: { tool: "run_command", access: "change", targets: ["@chat-folder"], command: "ls" } })!;
+  expect(approvalRequestView(card(ran), en).details).toEqual([{ code: "ls" }, "Runs in: Chat folder"]);
+  expect(approvalRequestView(card(ran), ko).details).toEqual([{ code: "ls" }, "실행 위치: 대화 폴더"]);
 });
 
 // test-category: pure-logic
