@@ -1,5 +1,10 @@
 //! Relay a request to the computer's local socket over its pinned SSH connection.
-use super::{Computer, HttpError, deploy, remote_error, ssh, target::SshTarget};
+use super::{
+    Computer, HttpError, deploy,
+    remote_command::{self, Shell},
+    remote_error, ssh,
+    target::SshTarget,
+};
 use butler_platform::secrets::SecretText;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -42,12 +47,7 @@ pub(super) async fn send(
     cancel: CancellationToken,
 ) -> Result<Sent, HttpError> {
     let target = SshTarget::of(computer).await?;
-    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
-    let command = format!(
-        r#""$HOME/.butler-remote/current/butler-agent" --remote-request "$HOME/.butler-remote/data" {} {}"#,
-        quote(method),
-        quote(path)
-    );
+    let command = remote_command::request(Shell::of(&computer.os), method, path);
     let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(
         args,
@@ -132,11 +132,10 @@ pub(super) async fn loopback(
     cancel: CancellationToken,
 ) -> Result<String, HttpError> {
     let target = SshTarget::of(computer).await?;
+    let shell = Shell::of(&computer.os);
     let command = match callback {
-        super::forward::Callback::Port(port) =>
-            format!(r#""$HOME/.butler-remote/current/butler-agent" --remote-loopback {port}"#),
-        super::forward::Callback::Socket =>
-            r#""$HOME/.butler-remote/current/butler-agent" --remote-callback "$HOME/.butler-remote/data""#.to_owned(),
+        super::forward::Callback::Port(port) => remote_command::loopback(shell, port),
+        super::forward::Callback::Socket => remote_command::callback(shell),
     };
     let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(

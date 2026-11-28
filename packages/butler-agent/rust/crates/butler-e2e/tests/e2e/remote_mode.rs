@@ -55,6 +55,25 @@ async fn request_status(
         .map_err(|error| harness_error(format!("invalid HTTP status: {error}")))
 }
 
+/// Whether this test process may start a child that outlives it. No env changes:
+/// spawn_outliving_session refuses them (F4.2). Only whether the spawn succeeds
+/// matters; the exit status is not read.
+fn outliving_spawn_allowed(binary: &Path) -> Result<bool, HarnessError> {
+    let mut probe = std::process::Command::new(binary);
+    probe
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    match process_control::spawn_outliving_session(&mut probe) {
+        Ok(mut child) => {
+            child.wait()?;
+            Ok(true)
+        }
+        Err(error) if process_control::breakaway_denied(&error) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[tokio::test]
 async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Result<(), HarnessError>
 {
@@ -191,21 +210,7 @@ async fn remote_service_answers_relay_requests_and_exits_when_idle() -> Result<(
     }
     let data = RemoteData(launch);
     // cargo test may run in a Job Object that forbids breakaway: start must then fail closed.
-    // No env changes: spawn_outliving_session refuses them (F4.2). Only whether
-    // the spawn succeeds matters; the exit status is not read.
-    let mut probe = std::process::Command::new(&data.0.binary);
-    probe
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    let breakaway = match process_control::spawn_outliving_session(&mut probe) {
-        Ok(mut child) => {
-            child.wait()?;
-            true
-        }
-        Err(error) if process_control::breakaway_denied(&error) => false,
-        Err(error) => return Err(error.into()),
-    };
+    let breakaway = outliving_spawn_allowed(&data.0.binary)?;
     let output = data
         .0
         .command_without_local_auth()
@@ -271,6 +276,77 @@ async fn remote_service_answers_relay_requests_and_exits_when_idle() -> Result<(
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
+    drop(data);
+    sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn restart_keeps_remote_mode() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut sandbox = Sandbox::new("REMOTE-RESTART")?;
+    let mut launch = Launch::new(&sandbox)?;
+    if local_socket::PATH_LIMIT.is_some() {
+        // Socket paths are limited (PATH_LIMIT); the sandbox data path is longer.
+        launch.data = PathBuf::from(format!(
+            "/tmp/bre-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir(&launch.data)?;
+    }
+    let data = RemoteData(launch);
+    if !outliving_spawn_allowed(&data.0.binary)? {
+        // The relay test covers the fail-closed start; a restart needs a running service.
+        eprintln!("butler-e2e: SKIPPED (Requires a service that may outlive the test)");
+        drop(data);
+        sandbox.mark_success();
+        return Ok(());
+    }
+
+    let output = data
+        .0
+        .command_without_local_auth()
+        .args(["start", "--remote", "--data"])
+        .arg(&data.0.data)
+        .arg("--json")
+        .env("HOME", &sandbox.home)
+        .env("BUTLER_DATA", &data.0.data)
+        .output()?;
+    let started: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(started["ok"], true);
+    let record = instance_record(&data.0.data).ok_or_else(|| harness_error("no service record"))?;
+    let pid1 = record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| harness_error("no service PID"))?;
+
+    let output = data
+        .0
+        .command_without_local_auth()
+        .args(["restart", "--data"])
+        .arg(&data.0.data)
+        .arg("--json")
+        .env("HOME", &sandbox.home)
+        .env("BUTLER_DATA", &data.0.data)
+        .output()?;
+    let restarted: Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(restarted["ok"], true);
+    let record = instance_record(&data.0.data).ok_or_else(|| harness_error("no service record"))?;
+    let pid2 = record["pid"]
+        .as_u64()
+        .and_then(|pid| u32::try_from(pid).ok())
+        .ok_or_else(|| harness_error("no service PID"))?;
+    assert_ne!(pid1, pid2);
+    assert_eq!(record["remote"], true);
+    assert_eq!(record["state"], "ready");
+    let token = data
+        .0
+        .data_folder_token()
+        .ok_or_else(|| harness_error("no local token"))?;
+    let socket = data.0.data.join("remote/agent.sock");
+    assert_eq!(request_status(&socket, "/health", &token, None).await?, 200);
+    assert_eq!(listening_tcp_ports(pid2).await?, Default::default());
     drop(data);
     sandbox.mark_success();
     Ok(())

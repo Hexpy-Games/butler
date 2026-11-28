@@ -1,5 +1,10 @@
 //! Place the main's exact release and start the remote only when it is idle.
-use super::{Computer, HttpError, remote_error, ssh, target::SshTarget};
+use super::{
+    Computer, HttpError,
+    remote_command::{self, Shell},
+    remote_error, ssh,
+    target::SshTarget,
+};
 use butler_platform::{hook_process::HookOutput, launcher::release_platform_for};
 use butler_runtime::operations::{fetch_verified, release_artifact};
 use std::{path::Path, time::Duration};
@@ -9,77 +14,6 @@ pub(super) struct RemoteState {
     pub version: String,
     pub started: bool,
 }
-
-const SCRIPT: &str = r#"set -eu
-umask 077
-F=$4
-case "$F" in
-    '~') F="$HOME" ;;
-    '~/'*) F="$HOME/${F#??}" ;;
-esac
-if [ "$(cd -- "$F" && pwd -P)" = "$(cd -- "$HOME" && pwd -P)" ]; then
-    echo state=home_folder
-    exit 0
-fi
-R="$HOME/.butler-remote"
-mkdir -p "$R/versions"
-if [ "$(uname -s)" = Linux ]; then P=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0); if [ "$P" -lt 1 ] 2>/dev/null || [ -z "$P" ]; then echo state=unprotected; exit 0; fi; fi
-rm -rf "$R"/versions/.download-* "$R"/versions/.staging-*; [ -n "${UPLOADED:-}" ] || rm -f "$R"/versions/.upload-*
-V=$1
-SHA=$2
-URL=$3
-SHORT=$(printf '%s' "$SHA" | cut -c1-8)
-DEST="versions/$V-$SHORT"
-CURRENT=$(readlink "$R/current" || true)
-if [ "$CURRENT" = "$DEST" ]; then
-    if "$R/current/butler-agent" status --json --data "$R/data" | grep -q '"status": *"offline"'; then
-        "$R/current/butler-agent" start --remote --data "$R/data" --json >/dev/null
-    fi
-    echo "state=ready version=$V"
-    exit 0
-fi
-if [ -x "$R/current/butler-agent" ]; then
-    if ! "$R/current/butler-agent" status --json --data "$R/data" | grep -q '"status": *"offline"'; then
-        RUNNING=${CURRENT#versions/}
-        echo "state=busy version=${RUNNING%-*}"
-        exit 0
-    fi
-fi
-ARCHIVE="$R/versions/.download-$SHORT"
-if [ -n "${UPLOADED:-}" ]; then
-    ARCHIVE="$R/$UPLOADED"
-elif [ -z "$URL" ]; then
-    echo state=need_upload; exit 0
-elif command -v curl >/dev/null 2>&1; then
-    if ! curl -fsSL "$URL" > "$ARCHIVE"; then rm -f "$ARCHIVE"; echo state=need_upload; exit 0; fi
-elif command -v wget >/dev/null 2>&1; then
-    if ! wget -qO- "$URL" > "$ARCHIVE"; then rm -f "$ARCHIVE"; echo state=need_upload; exit 0; fi
-else
-    echo state=need_upload; exit 0
-fi
-if command -v sha256sum >/dev/null 2>&1; then
-    DIGEST=$(sha256sum "$ARCHIVE") || { rm -f "$ARCHIVE"; echo state=need_upload; exit 0; }
-else
-    DIGEST=$(shasum -a 256 "$ARCHIVE") || { rm -f "$ARCHIVE"; echo state=need_upload; exit 0; }
-fi
-if [ "${DIGEST%% *}" != "$SHA" ]; then
-    rm -f "$ARCHIVE"; echo state=need_upload; exit 0
-fi
-if [ ! -d "$R/$DEST" ]; then
-    STAGING="$R/versions/.staging-$SHORT"
-    mkdir "$STAGING"
-    tar -xzf "$ARCHIVE" -C "$STAGING"
-    grep -q '"version": *"'"$V"'"' "$STAGING/native-agent-manifest.json"
-    mv "$STAGING" "$R/$DEST"
-fi
-rm -f "$ARCHIVE"
-ln -sfn "$DEST" "$R/current.tmp" && (mv -fT "$R/current.tmp" "$R/current" 2>/dev/null || mv -fh "$R/current.tmp" "$R/current")
-for OLD in "$R"/versions/*; do
-    if [ "$OLD" != "$R/$DEST" ]; then rm -rf "$OLD"; fi
-done
-"$R/current/butler-agent" start --remote --data "$R/data" --json >/dev/null
-echo "state=ready version=$V"
-"#;
 
 pub(super) async fn ensure_running(
     data: (&Path, &str),
@@ -115,18 +49,18 @@ pub(super) async fn ensure_running(
         ));
     }
     let target = SshTarget::of(computer).await?;
-    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
-    let command = format!(
-        "sh -s -- {} {} {} {}",
-        quote(version),
-        quote(&sha),
-        quote(if loopback { "" } else { &url }),
-        quote(&computer.folder)
-    );
-    let args = target.arguments("yes", &[], &command)?;
+    let shell = Shell::of(&computer.os);
+    let values = remote_command::Deploy {
+        version,
+        sha: &sha,
+        url: if loopback { "" } else { &url },
+        folder: &computer.folder,
+    };
+    let remote = remote_command::deploy(shell, &values, None);
+    let args = target.arguments("yes", &[], &remote.command)?;
     let output = ssh::run(
         args.clone(),
-        ssh::Stdin::Bytes(SCRIPT.as_bytes().to_vec()),
+        ssh::Stdin::Bytes(remote.stdin),
         Duration::from_mins(10),
         cancel.clone(),
     )
@@ -136,7 +70,7 @@ pub(super) async fn ensure_running(
         return ready(&state);
     }
     let directory = root.join(format!("remote-download-{}", uuid::Uuid::new_v4()));
-    let result = upload(&client, &directory, &url, &sha, args, cancel).await;
+    let result = upload(&client, &directory, &url, (shell, &values), args, cancel).await;
     let _ = tokio::fs::remove_dir_all(&directory).await;
     result
 }
@@ -145,11 +79,11 @@ async fn upload(
     client: &butler_log::http::Client,
     directory: &Path,
     url: &str,
-    sha: &str,
+    (shell, values): (Shell, &remote_command::Deploy<'_>),
     args: Vec<String>,
     cancel: CancellationToken,
 ) -> Result<RemoteState, HttpError> {
-    let archive = fetch_verified(client, &cancel, url, sha, directory)
+    let archive = fetch_verified(client, &cancel, url, values.sha, directory)
         .await
         .map_err(|error| {
             if error.code() == "update_artifact_sha256_mismatch" {
@@ -158,11 +92,9 @@ async fn upload(
                 remote_error("release_download_failed", "Release download failed.")
             }
         })?;
-    let path = format!("versions/.upload-{}", &sha[..8]);
+    let (command, uploaded) = remote_command::upload(shell, &values.sha[..8]);
     let mut upload_args = args.clone();
-    *upload_args.last_mut().ok_or(HttpError::Internal)? = format!(
-        "umask 077; mkdir -p \"$HOME/.butler-remote/versions\" && cat > \"$HOME/.butler-remote/{path}\""
-    );
+    *upload_args.last_mut().ok_or(HttpError::Internal)? = command;
     let output = ssh::run(
         upload_args,
         ssh::Stdin::File(archive),
@@ -171,10 +103,10 @@ async fn upload(
     )
     .await?;
     check_exit(&output)?;
-    let script = format!("UPLOADED='{path}'\n{SCRIPT}");
+    let remote = remote_command::deploy(shell, values, Some(&uploaded));
     let output = ssh::run(
         args,
-        ssh::Stdin::Bytes(script.into_bytes()),
+        ssh::Stdin::Bytes(remote.stdin),
         Duration::from_mins(10),
         cancel,
     )
@@ -233,6 +165,12 @@ fn ready(line: &str) -> Result<RemoteState, HttpError> {
             started: state == "state=ready",
         });
     }
+    if line == "state=breakaway_denied" {
+        return Err(remote_error(
+            "remote_start_failed",
+            "This computer's SSH server stops Butler on disconnect.",
+        ));
+    }
     Err(remote_error("remote_start_failed", "Remote start failed."))
 }
 
@@ -241,11 +179,8 @@ pub(super) async fn installed(
     cancel: CancellationToken,
 ) -> Result<bool, HttpError> {
     let target = SshTarget::of(computer).await?;
-    let args = target.arguments(
-        "yes",
-        &[],
-        r#"test -x "$HOME/.butler-remote/current/butler-agent""#,
-    )?;
+    let command = remote_command::installed(Shell::of(&computer.os));
+    let args = target.arguments("yes", &[], &command)?;
     let output = ssh::run(
         args,
         ssh::Stdin::Bytes(Vec::new()),
@@ -265,18 +200,11 @@ pub(super) async fn remove(
     cancel: CancellationToken,
 ) -> Result<(), HttpError> {
     let target = SshTarget::of(computer).await?;
-    let args = target.arguments("yes", &[], "sh -s")?;
-    let script = br#"set -eu
-umask 077
-R="$HOME/.butler-remote"
-if [ -x "$R/current/butler-agent" ]; then
-    "$R/current/butler-agent" stop --data "$R/data" --json >/dev/null
-fi
-rm -rf "$R"
-"#;
+    let remote = remote_command::remove(Shell::of(&computer.os));
+    let args = target.arguments("yes", &[], &remote.command)?;
     let output = ssh::run(
         args,
-        ssh::Stdin::Bytes(script.to_vec()),
+        ssh::Stdin::Bytes(remote.stdin),
         Duration::from_mins(10),
         cancel,
     )

@@ -17,7 +17,9 @@ use butler_turn::btcc::BtccError;
 use butler_turn::workspace::StoredSessionBinding;
 use local_credentials::CredentialFiles;
 
-pub(crate) use app::{AppCapturedDependencies, AppServiceConfiguration};
+pub(crate) use app::{
+    AppCapturedDependencies, AppServiceConfiguration, remote_requested, remote_socket_path,
+};
 pub(crate) use local_credentials::data_folder_token;
 
 pub(crate) struct ServiceBootstrap {

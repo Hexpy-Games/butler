@@ -1,6 +1,7 @@
 use super::{
-    AppSetupPort, Computer, HttpError, Link, SessionStateRow, deploy, relay, session_state,
-    session_state_path, ssh, ssh_key, ssh_password, store, target::SshTarget, transcripts,
+    AppSetupPort, Computer, HttpError, Link, SessionStateRow, deploy, relay, remote_command::Shell,
+    session_state, session_state_path, ssh, ssh_key, ssh_password, store, target::SshTarget,
+    transcripts,
 };
 use serde_json::Value;
 use std::{path::Path, sync::Arc, time::Duration};
@@ -114,10 +115,14 @@ async fn remove_key(
         return Ok(false);
     };
     let target = SshTarget::of(computer).await?;
-    let command = ssh_password::command(ssh_password::blob(&public)?);
+    let remote = ssh_password::key_command(
+        Shell::of(&computer.os),
+        ssh_password::Key::Remove,
+        ssh_password::blob(&public)?,
+    );
     let output = ssh::run(
-        target.arguments("yes", &[], &command)?,
-        ssh::Stdin::Bytes(ssh_password::REMOVE.to_vec()),
+        target.arguments("yes", &[], &remote.command)?,
+        ssh::Stdin::Bytes(remote.stdin),
         Duration::from_secs(30),
         cancel,
     )
