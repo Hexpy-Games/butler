@@ -132,24 +132,11 @@ export async function firstRun(app: App, locale: Locale) {
 }
 
 export async function openChat(page: ElectronPage, title: string, prompt?: string) {
-  const hitTestable = ({ scope, title }: { scope: string; title: string }) =>
-    [...document.querySelectorAll(scope)].some(node => {
-      if ((node.getAttribute("aria-label") || node.textContent)?.trim() !== title) return false;
-      const { left, top, right, bottom, width, height } = node.getBoundingClientRect();
-      return width > 0 && height > 0 && left >= 0 && top >= 0 && right <= innerWidth && bottom <= innerHeight &&
-        node.contains(document.elementFromPoint(left + width / 2, top + height / 2));
-    });
-  const target = { scope: sidebarItems, title };
-  if (!await page.expression<boolean>(`(${hitTestable})(${JSON.stringify(target)})`)) {
-    const language = await page.evaluate(() => document.documentElement.lang);
-    const label = getAppCopy(appLocaleFromLanguage(language)).titlebar.showLeftPanel;
-    const toggle = `button[aria-label=${JSON.stringify(label)}]`;
-    // A newly created chat can arrive after the sidebar has already opened.
-    if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(toggle)}))`)) {
-      await click(page, label, toggle);
-    }
-    await page.waitForFunction(hitTestable, target);
-  }
+  // The app collapses the sidebar beside an open browser pane; a user opens it with the titlebar toggle.
+  const language = await page.evaluate(() => document.documentElement.lang);
+  const show = getAppCopy(appLocaleFromLanguage(language)).titlebar.showLeftPanel;
+  const toggle = `button[aria-label=${JSON.stringify(show)}]`;
+  if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(toggle)}))`)) await click(page, show, toggle);
   await click(page, title, sidebarItems);
   if (prompt) await textVisible(page, prompt);
 }
