@@ -6,10 +6,13 @@ import { type App, type Locale, until, windowSetup } from "./app.ts";
 import { storeScale } from "./ui.ts";
 
 type Bounds = { x: number; y: number; width: number; height: number };
+type Size = Pick<Bounds, "width" | "height">;
 type Geometry = {
   display: { width: number; height: number; scaleFactor: number };
   windowBounds: Bounds;
   contentBounds: Bounds;
+  reportedSize?: Size;
+  physical?: Size;
 };
 type View = { theme: string; language: string; visibleTextLength: number; uiScale: string; devicePixelRatio: number };
 type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string; beforePixels?: object };
@@ -41,22 +44,31 @@ function screen(...args: string[]) {
 }
 
 export async function focus(app: App) {
-  return app.main.evaluate<Geometry>(`(() => {
+  const geometry = await app.main.evaluate<Geometry>(`(() => {
     ${windowSetup}
-    const { bounds, size, scaleFactor } = screen.getPrimaryDisplay();
+    const { size, scaleFactor } = screen.getPrimaryDisplay();
     const displayScale = ${app.displayScale};
-    if (!(Math.abs(scaleFactor - displayScale) < 0.01 &&
-      Math.round(size.width * scaleFactor) === 1920 && Math.round(size.height * scaleFactor) === 1080))
-      throw new Error('Expected 1920x1080 at scaleFactor ' + displayScale + ': ' + JSON.stringify({ size, scaleFactor }));
-    win.setBounds(bounds);
+    if (!(Math.abs(scaleFactor - displayScale) < 0.01))
+      throw new Error('Expected scaleFactor ' + displayScale + ': ' + JSON.stringify({ size, scaleFactor }));
+    // Run 46129754897 showed that Electron scaled the display dimensions twice.
+    win.setBounds({ x: 0, y: 0, width: Math.round(1920 / displayScale), height: Math.round(1080 / displayScale) });
     win.setAlwaysOnTop(true, 'screen-saver');
     app.focus({ steal: true });
     win.show(); win.focus(); win.moveTop();
-    return { display: { ...size, scaleFactor }, windowBounds: win.getBounds(), contentBounds: win.getContentBounds() };
+    return { display: { width: 1920, height: 1080, scaleFactor }, reportedSize: size,
+      windowBounds: win.getBounds(), contentBounds: win.getContentBounds() };
   })()`);
+  await until(async () => {
+    const physical = await app.page.expression<Size>(
+      "({ width: innerWidth * devicePixelRatio, height: innerHeight * devicePixelRatio })",
+    );
+    geometry.physical = physical;
+    return Math.abs(physical.width - 1920) <= 2 && Math.abs(physical.height - 1080) <= 2;
+  }, async () => `1920x1080 renderer pixels: ${JSON.stringify(geometry)}`, 10_000);
+  return geometry;
 }
 
-async function settle(app: App, bounds: Bounds) {
+async function settle(app: App) {
   const point = await app.page.evaluate(() => {
     for (const x of [900, 1000, 800, 1100, 700]) {
       const node = document.elementFromPoint(x, 16);
@@ -64,10 +76,11 @@ async function settle(app: App, bounds: Bounds) {
     }
     return { x: 900, y: 24 };
   });
+  const dpr = storeScale * app.displayScale;
   // The desktop cursor may be unavailable in a headless session. CDP also clears renderer hover.
   try {
-    screen("-Mode", "Pointer", "-X", String(Math.round((bounds.x + point.x) * app.displayScale)),
-      "-Y", String(Math.round((bounds.y + point.y) * app.displayScale)));
+    screen("-Mode", "Pointer", "-X", String(Math.round(point.x * dpr)),
+      "-Y", String(Math.round(point.y * dpr)));
   } catch {}
   await app.page.movePointer(point.x, point.y);
   // A real pointer user sees no keyboard focus ring.
@@ -146,12 +159,11 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
         if (app) Object.assign(entry, await focus(app));
         await prepare();
         assert(app, "Butler did not launch");
-        const geometry = await focus(app);
-        Object.assign(entry, geometry);
+        Object.assign(entry, await focus(app));
         // A toast can arrive while the frame settles (run 46126644309, en-US #2); close it and settle again.
         for (let attempt = 0; ; attempt++) {
           await closeToasts(app);
-          await settle(app, geometry.contentBounds);
+          await settle(app);
           if (!await app.page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(visibleToast)}))`)) break;
           assert(attempt < 2, "A toast kept appearing before capture");
         }
