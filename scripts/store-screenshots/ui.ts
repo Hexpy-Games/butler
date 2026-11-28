@@ -138,17 +138,28 @@ async function clickSidebar(page: ElectronPage, label: string) {
     await clickSelector(page, '[data-test-class="titlebar-browser-toggle"]');
     await page.waitForFunction(area => !document.querySelector(area)?.getBoundingClientRect().width, area);
   }
-  await page.waitForFunction(({ label, sidebarItems }) => {
-    const node = [...document.querySelectorAll(sidebarItems)].find(node =>
-      (node.getAttribute("aria-label") || node.textContent)?.trim() === label);
-    if (!node) return false;
-    node.scrollIntoView({ block: "nearest" });
-    const { left, top, width, height } = node.getBoundingClientRect();
-    const x = left + width / 2;
-    const y = top + height / 2;
-    return width > 0 && x >= 0 && x < innerWidth && y >= 0 && y < innerHeight &&
-      node.contains(document.elementFromPoint(x, y));
-  }, { label, sidebarItems });
+  try {
+    await page.waitForFunction(({ label, sidebarItems }) => {
+      const nodes = [...document.querySelectorAll(sidebarItems)].filter(node =>
+        (node.getAttribute("aria-label") || node.textContent)?.trim() === label);
+      // Any match whose centre takes the click counts.
+      const clickable = nodes.some(node => {
+        const { left, top, width, height } = node.getBoundingClientRect();
+        const x = left + width / 2, y = top + height / 2;
+        return width > 0 && x >= 0 && x < innerWidth && y >= 0 && y < innerHeight &&
+          node.contains(document.elementFromPoint(x, y));
+      });
+      if (!clickable) nodes.find(node => node.getBoundingClientRect().width > 0)?.scrollIntoView({ block: "nearest" });
+      return clickable;
+    }, { label, sidebarItems });
+  } catch (error) {
+    const seen = await page.expression(`[...document.querySelectorAll(${JSON.stringify(sidebarItems)})].map(node => {
+      const r = node.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { text: (node.getAttribute('aria-label') || node.textContent).trim().slice(0, 60), x: r.left, y: r.top, w: r.width, h: r.height,
+        hit: hit && (hit.getAttribute('data-test-class') || hit.tagName) };
+    })`).catch(() => null);
+    throw new Error(`Sidebar row ${JSON.stringify(label)} did not take the click: ${JSON.stringify(seen)}`, { cause: error });
+  }
   await page.clickText(label, sidebarItems);
 }
 

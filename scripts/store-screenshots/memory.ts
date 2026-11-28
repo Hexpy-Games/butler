@@ -175,7 +175,8 @@ export async function frameMemory(page: ElectronPage, words: Demo, locale: Local
       storageFactsVisible: visible(facts),
     };
   })()`);
-  assert.equal(frame.scrollTop, frame.targetScrollTop, "Memory scroll changed before capture");
+  // Fractional device pixels leave sub-pixel scroll offsets (51.08 for 51 at 1.625x, run 46134834566).
+  assert(Math.abs(frame.scrollTop - frame.targetScrollTop) < 1, `Memory scroll changed before capture: ${frame.scrollTop} vs ${frame.targetScrollTop}`);
   assert(frame.profileCount !== null && frame.profileCount >= 1, "The rendered profile card has no entries");
   assert(Object.values(frame.instructions).every(Boolean), "Both instruction rows must be fully visible");
   assert(Object.values(frame.patterns).every(Boolean), "Both pattern rows must be fully visible");
