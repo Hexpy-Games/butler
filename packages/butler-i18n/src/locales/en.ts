@@ -655,7 +655,7 @@ export const enUsCopy: AppCopy = {
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",
     aging: "Work to revisit", agingHelp: "Time since the last update, not time spent working or waiting.",
     calendar: "Project activity",
-    activeItems: (count) => `${count} items in total`,
+    activeItems: (count) => `${count} ${count === 1 ? "item" : "items"} in total`,
     workOverview: "Work overview", loading: (days) => `Loading the last ${days} days…`,
     refreshing: "Updating statistics…", loadFailed: "No statistics response was received. Check your connection and try again.",
     focus: "Where activity went",
@@ -667,8 +667,8 @@ export const enUsCopy: AppCopy = {
     historyUnavailable: "Full project record history is unavailable. Work and document trends are not counted.",
     sessionUnavailable: "Conversation history is unavailable. Conversation activity, published attachments, and request outcomes are not counted.",
     taskCompletionUnavailable: "Existing project records do not store task completion times. Only registrations and current stages are shown.",
-    selected: "Selected records", all: "All", partialDay: "Today includes records so far.", excluded: (count) => `${count} records without sufficient evidence excluded`,
-    age: (days) => `${days} days since update`, changes: (count) => `${count} changes`, sources: (count) => `${count} records`,
+    selected: "Selected records", all: "All", partialDay: "Today includes records so far.", excluded: (count) => `${count} ${count === 1 ? "record" : "records"} without sufficient evidence excluded`,
+    age: (days) => `${days} ${days === 1 ? "day" : "days"} since update`, changes: (count) => `${count} ${count === 1 ? "change" : "changes"}`, sources: (count) => `${count} ${count === 1 ? "record" : "records"}`,
     labels: { types: "By type", changes: "Changes", spec: "Specifications", plan: "Plans", report: "Reports",
       created: "Registered", completed: "Completion recorded", executed: "Execution completed", updated: "Updated",
       artifacts: "Published attachments", conversations: "Conversations", work: "Work changes", materials: "Materials",
@@ -692,7 +692,7 @@ export const enUsCopy: AppCopy = {
     undo: "Undo", dropAdd: (group) => `Add to “${group}”`, dropScrap: (group) => `Scrap to “${group}”`, savedScraps: (count) => `Saved ${count} scrap${count === 1 ? "" : "s"}`,
     addToGroup: "Add to group", leaveUngrouped: "Leave ungrouped", back: (title) => `Back to ${title}`,
     mixedKinds: "Items of different kinds can't move together.", tagsOnAll: (count) => `all ${count}`, tagsOnSome: (count, total) => `${count} of ${total}`,
-    addToAll: "Add to all", removeFromAll: "Remove from all", bulkTagsTitle: (count) => `Tags · ${count} items`, source: "Source", saved: "Saved",
+    addToAll: "Add to all", removeFromAll: "Remove from all", bulkTagsTitle: (count) => `Tags · ${count} ${count === 1 ? "item" : "items"}`, source: "Source", saved: "Saved",
     size: "Size", none: "None", cancel: "Cancel", create: "Create", save: "Save", move: "Move", close: "Close", deleteItem: "Delete",
     tileLabel: (name, meta) => `${name}, ${meta}`,
     deleteSelected: (count) => `Delete ${count} item${count === 1 ? "" : "s"}?`, deleteSelectedBody: "Deleted items can't be restored.", selectionActions: "Selected items",
@@ -1604,7 +1604,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     saved: "Schedule saved", frequency: "Frequency", time: "Time", weekday: "Day",
     interval: "Interval", daily: "Daily", weekdays: "Weekdays", weekly: "Weekly", once: "Once",
     on: "On", off: "Off", next: (time) => `Next: ${time}`,
-    everyMinutes: (count) => `Every ${count} minutes`, everyHours: (count) => count === 1 ? "Every hour" : `Every ${count} hours`,
+    everyMinutes: (count) => count === 1 ? "Every minute" : `Every ${count} minutes`, everyHours: (count) => count === 1 ? "Every hour" : `Every ${count} hours`,
     everySeconds: (count) => `Every ${count} seconds`, dailyAt: (time) => `Every day at ${time}`,
     weekdaysAt: (time) => `Every weekday at ${time}`, weeklyAt: (days, time) => `Every ${days} at ${time}`,
     startAtLogin: "Start at login", loginHint: "Start at login for your schedules. Settings → General.", loginFailed: "Could not change start at login",
@@ -1918,7 +1918,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     },
     memory: {
       patternsEmpty: "Nothing yet", deletePatternTitle: "Delete this habit?", deletePatternBody: "Butler won't suggest it again.", patternDeleted: "Deleted",
-      patternDays: n => `Last ${n} days`, patternWeeks: n => `Last ${n} weeks`, patternMonths: n => `Last ${n} months`, patternCount: n => `${n} times`,
+      patternDays: n => `Last ${n} ${n === 1 ? "day" : "days"}`, patternWeeks: n => `Last ${n} ${n === 1 ? "week" : "weeks"}`, patternMonths: n => `Last ${n} ${n === 1 ? "month" : "months"}`, patternCount: n => `${n} ${n === 1 ? "time" : "times"}`,
       proactiveLevel: "Reach out first", proactiveDescription: "How readily Butler suggests things after memory consolidation.",
       proactiveOff: "Off", proactiveSometimes: "Sometimes", proactiveOften: "Often",
       quietHours: "Quiet hours", quietHoursDescription: "Butler won't reach out during these hours.", quietHoursStart: "Start time", quietHoursEnd: "End time",
@@ -2299,7 +2299,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       profileMigrationImporting:
         "Reading imported memories and applying them to the profile.",
       profileMigrationApplied: (count) =>
-        `Import complete. ${count} items were applied to the profile and will be used in future replies.`,
+        `Import complete. ${count} ${count === 1 ? "item was" : "items were"} applied to the profile and will be used in future replies.`,
       profileMigrationStored:
         "The import was stored. Butler will apply it once there is enough reliable information for future replies.",
       profileMigrationNoNewInfo:
