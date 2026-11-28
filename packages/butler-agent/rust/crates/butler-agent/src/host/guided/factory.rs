@@ -68,12 +68,18 @@ struct BoundTurn<'a> {
 }
 
 impl GuidedTurnFactoryAdapter {
-    fn journal(&self, turn_id: &str, activity: Arc<GuidedActivity>) -> Arc<GuidedJournal> {
+    fn journal(
+        &self,
+        turn_id: &str,
+        activity: Arc<GuidedActivity>,
+        tools: Arc<GuidedTools>,
+    ) -> Arc<GuidedJournal> {
         Arc::new(GuidedJournal::new(
             turn_id.to_owned(),
             self.preparation.journal.clone(),
             activity,
             self.subsessions.repository(),
+            tools,
         ))
     }
 
@@ -288,7 +294,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     installation_root: Some(self.installation_root.clone()),
                 },
             )?);
-            let journal = self.journal(&start.turn.turn_id, activity.clone());
+            let journal = self.journal(&start.turn.turn_id, activity.clone(), tools.clone());
             let text = Arc::new(
                 prompt_state::state(
                     self,

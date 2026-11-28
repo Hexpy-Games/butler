@@ -167,6 +167,7 @@ pub(super) const ROUTES: &[(&str, Handler)] = &[
     ("/message-assets/{id}/versions", Handler::MessageFiles),
     ("/internal/images/calls", Handler::Browser),
     ("/message-assets/masks", Handler::ImageModels),
+    ("/message-assets/import", Handler::ImageModels),
     ("/settings/image-model", Handler::ImageModels),
     ("/settings/image-model/custom", Handler::ImageModels),
     ("/settings/image-model/registered", Handler::ImageModels),

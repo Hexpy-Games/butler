@@ -25,7 +25,7 @@ export function ComposerAttachments() {
     const viewable = attachments.filter((item) => attachmentViewerKind(item.file));
     if (!attachmentViewerKind(attachment.file)) { openAttachmentInViewer(attachment.file, sessionId); return; }
     const images: ViewerImage[] = viewable.map((item) => ({
-      src: messageFileUrl(item.file), alt: item.file.safe_name, kind: attachmentViewerKind(item.file), sessionId,
+      src: messageFileUrl(item.file), alt: item.file.safe_name, kind: attachmentViewerKind(item.file), sessionId, fileId: item.file.file_id,
     }));
     openImageViewer(images, viewable.indexOf(attachment));
   };

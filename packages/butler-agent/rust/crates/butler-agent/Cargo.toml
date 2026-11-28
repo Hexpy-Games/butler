@@ -53,6 +53,7 @@ futures-util.workspace = true
 indexmap.workspace = true
 image.workspace = true
 parking_lot.workspace = true
+pulldown-cmark = { version = "0.13.0", default-features = false }
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true

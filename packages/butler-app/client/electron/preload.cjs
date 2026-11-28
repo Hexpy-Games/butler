@@ -734,6 +734,10 @@ const butlerApp = Object.freeze({
     if (!/^\/message-assets\/img_[a-z0-9]{10}(?:[a-z0-9]{2})?\/(meta|versions)$/u.test(path)) throw new Error("invalid_image_asset_route");
     return requestBridgeResult(path);
   },
+  importImageAsset: ({ session, file }) => {
+    if (typeof session !== "string" || typeof file !== "string") throw new Error("invalid_image_asset_import");
+    return requestBridgeResult(`/message-assets/import?${new URLSearchParams({ session, file })}`, { method: "POST" });
+  },
   uploadImageMask: ({ session, image, bytes }) => {
     if (typeof session !== "string" || !/^img_[a-z0-9]{10}(?:[a-z0-9]{2})?$/u.test(image)
       || !(bytes instanceof Uint8Array) || bytes.length > 50 * 1024 * 1024) throw new Error("invalid_image_mask");

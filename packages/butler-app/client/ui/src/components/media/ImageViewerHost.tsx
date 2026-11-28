@@ -1,4 +1,4 @@
-import { GeneratedImageActions } from "../images/GeneratedImageActions";
+import { GeneratedImageActions, ImageEditButton } from "../images/GeneratedImageActions";
 import { useMemo } from "react";
 import { Copy, DoneIconButton, IconButton, ImageViewer, Library, Popup, type ImageViewerImage } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
@@ -23,6 +23,8 @@ export function ImageViewerHost() {
   const shown = useMemo(() => images.map((image) => viewerImage(image, copy.checked)), [images, copy.checked]);
   const current = index === null ? undefined : images[index];
   const actions = current?.asset && current.sessionId ? <GeneratedImageActions asset={current.asset} session={current.sessionId} title={current.alt} /> : current ? <>
+    {current.sessionId && current.fileId && current.kind !== "video"
+      ? <ImageEditButton session={current.sessionId} fileId={current.fileId} /> : null}
     {current.source || current.openSource ? <IconButton label={copy.openSource} onClick={() => {
       closeImageViewer();
       runAnswerAction(async () => { await openViewerSource(current); });

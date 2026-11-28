@@ -377,6 +377,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge(bridge, "unregisterImageModel", decodeURIComponent(url.pathname.slice("/settings/image-model/registered/".length))));
   if (method === "GET" && /^\/message-assets\/img_[a-z0-9]+\/(meta|versions)$/u.test(url.pathname))
     return unwrapBridgeResult<T>(await callBridge(bridge, "imageAssetInfo", { path: url.pathname }));
+  if (method === "POST" && url.pathname === "/message-assets/import")
+    return unwrapBridgeResult<T>(await callBridge(bridge, "importImageAsset", {
+      session: url.searchParams.get("session"), file: url.searchParams.get("file"),
+    }));
   const asks = pendingAsksBridgeInput(url, method);
   if (asks) return await callBridge<T>(bridge, asks.method, asks.input);
   const canon = canonBridgeInput(url, method, () => parseBody(options.body));
