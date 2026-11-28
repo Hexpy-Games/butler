@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize.ts";
 import type { ElectronPage } from "../../tests/support/electron-page-cdp.ts";
 import { type App, type Locale, until, windowSetup } from "./app.ts";
-import { appLocaleFromLanguage, getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
+import { getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
 import { demoModel, type Demo } from "./demo.ts";
 
 const buttons = "button, [role=button]";
@@ -132,11 +132,12 @@ export async function firstRun(app: App, locale: Locale) {
 }
 
 async function clickSidebar(page: ElectronPage, label: string) {
-  // The app collapses the sidebar beside an open browser pane; a user opens it with the titlebar toggle.
-  const language = await page.evaluate(() => document.documentElement.lang);
-  const show = getAppCopy(appLocaleFromLanguage(language)).titlebar.showLeftPanel;
-  const toggle = `button[aria-label=${JSON.stringify(show)}]`;
-  if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(toggle)}))`)) await click(page, show, toggle);
+  // The app collapses the sidebar beside an open browser pane (run 46134374438); close the pane like a user.
+  const area = "#butler-browser-area";
+  if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(area)})?.getBoundingClientRect().width)`)) {
+    await clickSelector(page, '[data-test-class="titlebar-browser-toggle"]');
+    await page.waitForFunction(area => !document.querySelector(area)?.getBoundingClientRect().width, area);
+  }
   await page.waitForFunction(({ label, sidebarItems }) => {
     const node = [...document.querySelectorAll(sidebarItems)].find(node =>
       (node.getAttribute("aria-label") || node.textContent)?.trim() === label);
