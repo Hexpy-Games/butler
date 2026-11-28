@@ -9,8 +9,7 @@ use butler_memory::cognition::{
     CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
     ConfiguredCycleService, CycleService, CycleStatus, KnowHowService,
     LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, PatternRepository,
-    ProjectCapsuleService, RunCycle, VectorOptimizeService, active_memory_descriptor_exists,
-    resolve_active_generation,
+    RunCycle, VectorOptimizeService, active_memory_descriptor_exists, resolve_active_generation,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
@@ -30,7 +29,6 @@ pub(in crate::host) struct DailyCognitionJobs {
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
     pub(in crate::host) consumer: Arc<MemorySyncConsumer>,
-    capsules: Arc<ProjectCapsuleService>,
     phases: CyclePhases,
     legacy: LegacySessionSync,
     standing: super::standing::StandingFacts,
@@ -52,7 +50,6 @@ pub(in crate::host) struct DailyCognitionOwners {
     pub(in crate::host) coordinator: Arc<CognitionWriteCoordinator>,
     pub(in crate::host) metrics: Arc<MetricFiles>,
     pub(in crate::host) consumer: Arc<MemorySyncConsumer>,
-    pub(in crate::host) capsules: Arc<ProjectCapsuleService>,
     pub(in crate::host) provider: Arc<ModelProvider>,
     pub(in crate::host) configuration: Arc<ModelConfiguration>,
     pub(in crate::host) profile: Arc<ProfileService>,
@@ -87,7 +84,6 @@ impl DailyCognitionJobs {
             coordinator,
             metrics,
             consumer,
-            capsules,
             provider,
             configuration,
             profile,
@@ -149,7 +145,6 @@ impl DailyCognitionJobs {
             paths,
             coordinator,
             consumer,
-            capsules,
             phases,
             legacy,
             standing,
@@ -241,7 +236,7 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())?;
         // Contention counts as done for today, but must not skip configured maintenance.
         let configured = self.run_configured(cancellation).await?;
-        if let Err(error) = self.standing.refresh(cancellation).await {
+        if let Err(error) = self.standing.refresh(started_ms, cancellation).await {
             butler_core::diagnostic!("[standing-facts] {}", error.message());
         }
         let generic_ok = matches!(
@@ -306,14 +301,12 @@ impl DailyCognitionJobs {
                 self.paths.clone(),
                 self.coordinator.clone(),
             ),
-            capsules: self.capsules.clone(),
             health: MemoryHealthService::new(
                 self.data_root.clone(),
                 self.paths.clone(),
                 self.coordinator.clone(),
             ),
             generation_id: generation.generation_id,
-            project_capsule_refresh_limit: config.project_capsule_refresh_limit,
         });
         ConfiguredCycleService::new(self.data_root.clone(), self.paths.clone(), phases)
             .run(&config, cancellation)

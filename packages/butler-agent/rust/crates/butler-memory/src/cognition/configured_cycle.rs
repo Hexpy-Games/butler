@@ -63,8 +63,6 @@ pub struct ConfiguredCycleOptions {
     pub enabled: bool,
     /// Time budget for the whole cycle, in milliseconds.
     pub total_budget_ms: u64,
-    /// Project capsules refreshed per cycle at most.
-    pub project_capsule_refresh_limit: usize,
 }
 
 impl ConfiguredCycleOptions {
@@ -79,10 +77,6 @@ impl ConfiguredCycleOptions {
         Self {
             enabled: config["enabled"] != false,
             total_budget_ms: number("totalBudgetMs", 600_000),
-            project_capsule_refresh_limit: usize::try_from(
-                number("projectCapsuleRefreshLimit", 20).min(usize::MAX as u64),
-            )
-            .unwrap_or(usize::MAX),
         }
     }
 }

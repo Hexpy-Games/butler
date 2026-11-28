@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 
+use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, LOCAL_MODEL};
 use butler_e2e::e2e::faults::{ArgsMutation, mutate_chunk};
 use butler_e2e::e2e::scenario::{Fixture, Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, fixtures};
@@ -253,28 +254,66 @@ async fn wiring_project_rule_stays_out_of_general_prompt() -> Result<(), Harness
     Ok(())
 }
 
-fn configured_health(data: &Path) -> Option<Value> {
-    let logs = std::fs::read_dir(data.join("cognition/consolidation/logs")).ok()?;
-    logs.filter_map(Result::ok)
-        .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
-        .flat_map(|text| text.lines().map(str::to_owned).collect::<Vec<_>>())
-        .filter_map(|line| serde_json::from_str::<Value>(&line).ok())
-        .find(|event| event["phase"] == "health" && event["status"] == "ok")
-}
-
-/// App registration must feed the daily project-memory capsule refresh.
+/// A daily fold publishes a project page for subsequent chats in that project.
 #[tokio::test]
-async fn wiring_daily_capsule_includes_app_registered_project() -> Result<(), HarnessError> {
+async fn wiring_daily_project_page_reaches_project_chat() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = Setup::new("WIRING-CAPSULE")?.fixture(Fixture::Empty);
-    assert!(!setup.sandbox.data.join("cognition").exists());
+    const NOW: &str = "2026-10-02T04:01:00.000Z";
+    const DECISION: &str = "We ship the garden app as a web app only.";
+    let server = FakeServer::local_models(ChatBehavior {
+        answer: json!({"status":"processed","entities":[],"items":[
+            {"kind":"decision","subject":null,"text":DECISION,"evidence":[0]}
+        ],"attributes":[]})
+        .to_string(),
+        chunk_delay: std::time::Duration::ZERO,
+        ..ChatBehavior::default()
+    })
+    .await?;
+    let setup = Setup::new("WIRING-PROJECT-PAGE")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_E2E_APP_NOW", NOW)
+        .env(
+            "BUTLER_E2E_EMBED_MANIFEST",
+            format!("{}/unavailable", server.base_url),
+        );
+    fixtures::onboarding_complete(&setup.sandbox.data)?;
+    fixtures::scheduler_ran_today(&setup.sandbox.data, NOW)?;
     let mut s = setup.start().await?;
     bootstrap(&s.sandbox.data).await;
+    let data = s.sandbox.data.clone();
+    let memory = data.join("cognition/memory");
+    let descriptor: Value =
+        serde_json::from_slice(&std::fs::read(memory.join("active-generation.json"))?)?;
+    let generation = memory
+        .join("generations")
+        .join(descriptor["generation_id"].as_str().unwrap());
+    let graph = generation.join("graph.sqlite");
+    let reply =
+        s.gw.post(
+            "/model-catalog/local-models",
+            json!({
+                "provider_id":"local","api_type":"openai_compatible","platform":"ollama",
+                "server_url":server.base_url,"model_id":LOCAL_MODEL,"display_name":LOCAL_MODEL,
+                "context_window_tokens":131_072,"source":"discovered"
+            }),
+        )
+        .await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    let model = reply.data()["model"]["model_ref"].as_str().unwrap();
+    let reply =
+        s.gw.patch(
+            "/settings",
+            json!({
+                "model":model,"consolidation_model":model,"access_mode":"full_access"
+            }),
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
     let reply =
         s.gw.post(
             "/projects",
             json!({
-                "source":"scratch", "display_name":"Audit garden"
+                "source":"scratch","display_name":"Audit garden"
             }),
         )
         .await?;
@@ -284,59 +323,126 @@ async fn wiring_daily_capsule_includes_app_registered_project() -> Result<(), Ha
         s.gw.post(
             "/sessions",
             json!({
-                "kind":"project", "title":"Garden notes", "project_id":project
+                "kind":"project","title":"Garden notes","project_id":project
             }),
         )
         .await?;
     assert_eq!(reply.status, 201, "{}", reply.text);
-    let listed = s.gw.get("/projects").await?;
-    assert_eq!(listed.status, 200, "{}", listed.text);
-    assert!(
-        listed.text.contains(&project),
-        "App lost its registered project"
-    );
+    let chat = reply.data()["session"]["id"].as_str().unwrap();
+    let (first_turn, turn) = s.turn(chat, DECISION).await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let db = butler_platform::sqlite::open_with_flags(
+        &graph,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    until(|| {
+        db.query_row(
+            "SELECT COUNT(*) FROM memory_chunks WHERE source_key=?1 AND summary_status='complete'",
+            [format!("conversation_turn:{first_turn}")],
+            |row| row.get::<_, u64>(0),
+        )
+        .unwrap()
+            == 1
+    })
+    .await;
+    drop(db);
 
-    // Advance the supported stub clock and restart: the first maintenance
-    // tick runs after 04:00. No fabricated daily completion marker is supplied.
-    s.agent
-        .launch
-        .set_env("BUTLER_E2E_APP_NOW", "2026-10-02T04:01:00.000Z");
-    s.restart().await?;
-    let marker = s
-        .sandbox
-        .data
-        .join("state/scheduler/consolidation-cycle.json");
+    s.agent.terminate().await?;
+    for job in ["session-sync", "consolidation-cycle"] {
+        std::fs::remove_file(data.join(format!("state/scheduler/{job}.json")))?;
+    }
+    super::memory_fixture::arm_consolidation(&data, "2026-10-02T03:59:00.000Z")?;
+    s.gw = s.agent.start_again().await?;
+    let marker = data.join("state/scheduler/consolidation-cycle.json");
     until(|| {
         std::fs::read(&marker)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-            .is_some_and(|state| state["lastRunDate"] == "2026-10-02")
+            .is_some_and(|state| state["lastRunDate"] == NOW[..10])
     })
     .await;
-    let health = configured_health(&s.sandbox.data)
-        .expect("configured health phase must complete before inspecting capsule coverage");
-    let capsule = s
-        .sandbox
-        .data
-        .join("cognition/memory/projects")
+    assert!(server.chat_requests().iter().any(|request| {
+        let text = request["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|message| message["content"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        text.contains("You keep a short page about one project")
+            && text.contains("Current page (0 bytes; keep it under 3,000)")
+            && text
+                .lines()
+                .any(|line| line.ends_with(&format!("user decision] {DECISION}")))
+    }));
+    let page = generation
+        .join("hot/projects")
         .join(format!("{project}.md"));
-    let present = capsule.exists();
-    if present {
-        let body = std::fs::read_to_string(&capsule)?;
-        assert!(body.contains(&format!("# Project Memory: {project}")));
-        assert!(body.contains("source_counts: registry=1"));
-    }
-    eprintln!(
-        "WIRING-CAPSULE registered=1 considered={} refreshed={} capsule_present={present}",
-        health["metrics"]["project_capsules_considered"],
-        health["metrics"]["project_capsules_refreshed"]
+    assert_eq!(
+        butler_platform::secure_fs::is_owner_only(&std::fs::metadata(&page)?),
+        butler_platform::secure_fs::OWNER_ONLY.then_some(true),
+        "project page privacy"
     );
-    s.finish().await?;
+    assert!(std::fs::read_to_string(&page)?.starts_with("<!-- butler-standing {\"v\":3"));
+    let events: Vec<Value> = std::fs::read_dir(data.join("cognition/consolidation/logs"))?
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .flat_map(|text| {
+            text.lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect::<Vec<Value>>()
+        })
+        .collect();
+    let folds: Vec<_> = events
+        .iter()
+        .filter(|event| event["phase"] == "project_page")
+        .collect();
+    assert_eq!(folds.len(), 1, "{events:?}");
+    assert_eq!(folds[0]["project_id"], project);
+    assert_eq!(folds[0]["status"], "ok");
+    assert_eq!(folds[0]["metrics"]["calls"], 1);
+    assert!(folds[0]["metrics"]["sources_folded"].as_u64().unwrap() >= 1);
+    let health = events
+        .iter()
+        .find(|event| event["phase"] == "health")
+        .unwrap();
     assert!(
-        present,
-        "daily health completed but the App project's capsule is missing: {health}"
+        health["metrics"]
+            .get("project_capsules_considered")
+            .is_none()
     );
-    assert_eq!(health["metrics"]["project_capsules_considered"], 1);
-    assert_eq!(health["metrics"]["project_capsules_refreshed"], 1);
+
+    let (project_turn, turn) = s.turn(chat, "What did we decide about platforms?").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let (general_turn, turn) = s.turn("general", "Say hello.").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let db = butler_platform::sqlite::open_with_flags(
+        data.join("agent-runtime/btcc.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let mut query = db.prepare(
+        "SELECT d.content FROM btcc_turns t, json_each(t.context_json, '$.optionalHotCacheRefs') r JOIN btcc_context_documents d ON d.context_ref=r.value WHERE t.turn_id=?1 AND d.source_id='project-memory'"
+    ).unwrap();
+    let documents: Vec<String> = query
+        .query_map([project_turn], |row| row.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(documents.len(), 1);
+    assert!(documents[0].starts_with(
+        "## Project Memory\n\nWhat Butler keeps about this project from earlier chats in it."
+    ));
+    assert!(
+        query
+            .query([general_turn])
+            .unwrap()
+            .next()
+            .unwrap()
+            .is_none()
+    );
+    let view = s.gw.get(&format!("/memory/projects/{project}")).await?;
+    assert!(view.data()["summary_bytes"].as_u64().unwrap() > 0);
+    s.finish().await?;
     Ok(())
 }

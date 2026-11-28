@@ -259,6 +259,8 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
     let rules = memory.join("rules");
     std::fs::create_dir_all(&rules)?;
     use sha2::{Digest, Sha256};
+    let project_pages = graph(&s.sandbox.data).with_file_name("hot/projects");
+    std::fs::create_dir_all(&project_pages)?;
     for (index, project) in projects.iter().enumerate() {
         let text = format!("Keep instruction for project {index}.");
         let hash = format!("{:x}", Sha256::digest(text.as_bytes()));
@@ -268,6 +270,10 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
         let capsule = memory.join("projects").join(format!("{project}.md"));
         std::fs::create_dir_all(capsule.parent().unwrap())?;
         std::fs::write(capsule, format!("Old summary for {index}"))?;
+        std::fs::write(
+            project_pages.join(format!("{project}.md")),
+            format!("page {index}"),
+        )?;
     }
     std::fs::write(
         rules.join("INDEX.md"),
@@ -306,6 +312,12 @@ async fn project_reset_is_scoped_and_summary_stays_empty_until_a_new_project_con
     assert_eq!(accepted.status, 202, "{}", accepted.text);
     wait_reset(&s, &id).await?;
     let active = graph(&s.sandbox.data);
+    let project_pages = active.with_file_name("hot/projects");
+    assert!(!project_pages.join(format!("{}.md", projects[0])).exists());
+    assert_eq!(
+        std::fs::read(project_pages.join(format!("{}.md", projects[1])))?,
+        b"page 1"
+    );
     assert_eq!(count(&active, &selected_sql), 0);
     assert_eq!(count(&active, &selected_fts), 0);
     assert_eq!(count(&active, &other_fts), other_fts_count);

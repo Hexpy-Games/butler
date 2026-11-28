@@ -294,7 +294,7 @@ fn commit(
         target_manifest_sha256: &hash,
     };
     if let Some(project) = result.project_id.as_deref() {
-        let capsule = crate::cognition::capsule_path(&paths.memory_root(root), project);
+        let capsule = crate::cognition::legacy_capsule_path(&paths.memory_root(root), project);
         crate::cognition::ensure_data_authority(root, &[&capsule]).map_err(io::Error::other)?;
         if capsule.exists() {
             fs::remove_file(&capsule)?;
@@ -304,6 +304,10 @@ fn commit(
                     .ok_or_else(|| io::Error::other("Invalid capsule path"))?,
             )?;
         }
+        crate::cognition::discard_standing(
+            new,
+            &crate::cognition::StandingPage::Project(project.to_owned()),
+        )?;
     }
     swap::commit_descriptor_transition(root, paths, &lease, &guard, &next)
         .map_err(io::Error::other)?;
