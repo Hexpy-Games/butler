@@ -364,6 +364,8 @@ mod compact;
 mod context_reference;
 #[path = "memory/hook_context.rs"]
 mod hook_context;
+#[path = "memory/linked_copies.rs"]
+mod linked_copies;
 #[path = "memory/reset_vectors.rs"]
 mod reset_vectors;
 
