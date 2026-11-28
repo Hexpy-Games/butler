@@ -144,12 +144,11 @@ export async function openChat(page: ElectronPage, title: string, prompt?: strin
 export async function organized(page: ElectronPage, words: Demo) {
   await openChat(page, words.A[0], words.A[1]);
   const table = '[data-test-class="message assistant"] table';
+  const request = '[data-test-class~="message"][data-test-class~="user"]';
   await page.waitForFunction(table => Boolean(document.querySelector(table)), table);
-  await page.expression(`document.querySelector(${JSON.stringify(table)}).scrollIntoView({ block: 'end', behavior: 'instant' })`);
-  await page.waitForFunction(table => {
-    const bounds = document.querySelector(table)?.getBoundingClientRect();
-    return Boolean(bounds && bounds.width && bounds.top >= 0 && bounds.bottom <= innerHeight);
-  }, table);
+  // Show the request and the whole result table together.
+  await page.expression(`document.querySelector(${JSON.stringify(request)}).scrollIntoView({ block: 'start', behavior: 'instant' })`);
+  await waitInViewport(page, { selector: request }, { selector: table });
 }
 
 export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale) {
