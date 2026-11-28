@@ -42,15 +42,18 @@ export function messageViewerImages(message: MessageRecord): Keyed[] {
   const add = (image: Keyed) => { if (image.src && !seen.has(image.key)) { seen.add(image.key); images.push(image); } };
   for (const { src, alt } of markdownImages(message.text)) {
     const file = markdownImageFile(src, attachments, artifacts);
-    if (file?.url) add({ key: file.url, src: messageFileUrl(file), alt, caption: alt || undefined, sessionId });
+    if (file?.url) {
+      const fileId = "file_id" in file && typeof file.file_id === "string" ? file.file_id : undefined;
+      add({ key: file.url, src: messageFileUrl(file), alt, caption: alt || undefined, sessionId, fileId });
+    }
     else if (/^(https?:|data:image\/|\/)/iu.test(src)) add({ key: src, src, alt, caption: alt || undefined, sessionId });
   }
   // An attachment-backed artifact shares its attachment's key, so each file shows once.
-  const files: Array<Pick<SessionArtifactSummary, "kind" | "url" | "signed_url" | "title">> = [...artifacts,
-    ...attachments.map((file) => ({ kind: attachmentViewerKind(file) ?? "file", url: file.url, signed_url: file.signed_url, title: file.safe_name }))];
+  const files: Array<Pick<SessionArtifactSummary, "kind" | "url" | "signed_url" | "title" | "file_id">> = [...artifacts,
+    ...attachments.map((file) => ({ kind: attachmentViewerKind(file) ?? "file", url: file.url, signed_url: file.signed_url, title: file.safe_name, file_id: file.file_id }))];
   for (const file of files) {
     if ((file.kind === "image" || file.kind === "video") && file.url) {
-      add({ key: file.url, src: messageFileUrl(file), alt: file.title, kind: file.kind, sessionId });
+      add({ key: file.url, src: messageFileUrl(file), alt: file.title, kind: file.kind, sessionId, fileId: file.file_id });
     }
   }
   return images;

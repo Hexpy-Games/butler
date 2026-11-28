@@ -50,6 +50,7 @@ pub(super) async fn route(
                 .await?
         }
         (&Method::POST, "/message-assets/masks") => store_mask(&state, request).await?,
+        (&Method::POST, "/message-assets/import") => import_image_asset(&state, &uri).await?,
         _ => {
             return Err(HttpError::public(
                 405,
@@ -71,6 +72,30 @@ async fn catalog(state: &HttpState, command: AppModelCatalogCommand) -> Result<V
     state
         .application
         .model_catalog(command, state.shutdown.child_token())
+        .await
+        .map_err(HttpError::from)
+}
+
+async fn import_image_asset(state: &HttpState, uri: &Uri) -> Result<Value, HttpError> {
+    let mut query = params::query(uri);
+    let session = query
+        .remove("session")
+        .ok_or_else(HttpError::invalid_json)?;
+    let file = query.remove("file").ok_or_else(HttpError::invalid_json)?;
+    let id = state
+        .application
+        .assets(AppAssetCommand::ResolveInput {
+            session,
+            id: file,
+            mask_for: None,
+        })
+        .await?["id"]
+        .as_str()
+        .ok_or(HttpError::Internal)?
+        .to_owned();
+    state
+        .application
+        .assets(AppAssetCommand::Meta { id })
         .await
         .map_err(HttpError::from)
 }
