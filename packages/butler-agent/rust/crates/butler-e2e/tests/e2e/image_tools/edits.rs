@@ -205,7 +205,7 @@ async fn attached_images_import_losslessly_as_original_parents() -> Result<(), H
 #[tokio::test]
 async fn delivered_image_file_imports_as_editor_parent() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let f = Fixture::start(Access::Auto, "openai").await?;
+    let f = Fixture::start(Access::FullAccess, "openai").await?;
     std::fs::write(
         f.s.sandbox.chat_folder("general")?.join("source.png"),
         png(false),
@@ -256,12 +256,7 @@ async fn delivered_image_file_imports_as_editor_parent() -> Result<(), HarnessEr
     delivered(&f.s, "general", &turn).await?;
     let output = f.output("edit");
     assert_eq!(output["status"], "ok", "{output}");
-    let edited = output["image"].as_str().unwrap();
-    let edited_meta =
-        f.s.gw
-            .get(&format!("/message-assets/{edited}/meta"))
-            .await?;
-    assert_eq!(edited_meta.data()["parent_id"], image);
+    assert_eq!(output["parent"], image);
     f.finish().await
 }
 

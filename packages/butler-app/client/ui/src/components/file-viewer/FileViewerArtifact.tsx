@@ -71,7 +71,7 @@ function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSu
   const c = appCopy.fileViewer;
   const actions: FileViewerAction[] = [];
   const fileId = artifact.file_id;
-  if (session && session !== LIBRARY_VIEWER && fileId && artifactPreviewMode(artifact) === "image") {
+  if (outsideLibrary && session && fileId && artifactPreviewMode(artifact) === "image") {
     actions.push({ id: "edit", label: appCopy.conversation.imageTools.edit, icon: <Pencil size="sm" />, labelIcon: true,
       run: () => runAnswerAction(async () => openImageEditor(session, await importImageAsset(session, fileId))) });
   }
