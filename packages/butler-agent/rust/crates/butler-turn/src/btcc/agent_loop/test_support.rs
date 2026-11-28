@@ -37,6 +37,7 @@ pub struct Fixture {
     pub rebase_once: Mutex<bool>,
     pub cancel_during_model: AtomicBool,
     pub cleanup_error: AtomicBool,
+    pub work_error: AtomicBool,
     pub operation_scopes: Mutex<Vec<OperationResultScope>>,
     pub result_references: Mutex<Vec<OperationResultMessageReferences>>,
     /// Extra tools the prepared surface offers, such as answer blocks.
@@ -63,6 +64,7 @@ impl Fixture {
             rebase_once: Mutex::new(false),
             cancel_during_model: AtomicBool::new(false),
             cleanup_error: AtomicBool::new(false),
+            work_error: AtomicBool::new(false),
             operation_scopes: Mutex::new(Vec::new()),
             result_references: Mutex::new(Vec::new()),
             reply_tools: Mutex::new(Vec::new()),

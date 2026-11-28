@@ -1,4 +1,6 @@
 //! Batch outcome ordering, including authority continuation recovery.
+use std::sync::atomic::Ordering;
+
 use super::contracts::{AuthorityDecision, ToolOutcome};
 use super::test_data::{call, result, run, turn};
 use super::test_support::Fixture;
@@ -28,6 +30,16 @@ async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
             .count(),
         3
     );
+
+    let fixture = Fixture::new([result("done", vec![], 0)]);
+    fixture.work_error.store(true, Ordering::SeqCst);
+    let outcome = run(&fixture.guided_agent(None), &turn(None, "safe_fallback"))
+        .await
+        .unwrap();
+    assert_eq!(outcome.content, "done");
+    assert!(outcome.runtime_failure.is_none());
+    assert!(outcome.suspension.is_none());
+    assert_eq!(fixture.request_history.lock().unwrap().len(), 1);
 
     let first = Fixture::new([result(
         "",

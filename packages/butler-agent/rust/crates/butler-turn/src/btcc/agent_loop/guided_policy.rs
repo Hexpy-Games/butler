@@ -10,7 +10,7 @@ use super::contracts::{
     ProviderRoundPorts, SteeringObservation, TextCallDisposition, ToolOutcome, ToolResult,
     ToolSurface,
 };
-use super::guided_ports::{GuidedInvocation, GuidedPolicyDependencies};
+use super::guided_ports::{GuidedInvocation, GuidedPolicyDependencies, WorkFinalState};
 use super::ports::{ContextProjectionFuture, GuidedPolicyPort, ToolExecutionError};
 use crate::btcc::BtccCode;
 pub(super) struct GuidedPolicy {
@@ -193,9 +193,17 @@ impl GuidedPolicyPort for GuidedPolicy {
         text: &'a str,
         iteration: u32,
     ) -> PortFuture<'a, CandidateDisposition> {
-        self.dependencies
-            .work
-            .review_candidate(invocation, text, iteration)
+        Box::pin(async move {
+            Ok(self
+                .dependencies
+                .work
+                .review_candidate(invocation, text, iteration)
+                .await
+                .unwrap_or_else(|error| {
+                    log_work_bookkeeping_failure(invocation, "review", error.code());
+                    CandidateDisposition::Accepted(None)
+                }))
+        })
     }
 
     fn handle_text_tool_calls<'a>(
@@ -272,13 +280,33 @@ impl GuidedPolicyPort for GuidedPolicy {
                 self.dependencies
                     .work
                     .reconcile(invocation, input.content)
-                    .await?
+                    .await
+                    .unwrap_or_else(|error| {
+                        log_work_bookkeeping_failure(invocation, "reconcile", error.code());
+                        input.content.into()
+                    })
             };
-            let final_work = self.dependencies.work.final_state(invocation).await?;
+            let final_work = match self.dependencies.work.final_state(invocation).await {
+                Err(error) if input.suspension.is_none() => {
+                    log_work_bookkeeping_failure(invocation, "final_state", error.code());
+                    WorkFinalState {
+                        status: None,
+                        has_work: false,
+                    }
+                }
+                result => result?,
+            };
             let accepted_work_result = if input.suspension.is_some() {
                 None
             } else {
-                self.dependencies.work.accepted_result(invocation).await?
+                self.dependencies
+                    .work
+                    .accepted_result(invocation)
+                    .await
+                    .unwrap_or_else(|error| {
+                        log_work_bookkeeping_failure(invocation, "accepted_result", error.code());
+                        None
+                    })
             };
             let journal = self.dependencies.journal.closeout(invocation).await?;
             let model_identity = invocation.model_execution.accepted_model_identity();
@@ -297,6 +325,15 @@ impl GuidedPolicyPort for GuidedPolicy {
             })
         })
     }
+}
+
+fn log_work_bookkeeping_failure(invocation: GuidedInvocation<'_>, stage: &str, code: &str) {
+    butler_core::diagnostic!(
+        "[btcc-work] final-answer bookkeeping failed turn_id={} stage={} code={}",
+        invocation.turn.turn_id,
+        stage,
+        code
+    );
 }
 
 /// Serves the exact operation-result reader tools from the turn's runtime.
