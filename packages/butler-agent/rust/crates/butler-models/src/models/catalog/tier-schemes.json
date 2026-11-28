@@ -49,6 +49,21 @@
   },
   {
     "provider_id": "google",
+    "pattern": "gemini-#-carbon",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-neon",
+    "tier": "flagship"
+  },
+  {
+    "provider_id": "google",
+    "pattern": "gemini-#-hydrogen",
+    "tier": "balanced"
+  },
+  {
+    "provider_id": "google",
     "pattern": "gemini-#-flash",
     "tier": "balanced"
   },
