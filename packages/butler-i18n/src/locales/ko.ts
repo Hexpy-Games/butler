@@ -920,6 +920,7 @@ export const koKrCopy: AppCopy = {
       createWorktree: "이 대화용 워크트리를 만들까요?",
       switchFolder: "작업 폴더를 옮길까요?",
       chatFolder: "대화 폴더",
+      commandFolder: folder => `실행 위치: ${folder}`,
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,
       risk: { low: "위험 낮음", medium: "위험 보통", high: "위험 높음" },
