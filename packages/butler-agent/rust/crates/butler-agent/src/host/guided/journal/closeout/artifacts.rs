@@ -91,7 +91,7 @@ fn page_url(result: &butler_core::json::JsonDocument) -> Result<Option<String>, 
         .filter(|url| butler_runtime::capabilities::answer_blocks::source_identity(url).is_some()))
 }
 
-fn final_artifact(value: &Value) -> Option<FinalArtifact> {
+pub(super) fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     let item = value.as_object()?;
     let deliverable = item.get("deliverable").and_then(Value::as_bool) == Some(true);
     let path = safe_path(item.get("path")?.as_str()?, !deliverable)?;

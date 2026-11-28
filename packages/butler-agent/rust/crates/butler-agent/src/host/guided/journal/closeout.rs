@@ -8,6 +8,7 @@ mod tests;
 use std::sync::Arc;
 
 use butler_turn::btcc::{BtccError, JournalCloseout, ToolJournalRepository};
+use pulldown_cmark::{Event, Parser, Tag};
 
 pub(super) async fn collect(
     journal: &Arc<ToolJournalRepository>,
@@ -80,6 +81,41 @@ pub(super) async fn collect(
         changed_files,
         answer_blocks,
     })
+}
+
+/// A workspace file the reply shows as a Markdown image is declared by that
+/// reply, as if it were passed to deliver_files. Failing targets and files
+/// already attached are skipped.
+pub(super) async fn shown_files(
+    mut closeout: JournalCloseout,
+    content: &str,
+    tools: &crate::host::GuidedTools,
+) -> JournalCloseout {
+    let targets: Vec<_> = Parser::new(content)
+        .filter_map(|event| match event {
+            Event::Start(Tag::Image { dest_url, .. }) => Some(dest_url.into_string()),
+            _ => None,
+        })
+        .collect();
+    if targets.is_empty() {
+        return closeout;
+    }
+    for value in tools.shown_files(targets).await {
+        if closeout.artifacts.len() >= 12 {
+            break;
+        }
+        let Some(artifact) = artifacts::final_artifact(&value) else {
+            continue;
+        };
+        if closeout.artifacts.iter().any(|existing| {
+            existing.safe_path_label == artifact.safe_path_label
+                || existing.source.as_deref() == Some(&artifact.safe_path_label)
+        }) {
+            continue;
+        }
+        closeout.artifacts.push(artifact);
+    }
+    closeout
 }
 
 pub(super) async fn handoff(

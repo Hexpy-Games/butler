@@ -280,7 +280,11 @@ impl GuidedPolicyPort for GuidedPolicy {
             } else {
                 self.dependencies.work.accepted_result(invocation).await?
             };
-            let journal = self.dependencies.journal.closeout(invocation).await?;
+            let journal = self
+                .dependencies
+                .journal
+                .closeout(invocation, &content)
+                .await?;
             let model_identity = invocation.model_execution.accepted_model_identity();
             Ok(GuidedCloseout {
                 content,

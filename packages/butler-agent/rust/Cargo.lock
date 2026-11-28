@@ -1188,6 +1188,7 @@ dependencies = [
  "indexmap 2.14.2",
  "lancedb",
  "parking_lot",
+ "pulldown-cmark",
  "qrcode",
  "regex",
  "reqwest 0.12.28",
