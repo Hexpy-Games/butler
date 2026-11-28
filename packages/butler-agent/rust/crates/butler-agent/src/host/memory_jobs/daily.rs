@@ -166,6 +166,7 @@ impl DailyCognitionJobs {
         output: &butler_runtime::context::ToolOutput,
         metrics: &Arc<MetricFiles>,
         timezone: &Arc<DateParser>,
+        shutdown: &CancellationToken,
     ) -> Arc<super::context_maintenance::ContextMaintenance> {
         super::context_maintenance::ContextMaintenance::for_cognition(
             &self.data_root,
@@ -173,6 +174,7 @@ impl DailyCognitionJobs {
             metrics,
             timezone,
             self,
+            shutdown,
         )
     }
 

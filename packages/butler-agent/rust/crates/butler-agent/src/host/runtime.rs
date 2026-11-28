@@ -192,7 +192,7 @@ impl AgentRuntime {
         })
         .await?;
         let context_maintenance =
-            daily_cognition.context_maintenance(&tool_output, &metric_files, &date_parser);
+            daily_cognition.context_maintenance(&tool_output, &metric_files, &date_parser, stop);
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
