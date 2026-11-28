@@ -1,5 +1,6 @@
 import { useState, type Ref } from "react";
 import { appCopy } from "@/app/copy";
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import type { UsageMonitorView } from "@/app/types";
 import { FilteredSelectPopover, Popover, PopoverContent, PopoverTrigger, RollingSwap, SelectButton } from "@/butler-ds";
 import { usageTokens } from "../usage/usageTimeline";
@@ -9,8 +10,8 @@ export type UsageSession = UsageMonitorView["topSessions"][number];
 
 /** Untitled conversations read as new chats; other work is named by its kind. */
 export function usageSessionTitle(session?: UsageSession): string {
-  if (session?.title != null) return session.title;
-  return session && session.kind !== "chat" ? usageKind(session.kind) : appCopy.sidebar.newChat;
+  const fallback = session && session.kind !== "chat" ? usageKind(session.kind) : appCopy.sidebar.newChat;
+  return session ? sessionDisplayTitle({ id: session.sessionId, title: session.title ?? fallback }) : fallback;
 }
 
 export function usageKind(kind: UsageSession["kind"]): string {

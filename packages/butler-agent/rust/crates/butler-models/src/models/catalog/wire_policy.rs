@@ -11,8 +11,9 @@ pub const ANTHROPIC_ADAPTIVE_MODELS: &[&str] = &[
 pub const ANTHROPIC_BUDGET_MODEL: &str = "claude-haiku-4-5";
 pub const OPENCODE_THINKING_MODEL: &str = "glm-5.3";
 pub const OPENAI_EXPLICIT_CACHE_MODELS: &[&str] = &["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
-pub const KIMI_ADAPTIVE_MODEL: &str = "kimi-k3";
+pub const KIMI_ADAPTIVE_MODELS: &[&str] = &["kimi-k3", "kimi-k3.1-pro"];
 pub const ZAI_THINKING_REFS: &[&str] = &[
+    "zai/glm-5.4",
     "zai/glm-5.3",
     "zai/glm-5.3-flash",
     "zai-api/glm-5.3",

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
+import { sessionDisplayTitle } from "@/app/sessionTitle.ts";
 import type { UsageHistoryView } from "@/app/types";
 import { ActivityHeatmap, MetricCard, MetricGrid, SegmentedControl, Stack, type ActivityHeatmapDay } from "@/butler-ds";
 import { calendarDate, durationMinutes, historyDate, historyWindow, localeWeekStart, type HistoryMode } from "./usageHistoryModel";
@@ -11,6 +12,7 @@ function HistoryStats({ history, locale }: { history: UsageHistoryView; locale: 
   const days = (value: number) => copy.days(Math.round(value));
   const date = (key: string) => historyDate(key, locale);
   const streak = history.longestStreak;
+  const longestTask = history.longestTask;
   const [started, setStarted] = useState(false);
   useEffect(() => { setStarted(true); }, []);
   const entering = (value: number) => started ? value : 0;
@@ -18,8 +20,9 @@ function HistoryStats({ history, locale }: { history: UsageHistoryView; locale: 
     <MetricCard label={copy.lifetimeTokens} value={entering(history.lifetimeTokens)} format={tokens} change=" " />
     <MetricCard label={copy.busiestDay} value={history.busiestDay ? entering(history.busiestDay.tokens) : "—"} format={tokens}
       change={history.busiestDay ? date(history.busiestDay.date) : " "} trend="neutral" />
-    <MetricCard label={copy.longestTask} value={history.longestTask ? entering(history.longestTask.durationMs / 60000) : "—"}
-      format={value => durationMinutes(value, copy)} change={history.longestTask?.title ?? " "} trend="neutral" />
+    <MetricCard label={copy.longestTask} value={longestTask ? entering(longestTask.durationMs / 60000) : "—"}
+      format={value => durationMinutes(value, copy)}
+      change={longestTask ? sessionDisplayTitle({ id: longestTask.sessionId, title: longestTask.title ?? " " }) : " "} trend="neutral" />
     <MetricCard label={copy.longestStreak} value={entering(streak.days)} format={days}
       change={streak.start && streak.end ? `${date(streak.start)} – ${date(streak.end)}` : " "} trend="neutral" />
     <MetricCard label={copy.currentStreak} value={entering(history.currentStreak.days)} format={days} change=" " />

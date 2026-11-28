@@ -67,10 +67,10 @@ async fn chat(State(wire): State<Wire>, Json(body): Json<Value>) -> impl IntoRes
             json!({"tool_calls":[{"index":0,"function":{"arguments":"\"Seoul\"}"}}]}),
         ]);
     }
-    let reported = if body["model"] == "solar-pro4" {
-        "solar-pro4-260806"
-    } else if body["model"] == "solar-mini4" {
-        "solar-mini4-260922"
+    let reported = if body["model"] == "solar-pro-4" {
+        "solar-pro-4-260806"
+    } else if body["model"] == "solar-mini-4" {
+        "solar-mini-4-260922"
     } else {
         body["model"].as_str().unwrap()
     };
@@ -358,9 +358,15 @@ async fn deepseek_stream_history_and_cost() -> Result<(), Error> {
 #[tokio::test]
 async fn upstage_strict_wire_dated_model_and_cost() -> Result<(), Error> {
     butler_e2e::gate!();
-    exercise("upstage/solar-pro4", "reasoning", false, [0.30, 0.06, 1.20]).await?;
     exercise(
-        "upstage/solar-mini4",
+        "upstage/solar-pro-4",
+        "reasoning",
+        false,
+        [0.30, 0.06, 1.20],
+    )
+    .await?;
+    exercise(
+        "upstage/solar-mini-4",
         "reasoning",
         false,
         [0.10, 0.01, 0.40],
@@ -382,7 +388,7 @@ async fn upstage_effort_none_is_explicit() -> Result<(), Error> {
         cumulative: false,
         text_chunks: Some(vec!["Delivered."]),
     };
-    let model = "upstage/solar-mini4";
+    let model = "upstage/solar-mini-4";
     let (provider, _, _server) = provider(model, &wire).await?;
     let messages = [ModelRoundMessage::user("Answer.".into(), None)];
     let effort = butler_turn::btcc::ReasoningEffort::None;

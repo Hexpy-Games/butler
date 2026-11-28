@@ -165,7 +165,7 @@ fn confirmed_routine_presets_and_openai_sol_metadata_are_pinned() {
     let find = |id: &str| lookup::find_model_metadata(Some(id), &catalog.models).unwrap();
 
     let sol = find("openai/gpt-6.1-sol");
-    assert_eq!(sol.status, "latest");
+    assert_eq!(sol.status, "available");
     assert_eq!(sol.context_window_tokens, Some(1_050_000.0));
     assert_eq!(sol.max_output_tokens, Some(128_000.0));
     assert_eq!(sol.default_reasoning_effort, ReasoningEffort::Medium);
