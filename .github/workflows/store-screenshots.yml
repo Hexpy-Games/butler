@@ -1,0 +1,107 @@
+name: Microsoft Store screenshots
+
+on:
+  push:
+    branches: [chore/store-screenshots]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: store-screenshots-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  app-source:
+    if: contains(github.event.head_commit.message, '[shots]')
+    runs-on: ubuntu-latest
+    outputs:
+      run-id: ${{ steps.source.outputs.run-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: source
+        shell: bash
+        run: |
+          run_id=$(tr -d '[:space:]' < scripts/store-screenshots/app-run-id)
+          if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
+            echo 'app-run-id must contain a GitHub Actions run ID or be empty' >&2
+            exit 1
+          fi
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: app-source
+    if: contains(github.event.head_commit.message, '[shots]') && needs.app-source.outputs.run-id == ''
+    runs-on: windows-2025
+    timeout-minutes: 180
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          profile: ci-fast
+          cache-key: windows-store-package
+          version: '0.1.0-preview.0'
+          artifact-base-url: http://127.0.0.1/unused
+      - uses: ./.github/actions/package-windows-app
+        with:
+          version: '0.1.0-preview.0'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-shots-app
+          path: dist/release/app-windows/*-portable.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  capture:
+    needs: [app-source, build]
+    if: >-
+      !cancelled() && contains(github.event.head_commit.message, '[shots]') &&
+      needs.app-source.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install locked dependencies
+        shell: powershell
+        run: |
+          $env:HOME = Join-Path $env:RUNNER_TEMP 'store-shots-home'
+          $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP 'store-shots-data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          bun install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        if: needs.app-source.outputs.run-id == ''
+        with:
+          name: store-shots-app
+          path: ${{ runner.temp }}/store-shots-zip
+      - uses: actions/download-artifact@v4
+        if: needs.app-source.outputs.run-id != ''
+        with:
+          name: store-shots-app
+          path: ${{ runner.temp }}/store-shots-zip
+          run-id: ${{ needs.app-source.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Expand the portable app and set the display resolution
+        shell: powershell
+        run: |
+          $archives = @(Get-ChildItem "$env:RUNNER_TEMP/store-shots-zip" -Filter '*-portable.zip')
+          if ($archives.Count -ne 1) { throw 'Expected one portable ZIP' }
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath "$env:RUNNER_TEMP/store-shots-app"
+          & ./scripts/store-screenshots/screen.ps1 -Mode Resolution
+      - name: Capture both locales
+        shell: powershell
+        run: |
+          $apps = @(Get-ChildItem "$env:RUNNER_TEMP/store-shots-app" -Filter 'Butler.exe' -Recurse |
+            Where-Object { Test-Path (Join-Path $_.DirectoryName 'resources/bundled-agent/bin/butler-agent.exe') })
+          if ($apps.Count -ne 1) { throw 'Expected one Butler.exe with its bundled Agent' }
+          bun run scripts/store-screenshots/capture.ts $apps[0].DirectoryName "$env:RUNNER_TEMP/store-screenshots"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-screenshots
+          path: ${{ runner.temp }}/store-screenshots
+          if-no-files-found: warn
