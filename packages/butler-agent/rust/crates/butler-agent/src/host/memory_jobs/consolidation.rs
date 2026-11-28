@@ -198,7 +198,8 @@ impl ConsolidationRunGate {
         let result = daily.consolidation_cycle(id, started, cancellation).await;
         let _admission = self.admission.lock().await;
         // Shutdown preserves the scheduled intent, including its original run id and start.
-        if result.is_err() && cancellation.is_cancelled() {
+        // A writer wait ended by shutdown reports busy, so only a full run is recorded then.
+        if cancellation.is_cancelled() && !matches!(result, Ok(CycleRun::Full)) {
             return result.map(|_| ());
         }
         let mut state = self.state().await?.unwrap_or(json!({}));
