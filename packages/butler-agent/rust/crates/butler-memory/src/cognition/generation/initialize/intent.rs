@@ -1,10 +1,10 @@
-//! Durable proof that bootstrap reserved a truly fresh root before producers.
+//! Durable proof that bootstrap reserved a folder's first generation before producers.
 
 use std::{fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 
-use super::{durable, empty, error};
+use super::{durable, error};
 use crate::cognition::{CognitionCode, CognitionPathEnvironment, CognitionResult};
 
 const SCHEMA: &str = "butler.fresh-memory-initialization.v1";
@@ -32,32 +32,34 @@ fn read(root: &Path) -> CognitionResult<Option<Intent>> {
     Ok(Some(intent))
 }
 
+/// Whether the folder still needs its first generation, or its descriptor
+/// names the adopted pre-generation baseline.
 pub(super) fn eligible(root: &Path, paths: &CognitionPathEnvironment) -> CognitionResult<bool> {
     let memory = paths.memory_root(root);
-    if memory
+    let described = memory
         .join("active-generation.json")
         .try_exists()
-        .map_err(durable::io_error)?
-    {
-        return Ok(false);
-    }
-    if read(&memory)?.is_some() {
-        return Ok(true);
-    }
-    // Existing sources have no fresh reservation and remain rebuild-only.
-    if butler_turn::conversation::conversation_store_path(root).exists()
-        || empty::has_entries(&memory)?
-        || empty::has_entries(&root.join("tasks"))?
-        || empty::has_entries(&paths.cognition_root(root).join("box"))?
-        || empty::has_entries(&paths.cognition_root(root).join("rules"))?
-    {
-        return Ok(false);
-    }
-    Ok(true)
+        .map_err(durable::io_error)?;
+    Ok(!described || names_baseline(&memory))
 }
 
-pub(super) fn reserve(root: &Path, now: &str) -> CognitionResult<Intent> {
-    if let Some(intent) = read(root)? {
+/// Whether the descriptor names the adopted pre-generation baseline, memory
+/// under `db/` that no code reads any more. False when the descriptor or its
+/// manifest cannot be read: that is an error for the resolver to report.
+fn names_baseline(memory_root: &Path) -> bool {
+    use super::super::{manifest::GenerationFormat, read as generation_read};
+    generation_read::read_descriptor(memory_root)
+        .and_then(|serving| generation_read::read_manifest(memory_root, &serving.generation_id))
+        .is_ok_and(|manifest| manifest.format == Some(GenerationFormat::Legacy))
+}
+
+pub(super) fn reserve(data_root: &Path, memory_root: &Path, now: &str) -> CognitionResult<Intent> {
+    if names_baseline(memory_root) {
+        // The baseline's files stay in place; only the pointer goes.
+        fs::remove_file(memory_root.join("active-generation.json")).map_err(durable::io_error)?;
+        butler_platform::secure_fs::sync_path(memory_root).map_err(durable::io_error)?;
+    }
+    if let Some(intent) = read(memory_root)? {
         return Ok(intent);
     }
     let intent = Intent {
@@ -65,7 +67,21 @@ pub(super) fn reserve(root: &Path, now: &str) -> CognitionResult<Intent> {
         generation_id: uuid::Uuid::new_v4().to_string(),
         created_at: now.into(),
     };
-    durable::write_json(&root.join(FILE), &intent)?;
+    // A folder used before its first generation: what was said until now stays
+    // out of memory. The exclusions are durable before the reservation exists.
+    if butler_turn::conversation::conversation_store_path(data_root)
+        .try_exists()
+        .map_err(durable::io_error)?
+    {
+        super::exclude_earlier_conversations(data_root, memory_root, &intent.generation_id, now)?;
+    }
+    if let Err(failure) = durable::write_json(&memory_root.join(FILE), &intent) {
+        // Nothing refers to the excluded generation's directory yet.
+        let _ = butler_platform::secure_fs::remove_tree(
+            &memory_root.join("generations").join(&intent.generation_id),
+        );
+        return Err(failure);
+    }
     Ok(intent)
 }
 

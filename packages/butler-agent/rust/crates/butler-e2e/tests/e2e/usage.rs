@@ -7,7 +7,6 @@
 )]
 
 mod background;
-mod legacy_summary;
 
 use std::time::Duration;
 
