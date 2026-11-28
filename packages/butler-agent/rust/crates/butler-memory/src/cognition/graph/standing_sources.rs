@@ -27,10 +27,17 @@ const PASS_ROWS: &str = "SELECT n.created_at AS a, n.id AS i,
     MIN(COALESCE(k.conversation_start, k.created_at)) AS t,
     c.source_class AS speaker,
     CASE n.type WHEN 'memory_atom' THEN c.speech_act ELSE n.type END AS kind,
-    c.statement AS statement";
+    c.statement AS statement,
+    c.valid_from AS valid_from, c.valid_to AS valid_to";
 
 const PASS_RANGE: &str = "AND (n.created_at, n.id) > (:from_at, :from_id)
     AND (n.created_at, n.id) <= (:to_at, :to_id) GROUP BY c.node_id";
+
+const USER_MENTIONS: &str = "(SELECT COUNT(DISTINCT ev.episode_id) FROM edges s
+    JOIN memory_aliases a1 ON a1.node_id = s.target_node_id
+    JOIN memory_aliases a2 ON a2.folded_key = a1.folded_key
+    JOIN memory_evidence ev ON ev.node_id = a2.node_id
+    WHERE s.source_node_id = i AND s.rel_type = 'has_subject' AND s.status = 'active')";
 
 /// A statement to fold, with its sort key.
 pub(in crate::cognition) struct StandingRow {
@@ -39,6 +46,41 @@ pub(in crate::cognition) struct StandingRow {
     pub id: String,
     pub label: String,
     pub statement: String,
+    /// Conversations in which the statement's subject name has come up; 0 when unknown.
+    pub mentions: u64,
+    /// The period the speaker gave, as written.
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
+}
+
+impl StandingRow {
+    pub(in crate::cognition) fn line(&self) -> String {
+        let statement = self
+            .statement
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut label = self.label.clone();
+        if self.mentions >= 2 {
+            label.push_str(&format!(" ×{}", self.mentions));
+        }
+        let mut line = format!("[{label}] {statement}");
+        let from = self
+            .valid_from
+            .as_deref()
+            .filter(|value| !value.trim().is_empty());
+        let to = self
+            .valid_to
+            .as_deref()
+            .filter(|value| !value.trim().is_empty());
+        match (from, to) {
+            (Some(from), Some(to)) => line.push_str(&format!(" (from {from} until {to})")),
+            (Some(from), None) => line.push_str(&format!(" (from {from})")),
+            (None, Some(to)) => line.push_str(&format!(" (until {to})")),
+            (None, None) => {}
+        }
+        line
+    }
 }
 
 fn sources(page: &Page) -> &'static str {
@@ -86,15 +128,19 @@ impl GraphRepository {
         limit: usize,
     ) -> CognitionResult<Vec<StandingRow>> {
         let sources = sources(page);
-        let label = match page {
-            Page::User => "substr(t, 1, 10)",
-            Page::Project(_) => "substr(t, 1, 10) || ' ' || speaker || ' ' || kind",
+        let (label, mentions) = match page {
+            Page::User => ("substr(t, 1, 10)", USER_MENTIONS),
+            Page::Project(_) => ("substr(t, 1, 10) || ' ' || speaker || ' ' || kind", "0"),
         };
         let (time, at, id) = &pass.at;
         self.connection()?
             .prepare(&format!(
-                "SELECT a, i, t, {label}, statement FROM ({PASS_ROWS} {sources} {PASS_RANGE})
-             WHERE (t, a, i) > (:t, :a, :i) ORDER BY t, a, i LIMIT :limit"
+                "SELECT a, i, t, {label}, statement, valid_from, valid_to, {mentions} AS mentions
+                 FROM (
+                     SELECT * FROM ({PASS_ROWS} {sources} {PASS_RANGE})
+                     WHERE (t, a, i) > (:t, :a, :i) ORDER BY t, a, i LIMIT :limit
+                 )
+                 ORDER BY t, a, i"
             ))
             .map_err(db_error)?
             .query_map(
@@ -110,6 +156,9 @@ impl GraphRepository {
                         time: row.get(2)?,
                         label: row.get(3)?,
                         statement: row.get(4)?,
+                        valid_from: row.get(5)?,
+                        valid_to: row.get(6)?,
+                        mentions: row.get(7)?,
                     })
                 },
             )
