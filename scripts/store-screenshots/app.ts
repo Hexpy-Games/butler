@@ -48,7 +48,7 @@ export const windowSetup = `
     /^https?:/.test(view.webContents.getURL()) && view.getBounds().width > 0);
 `;
 
-export async function startApp(executable: string, data: string, root: string, locale: Locale, out: string, phase: string) {
+export async function startApp(executable: string, data: string, root: string, locale: Locale, out: string, phase: string, displayScale: number) {
   const home = join(root, "home");
   const profile = join(root, "electron-profile");
   for (const folder of [home, profile, data]) mkdirSync(folder, { recursive: true });
@@ -70,7 +70,7 @@ export async function startApp(executable: string, data: string, root: string, l
     try {
       return spawn(executable, [
         `--lang=${locale.locale}`, `--inspect=${inspector}`, `--remote-debugging-port=${debug}`,
-        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-address=127.0.0.1", `--force-device-scale-factor=${displayScale}`,
       ], { env, stdio: ["ignore", fd, fd] });
     } finally { closeSync(fd); }
   })();
@@ -108,7 +108,7 @@ export async function startApp(executable: string, data: string, root: string, l
     assert(child.pid, "Could not launch Butler.exe");
     main = await until(() => connectElectronMain(inspector).catch(() => null), "Electron main inspector", 60_000);
     page = await electronPage(debug);
-    return { main, page, url, safe, stop, ready: () => gatewayReady(url, data, value => { token = value; }) };
+    return { main, page, url, displayScale, safe, stop, ready: () => gatewayReady(url, data, value => { token = value; }) };
   } catch (error) {
     try { throw new Error(safe(String(error)), { cause: error }); }
     finally { await stop(); }

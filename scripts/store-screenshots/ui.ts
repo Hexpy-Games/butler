@@ -50,10 +50,23 @@ export function verifyTheme(page: ElectronPage, locale: Locale) {
     document.body.classList.contains(`theme-${theme}`) && document.documentElement.lang.split("-")[0] === language, locale);
 }
 
-export function verifyTextSize(page: ElectronPage) {
-  return page.waitForFunction(scale =>
-    getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim() === String(scale) &&
-    Math.abs(devicePixelRatio - scale) < 0.01, storeScale);
+export function verifyTextSize(page: ElectronPage, devicePixelRatio: number) {
+  return page.waitForFunction(({ uiScale, expectedRatio }) =>
+    getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim() === uiScale &&
+    Math.abs(window.devicePixelRatio - expectedRatio) < 0.01,
+    { uiScale: String(storeScale), expectedRatio: devicePixelRatio });
+}
+
+export function assertDesktopLayout(page: ElectronPage, withBrowser: boolean) {
+  return page.waitForFunction(({ sidebar, withBrowser }) => {
+    const panel = document.querySelector(sidebar);
+    const side = panel?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && panel.getBoundingClientRect();
+    if (!side || !(side.width > 0 && side.left >= 0 && side.right <= innerWidth)) return false;
+    if (!withBrowser) return true;
+    const browser = document.querySelector("#butler-browser-area")?.getBoundingClientRect();
+    const chat = [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)?.getBoundingClientRect();
+    return Boolean(browser && browser.width > 0 && chat && chat.right <= browser.left);
+  }, { sidebar, withBrowser });
 }
 
 export function waitInViewport(page: ElectronPage, ...targets: { selector: string; visibleOnly?: boolean; last?: boolean }[]) {
@@ -70,6 +83,7 @@ export function waitInViewport(page: ElectronPage, ...targets: { selector: strin
 
 export async function firstRun(app: App, locale: Locale) {
   const { page } = app;
+  const combinedScale = storeScale * app.displayScale;
   const ko = locale.language === "ko";
   await app.ready();
   await page.waitForFunction(() => Boolean(document.querySelector('[data-first-run-screen="welcome"]')));
@@ -78,9 +92,9 @@ export async function firstRun(app: App, locale: Locale) {
   })})`);
   assert(result.ok, "Could not set the first-run theme and text size through the renderer bridge");
   if (await page.expression(`!document.body.classList.contains('theme-${locale.theme}') ||
-    Math.abs(devicePixelRatio - ${storeScale}) >= 0.01`)) await page.reload();
+    Math.abs(devicePixelRatio - ${combinedScale}) >= 0.01`)) await page.reload();
   await page.waitForFunction(() => Boolean(document.querySelector("#first-run-language")));
-  await verifyTextSize(page);
+  await verifyTextSize(page, combinedScale);
   await page.expression(`(() => {
     const field = document.querySelector('#first-run-language');
     const language = ${JSON.stringify(locale.language)};

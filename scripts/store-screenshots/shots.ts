@@ -44,8 +44,10 @@ export async function focus(app: App) {
   return app.main.evaluate<Geometry>(`(() => {
     ${windowSetup}
     const { bounds, size, scaleFactor } = screen.getPrimaryDisplay();
-    if (size.width !== 1920 || size.height !== 1080 || scaleFactor !== 1)
-      throw new Error('Expected 1920x1080 at scaleFactor 1: ' + JSON.stringify({ size, scaleFactor }));
+    const displayScale = ${app.displayScale};
+    if (!(Math.abs(scaleFactor - displayScale) < 0.01 &&
+      Math.round(size.width * scaleFactor) === 1920 && Math.round(size.height * scaleFactor) === 1080))
+      throw new Error('Expected 1920x1080 at scaleFactor ' + displayScale + ': ' + JSON.stringify({ size, scaleFactor }));
     win.setBounds(bounds);
     win.setAlwaysOnTop(true, 'screen-saver');
     app.focus({ steal: true });
@@ -63,7 +65,10 @@ async function settle(app: App, bounds: Bounds) {
     return { x: 900, y: 24 };
   });
   // The desktop cursor may be unavailable in a headless session. CDP also clears renderer hover.
-  try { screen("-Mode", "Pointer", "-X", String(bounds.x + point.x), "-Y", String(bounds.y + point.y)); } catch {}
+  try {
+    screen("-Mode", "Pointer", "-X", String(Math.round((bounds.x + point.x) * app.displayScale)),
+      "-Y", String(Math.round((bounds.y + point.y) * app.displayScale)));
+  } catch {}
   await app.page.movePointer(point.x, point.y);
   // A real pointer user sees no keyboard focus ring.
   await app.page.expression(`(document.activeElement?.matches(':focus-visible') && document.activeElement.blur(), true)`);
@@ -121,9 +126,10 @@ async function pixels(app: App, path: string, facts: Facts, beforePixels?: (app:
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1920, 1080], "PNG dimensions");
 }
 
-export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<string>) {
+export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<string>, displayScale: number) {
   mkdirSync(out, { recursive: true });
-  const facts = { ...locale, selected: [...selected], shots: [] as Facts[], stubRequests: {
+  const facts = { ...locale, displayScale, combinedScale: storeScale * displayScale,
+    selected: [...selected], shots: [] as Facts[], stubRequests: {
     profile_import: 0, pattern_extraction: 0, pattern_proposal: 0, extract_profile_candidates: 0, other_memory_tasks: 0,
   } as Record<string, number>, memoryModel: null as unknown, memoryRun: null as unknown, errors: [] as string[] };
   return {
@@ -160,7 +166,7 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
         assert.equal(entry.theme, locale.theme);
         assert.equal(entry.language?.split("-")[0], locale.language);
         assert.equal(view.uiScale, String(storeScale), "Unexpected UI scale");
-        assert(Math.abs(view.devicePixelRatio - storeScale) < 0.01, `Unexpected devicePixelRatio: ${view.devicePixelRatio}`);
+        assert(Math.abs(view.devicePixelRatio - storeScale * app.displayScale) < 0.01, `Unexpected devicePixelRatio: ${view.devicePixelRatio}`);
         await pixels(app, path, entry, beforePixels);
       } catch (error) {
         const failure = onFailure ? await onFailure(error).catch(() => error) : error;

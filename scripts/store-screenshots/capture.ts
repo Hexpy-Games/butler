@@ -9,7 +9,7 @@ import { type Api, type App, type Locale, locales, redact, startApp, until } fro
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { focus, shotRecorder } from "./shots.ts";
 import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
-import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
+import { approval, assertBrowserStills, assertDesktopLayout, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, storeScale, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
@@ -121,7 +121,7 @@ async function setupWorkspace(app: App, locale: Locale, shots: Recorder) {
   }
   await app.page.reload();
   await verifyTheme(app.page, locale);
-  await verifyTextSize(app.page);
+  await verifyTextSize(app.page, storeScale * app.displayScale);
   await focus(app); // Play the chats at the 1920x1080 layout the shots use.
   return { api, memorySetupFailure };
 }
@@ -137,7 +137,7 @@ async function enableMemory(api: Api, shots: Recorder) {
   }
 }
 
-async function workspace(exe: string, out: string, locale: Locale, shots: Recorder) {
+async function workspace(exe: string, out: string, locale: Locale, shots: Recorder, displayScale: number) {
   const words = demo(locale.language);
   const root = mkdtempSync(join(tmpdir(), "store-shots-workspace-"));
   const data = join(root, "data");
@@ -155,7 +155,7 @@ async function workspace(exe: string, out: string, locale: Locale, shots: Record
       mkdirSync(demoRoot); // Refuse to reuse an existing profile; delete only this run's fixture.
       ownsDemo = true;
       populateDemoFiles(locale.language);
-      app = await startApp(exe, data, root, locale, out, "workspace");
+      app = await startApp(exe, data, root, locale, out, "workspace", displayScale);
       setup = await setupWorkspace(app, locale, shots);
       const { api } = setup;
       for (const chat of chatOrder) {
@@ -189,6 +189,7 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
       assert(app && setup, "Workspace setup did not finish");
       for (const chat of dependencies) if (chatFailures.has(chat)) throw chatFailures.get(chat);
       await prepare(app, setup.api);
+      if (/^0[2-5]-/u.test(name)) await assertDesktopLayout(app.page, name === "04-browser");
     }, beforePixels, onFailure);
   await take("02-organize-files", ["A"], app => organized(app.page, words));
   await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), app => assertModelChip(app.page, locale));
@@ -207,12 +208,12 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
     error => memoryTimeout(error, app, setup?.api, shots.facts, diagnostics));
 }
 
-async function captureFirstRun(exe: string, out: string, locale: Locale, shots: Recorder) {
+async function captureFirstRun(exe: string, out: string, locale: Locale, shots: Recorder, displayScale: number) {
   const root = mkdtempSync(join(tmpdir(), "store-shots-setup-"));
   let app: App | undefined;
   let startupFailure: unknown;
   try {
-    try { app = await startApp(exe, join(root, "data"), root, locale, out, "first run"); }
+    try { app = await startApp(exe, join(root, "data"), root, locale, out, "first run", displayScale); }
     catch (error) { startupFailure = error; }
     await shots.shot("01-ai-connect", app, async () => {
       if (startupFailure) throw startupFailure;
@@ -229,14 +230,14 @@ async function captureFirstRun(exe: string, out: string, locale: Locale, shots: 
   }
 }
 
-async function captureLocale(exe: string, out: string, locale: Locale, selected: ReadonlySet<string>) {
-  const shots = shotRecorder(out, locale, selected);
-  if (selected.has("01")) await captureFirstRun(exe, out, locale, shots);
+async function captureLocale(exe: string, out: string, locale: Locale, selected: ReadonlySet<string>, displayScale: number) {
+  const shots = shotRecorder(out, locale, selected, displayScale);
+  if (selected.has("01")) await captureFirstRun(exe, out, locale, shots, displayScale);
   try {
-    if ([...selected].some(prefix => prefix !== "01")) await workspace(exe, out, locale, shots);
+    if ([...selected].some(prefix => prefix !== "01")) await workspace(exe, out, locale, shots, displayScale);
   } catch (error) { shots.facts.errors.push(redact(String(error))); }
   finally { shots.save(); }
-  for (const shot of shots.facts.shots) console.log(`${locale.locale} ${shot.name}: ${shot.error ? "FAILED (see facts.json)" : shot.method}`);
+  for (const shot of shots.facts.shots) console.log(`${displayScale}x ${locale.locale} ${shot.name}: ${shot.error ? "FAILED (see facts.json)" : shot.method}`);
   return shots.facts.errors.length > 0 || shots.facts.shots.length !== selected.size ||
     shots.facts.shots.some(shot => Boolean(shot.error));
 }
@@ -247,13 +248,20 @@ const executable = resolve(appDirectory, "Butler.exe");
 assert(existsSync(executable), "Butler.exe was not found");
 const selected = new Set(readFileSync(join(import.meta.dir, "shots"), "utf8").split(/\r?\n/u).map(line => line.trim()).filter(Boolean));
 assert([...selected].every(prefix => /^0[1-6]$/u.test(prefix)), "shots must list prefixes 01 through 06");
+const displayScales = readFileSync(join(import.meta.dir, "display-scales"), "utf8")
+  .split(/\r?\n/u).map(line => line.trim()).filter(Boolean).map(Number);
+assert(displayScales.every(scale => Number.isFinite(scale) && scale >= 1 && scale <= 3),
+  "display-scales must list finite numbers from 1 to 3");
 let failed = false;
-for (const locale of locales) {
-  try { failed = await captureLocale(executable, resolve(outputDirectory, locale.locale), locale, selected) || failed; }
-  catch {
-    // Details written to the locale's artifacts are redacted before upload.
-    console.error(`${locale.locale} capture did not finish. See the locale artifacts.`);
-    failed = true;
+for (const displayScale of displayScales) {
+  for (const locale of locales) {
+    const out = resolve(outputDirectory, `${Math.round(displayScale * 100)}`, locale.locale);
+    try { failed = await captureLocale(executable, out, locale, selected, displayScale) || failed; }
+    catch {
+      // Details written to the locale's artifacts are redacted before upload.
+      console.error(`${displayScale}x ${locale.locale} capture did not finish. See the locale artifacts.`);
+      failed = true;
+    }
   }
 }
 process.exitCode = failed ? 1 : 0;
