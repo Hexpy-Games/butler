@@ -13,11 +13,11 @@ pub(in crate::management) fn analyze(
     let generations = memory.join("generations");
     let references = manifest_references(&generations, active);
     let pending = pending_reset(memory)?;
+    let serving = without_migration_note(manifest);
     for entry in fs::read_dir(&generations)? {
         safety::cancelled(token)?;
         let entry = entry?;
         let id = entry.file_name().to_string_lossy().into_owned();
-
         let path = entry.path();
         let bytes = match files(&path, token) {
             Ok(measured) => measured.bytes,
@@ -34,7 +34,7 @@ pub(in crate::management) fn analyze(
         };
         let empty = entry.file_type()?.is_dir() && fs::read_dir(&path)?.next().is_none();
         let referenced = contains(descriptor, &id)
-            || contains(manifest, &id)
+            || contains(&serving, &id)
             || references
                 .as_ref()
                 .is_some_and(|values| values.iter().any(|value| contains(value, &id)));
@@ -93,6 +93,19 @@ fn references(value: &serde_json::Value, id: &str) -> bool {
         serde_json::Value::Object(values) => values.values().any(|value| references(value, id)),
         _ => false,
     }
+}
+
+/// The active manifest without its note of a finished schema migration. The
+/// note names the generation that was migrated; nothing reads that
+/// generation through it.
+fn without_migration_note(manifest: &[u8]) -> Vec<u8> {
+    let Ok(serde_json::Value::Object(mut fields)) =
+        serde_json::from_slice::<serde_json::Value>(manifest)
+    else {
+        return manifest.to_vec();
+    };
+    fields.remove("schema_migration");
+    serde_json::to_vec(&fields).unwrap_or_else(|_| manifest.to_vec())
 }
 
 fn manifest_references(generations: &Path, active: &str) -> Option<Vec<Vec<u8>>> {

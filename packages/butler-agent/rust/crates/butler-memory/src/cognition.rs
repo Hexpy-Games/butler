@@ -43,7 +43,6 @@ mod lexical;
 mod mcp_graph;
 mod memory_health;
 mod memory_recall;
-mod migration;
 mod mutable_paths;
 mod paths;
 mod patterns;
@@ -63,9 +62,6 @@ mod windows;
 pub use source_reader::MemorySourceReader;
 
 pub(crate) use crate::cognition::legacy::lance_writer::{LegacyLanceWriter, LegacyVectorRow};
-pub use crate::cognition::legacy::memory_import::{
-    LegacyMemoryImportChunk, LegacyMemoryImportPlan, LegacyMemoryImportService,
-};
 pub use crate::cognition::legacy::metadata::{LegacyMetadataIntegrityService, MissingFeedbackRef};
 pub use crate::cognition::legacy::session_sync::{
     LegacySessionOffsets, append_legacy_session_diagnostic, index_legacy_transcript_query,
@@ -89,7 +85,7 @@ pub use configured_cycle::{
     ConfiguredCycleOptions, ConfiguredCycleResult, ConfiguredCycleService, ConfiguredPhase,
     ConfiguredPhaseExecutor, ConfiguredPhaseFuture, append_cycle_event,
 };
-pub(crate) use configured_projects::{registered_project_names, registered_projects};
+pub(crate) use configured_projects::registered_project_names;
 pub use consolidation::{
     CycleEventSink, CycleService, CycleStatus, Phase, PhaseError, PhaseExecutor, RateBudget,
     RunCycle,
@@ -116,7 +112,7 @@ pub use generation::{
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{GRAPH_BUSY_TIMEOUT, GraphProgress, JobOutcome, StageState, StageStatus};
-pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};
+pub use hot_cache::LegacyIndexService;
 pub use knowhow_store::FeedbackTarget;
 pub use knowhow_store::{FeedbackResolvePort, KnowHowService};
 pub use mcp_graph::read_mcp_legacy_graph;
@@ -127,7 +123,6 @@ pub use memory_recall::{
 };
 pub use memory_recall::{MemoryRecall, RecallVectorFuture, RecallVectorPort};
 pub use memory_recall::{RecallMetric, RecallMetricSink};
-pub use migration::CognitionNamespaceMigrationService;
 pub use mutable_paths::ensure_data_authority;
 pub use paths::{CognitionPathEnvironment, explicit_memory_rules_root};
 pub use prompt::{CapsulePresence, CognitionPromptReader};
