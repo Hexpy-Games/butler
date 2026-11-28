@@ -189,7 +189,9 @@ async function workspaceShots(shots: Recorder, app: App | undefined,
       assert(app && setup, "Workspace setup did not finish");
       for (const chat of dependencies) if (chatFailures.has(chat)) throw chatFailures.get(chat);
       await prepare(app, setup.api);
-      if (/^0[2-5]-/u.test(name)) await assertDesktopLayout(app.page, name === "04-browser");
+      if (/^0[2-5]-/u.test(name)) {
+        shots.facts.shots.at(-1)!.layout = await assertDesktopLayout(app.page, name === "04-browser");
+      }
     }, beforePixels, onFailure);
   await take("02-organize-files", ["A"], app => organized(app.page, words));
   await take("03-ask-first", ["B"], app => pendingZip(app.page, words, locale), app => assertModelChip(app.page, locale));

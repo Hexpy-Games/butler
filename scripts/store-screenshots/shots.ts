@@ -15,7 +15,7 @@ type Geometry = {
   physical?: Size;
 };
 type View = { theme: string; language: string; visibleTextLength: number; uiScale: string; devicePixelRatio: number };
-type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string; beforePixels?: object };
+type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string; beforePixels?: object; layout?: object };
 
 const screenScript = join(import.meta.dir, "screen.ps1");
 const paint = "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))";
@@ -50,8 +50,8 @@ export async function focus(app: App) {
     const displayScale = ${app.displayScale};
     if (!(Math.abs(scaleFactor - displayScale) < 0.01))
       throw new Error('Expected scaleFactor ' + displayScale + ': ' + JSON.stringify({ size, scaleFactor }));
-    // Run 46129754897 showed that Electron scaled the display dimensions twice.
-    win.setBounds({ x: 0, y: 0, width: Math.round(1920 / displayScale), height: Math.round(1080 / displayScale) });
+    // Run 46129754897 showed double-scaled display dimensions, and 46130156385 showed a content-bounds inset.
+    win.setContentBounds({ x: 0, y: 0, width: Math.ceil(1920 / displayScale), height: Math.ceil(1080 / displayScale) });
     win.setAlwaysOnTop(true, 'screen-saver');
     app.focus({ steal: true });
     win.show(); win.focus(); win.moveTop();
@@ -59,11 +59,14 @@ export async function focus(app: App) {
       windowBounds: win.getBounds(), contentBounds: win.getContentBounds() };
   })()`);
   await until(async () => {
-    const physical = await app.page.expression<Size>(
-      "({ width: innerWidth * devicePixelRatio, height: innerHeight * devicePixelRatio })",
-    );
+    const { physical, matches } = await app.page.expression<{ physical: Size; matches: boolean }>(`(() => {
+      const width = innerWidth * devicePixelRatio, height = innerHeight * devicePixelRatio;
+      const tolerance = devicePixelRatio + 1;
+      return { physical: { width, height },
+        matches: Math.abs(width - 1920) <= tolerance && Math.abs(height - 1080) <= tolerance };
+    })()`);
     geometry.physical = physical;
-    return Math.abs(physical.width - 1920) <= 2 && Math.abs(physical.height - 1080) <= 2;
+    return matches;
   }, async () => `1920x1080 renderer pixels: ${JSON.stringify(geometry)}`, 10_000);
   return geometry;
 }

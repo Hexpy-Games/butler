@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize.ts";
 import type { ElectronPage } from "../../tests/support/electron-page-cdp.ts";
 import { type App, type Locale, until, windowSetup } from "./app.ts";
-import { getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
+import { appLocaleFromLanguage, getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
 import { demoModel, type Demo } from "./demo.ts";
 
 const buttons = "button, [role=button]";
@@ -57,16 +57,27 @@ export function verifyTextSize(page: ElectronPage, devicePixelRatio: number) {
     { uiScale: String(storeScale), expectedRatio: devicePixelRatio });
 }
 
-export function assertDesktopLayout(page: ElectronPage, withBrowser: boolean) {
-  return page.waitForFunction(({ sidebar, withBrowser }) => {
-    const panel = document.querySelector(sidebar);
-    const side = panel?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && panel.getBoundingClientRect();
-    if (!side || !(side.width > 0 && side.left >= 0 && side.right <= innerWidth)) return false;
-    if (!withBrowser) return true;
-    const browser = document.querySelector("#butler-browser-area")?.getBoundingClientRect();
-    const chat = [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)?.getBoundingClientRect();
-    return Boolean(browser && browser.width > 0 && chat && chat.right <= browser.left);
-  }, { sidebar, withBrowser });
+function sidebarIsDocked(selector: string) {
+  const panel = document.querySelector(selector);
+  if (!panel?.closest('[data-panel-layout="docked"] #butler-left-sidebar[data-open="true"]') ||
+    !panel.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+  const { width, left, right } = panel.getBoundingClientRect();
+  return width > 0 && left >= 0 && right <= innerWidth;
+}
+
+export async function assertDesktopLayout(page: ElectronPage, withBrowser: boolean) {
+  if (withBrowser) {
+    await page.waitForFunction(() => {
+      const browser = document.querySelector("#butler-browser-area")?.getBoundingClientRect();
+      const chat = [...document.querySelectorAll('[data-test-class="message assistant"]')].at(-1)?.getBoundingClientRect();
+      return Boolean(browser && browser.width > 0 && chat && chat.right <= browser.left);
+    });
+  } else {
+    await page.waitForFunction(sidebarIsDocked, sidebar);
+  }
+  return page.expression<{ sidebarDocked: boolean; innerWidth: number }>(
+    `({ sidebarDocked: (${sidebarIsDocked})(${JSON.stringify(sidebar)}), innerWidth })`,
+  );
 }
 
 export function waitInViewport(page: ElectronPage, ...targets: { selector: string; visibleOnly?: boolean; last?: boolean }[]) {
@@ -121,6 +132,24 @@ export async function firstRun(app: App, locale: Locale) {
 }
 
 export async function openChat(page: ElectronPage, title: string, prompt?: string) {
+  const hitTestable = ({ scope, title }: { scope: string; title: string }) =>
+    [...document.querySelectorAll(scope)].some(node => {
+      if ((node.getAttribute("aria-label") || node.textContent)?.trim() !== title) return false;
+      const { left, top, right, bottom, width, height } = node.getBoundingClientRect();
+      return width > 0 && height > 0 && left >= 0 && top >= 0 && right <= innerWidth && bottom <= innerHeight &&
+        node.contains(document.elementFromPoint(left + width / 2, top + height / 2));
+    });
+  const target = { scope: sidebarItems, title };
+  if (!await page.expression<boolean>(`(${hitTestable})(${JSON.stringify(target)})`)) {
+    const language = await page.evaluate(() => document.documentElement.lang);
+    const label = getAppCopy(appLocaleFromLanguage(language)).titlebar.showLeftPanel;
+    const toggle = `button[aria-label=${JSON.stringify(label)}]`;
+    // A newly created chat can arrive after the sidebar has already opened.
+    if (await page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(toggle)}))`)) {
+      await click(page, label, toggle);
+    }
+    await page.waitForFunction(hitTestable, target);
+  }
   await click(page, title, sidebarItems);
   if (prompt) await textVisible(page, prompt);
 }
