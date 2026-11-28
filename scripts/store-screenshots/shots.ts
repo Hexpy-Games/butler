@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { timeBasedFiniteAnimationsSettled } from "../../tests/support/animation-settle.ts";
 import { type App, type Locale, until, windowSetup } from "./app.ts";
+import { storeScale } from "./ui.ts";
 
 type Bounds = { x: number; y: number; width: number; height: number };
 type Geometry = {
@@ -10,7 +11,7 @@ type Geometry = {
   windowBounds: Bounds;
   contentBounds: Bounds;
 };
-type View = { theme: string; language: string; visibleTextLength: number };
+type View = { theme: string; language: string; visibleTextLength: number; uiScale: string; devicePixelRatio: number };
 type Facts = Partial<Geometry & View> & { name: string; method?: string; screenError?: string; error?: string; evidenceError?: string; beforePixels?: object };
 
 const screenScript = join(import.meta.dir, "screen.ps1");
@@ -141,13 +142,18 @@ export function shotRecorder(out: string, locale: Locale, selected: ReadonlySet<
         Object.assign(entry, geometry);
         await closeToasts(app);
         await settle(app, geometry.contentBounds);
-        Object.assign(entry, await app.page.evaluate(() => ({
+        const view: View = await app.page.evaluate(() => ({
           theme: document.body.classList.contains("theme-dark") ? "dark" : "light",
           language: document.documentElement.lang,
           visibleTextLength: document.body.innerText.length,
-        })));
+          uiScale: getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim(),
+          devicePixelRatio,
+        }));
+        Object.assign(entry, view);
         assert.equal(entry.theme, locale.theme);
         assert.equal(entry.language?.split("-")[0], locale.language);
+        assert.equal(view.uiScale, String(storeScale), "Unexpected UI scale");
+        assert(Math.abs(view.devicePixelRatio - storeScale) < 0.01, `Unexpected devicePixelRatio: ${view.devicePixelRatio}`);
         await pixels(app, path, entry, beforePixels);
       } catch (error) {
         const failure = onFailure ? await onFailure(error).catch(() => error) : error;

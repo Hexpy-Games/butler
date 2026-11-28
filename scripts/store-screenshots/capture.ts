@@ -9,7 +9,7 @@ import { type Api, type App, type Locale, locales, redact, startApp, until } fro
 import { assertOrganized, chatOrder, createSchedules, demo, demoModel, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { shotRecorder } from "./shots.ts";
 import { frameMemory, memoryTimeout, prepareMemory, type MemoryDiagnostics, type MemoryProgress } from "./memory.ts";
-import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, verifyTheme } from "./ui.ts";
+import { approval, assertBrowserStills, assertModelChip, browserShot, click, firstRun, openBrowserPane, openChat, organized, pendingZip, readApprovalCard, schedulesShot, storeTextSize, verifyTextSize, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
@@ -108,7 +108,8 @@ async function setupWorkspace(app: App, locale: Locale, shots: Recorder) {
   const api = await app.ready();
   const now = new Date().toISOString();
   await api("/settings", "PATCH", {
-    language: locale.language, appearance_theme: locale.theme, ...onboardingCompletedPatch(undefined, now, now),
+    language: locale.language, appearance_theme: locale.theme, text_size: storeTextSize,
+    ...onboardingCompletedPatch(undefined, now, now),
   });
   await api("/setup/butler-vault/decline", "POST");
   const settings = await api<{ access_mode: string }>("/settings");
@@ -120,6 +121,7 @@ async function setupWorkspace(app: App, locale: Locale, shots: Recorder) {
   }
   await app.page.reload();
   await verifyTheme(app.page, locale);
+  await verifyTextSize(app.page);
   return { api, memorySetupFailure };
 }
 

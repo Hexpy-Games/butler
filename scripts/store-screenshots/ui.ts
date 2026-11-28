@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { textSizeFactor } from "../../packages/butler-app/client/ui/src/app/textSize.ts";
 import type { ElectronPage } from "../../tests/support/electron-page-cdp.ts";
 import { type App, type Locale, until, windowSetup } from "./app.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../packages/butler-i18n/src/index.ts";
@@ -9,6 +10,8 @@ const sidebar = '[data-test-class="app-sidebar"]';
 const sidebarItems = `${sidebar} :is(button, [role=button], a, [role=treeitem])`;
 export const approval = '[data-test-class="composer-authority-decision"]';
 const approvalCode = '[data-slot="composer-decision-code"] pre';
+export const storeTextSize = "larger" as const;
+export const storeScale = textSizeFactor(storeTextSize);
 
 export function readApprovalCard(page: ElectronPage, allowLabel: string) {
   return page.expression<{ title: string; command?: string } | null>(`(() => {
@@ -47,15 +50,37 @@ export function verifyTheme(page: ElectronPage, locale: Locale) {
     document.body.classList.contains(`theme-${theme}`) && document.documentElement.lang.split("-")[0] === language, locale);
 }
 
+export function verifyTextSize(page: ElectronPage) {
+  return page.waitForFunction(scale =>
+    getComputedStyle(document.documentElement).getPropertyValue("--ui-scale").trim() === String(scale) &&
+    Math.abs(devicePixelRatio - scale) < 0.01, storeScale);
+}
+
+export function waitInViewport(page: ElectronPage, ...targets: { selector: string; visibleOnly?: boolean; last?: boolean }[]) {
+  return page.waitForFunction(targets => targets.every(({ selector, visibleOnly, last }) => {
+    let elements = [...document.querySelectorAll(selector)];
+    if (visibleOnly) elements = elements.filter(element => element.checkVisibility());
+    if (last) elements = elements.slice(-1);
+    return elements.length > 0 && elements.every(element => {
+      const { width, left, top, right, bottom } = element.getBoundingClientRect();
+      return width > 0 && left >= 0 && top >= 0 && right <= innerWidth && bottom <= innerHeight;
+    });
+  }), targets);
+}
+
 export async function firstRun(app: App, locale: Locale) {
   const { page } = app;
   const ko = locale.language === "ko";
   await app.ready();
   await page.waitForFunction(() => Boolean(document.querySelector('[data-first-run-screen="welcome"]')));
-  const result = await page.expression<{ ok: boolean }>(`window.butlerApp.updateSettings({ appearance_theme: ${JSON.stringify(locale.theme)} })`);
-  assert(result.ok, "Could not set the first-run theme through the renderer bridge");
-  if (!await page.expression(`document.body.classList.contains('theme-${locale.theme}')`)) await page.reload();
+  const result = await page.expression<{ ok: boolean }>(`window.butlerApp.updateSettings(${JSON.stringify({
+    appearance_theme: locale.theme, text_size: storeTextSize,
+  })})`);
+  assert(result.ok, "Could not set the first-run theme and text size through the renderer bridge");
+  if (await page.expression(`!document.body.classList.contains('theme-${locale.theme}') ||
+    Math.abs(devicePixelRatio - ${storeScale}) >= 0.01`)) await page.reload();
   await page.waitForFunction(() => Boolean(document.querySelector("#first-run-language")));
+  await verifyTextSize(page);
   await page.expression(`(() => {
     const field = document.querySelector('#first-run-language');
     const language = ${JSON.stringify(locale.language)};
@@ -76,8 +101,9 @@ export async function firstRun(app: App, locale: Locale) {
     await click(page, ko ? "사용 안 함" : "Don't use", '[role="alertdialog"] button, [role="dialog"] button');
   }
   await textVisible(page, ko ? "어떤 AI와 일할까요?" : "Which AI should Butler use?");
-  await page.waitForFunction(() => ["chatgpt", "claude", "gemini"].every(id =>
-    document.querySelector(`[data-test-class="first-run-top-cards"] [data-card-id="${id}"]`)));
+  await waitInViewport(page, ...["chatgpt", "claude", "gemini"].map(id => ({
+    selector: `[data-test-class="first-run-top-cards"] [data-card-id="${id}"]`,
+  })));
 }
 
 export async function openChat(page: ElectronPage, title: string, prompt?: string) {
@@ -109,6 +135,7 @@ export async function pendingZip(page: ElectronPage, words: Demo, locale: Locale
 }
 
 export async function assertModelChip(page: ElectronPage, locale: Locale) {
+  await waitInViewport(page, { selector: '[data-test-class="model-button"]' });
   const chip = await page.evaluate(() => document.querySelector<HTMLElement>('[data-test-class="model-button"]')?.innerText ?? "");
   assert(chip.includes(demoModel.display_name) && !chip.includes(reasoningEffortLabel("none", locale.locale)),
     `Unexpected composer model chip: ${JSON.stringify(chip)}`);
@@ -157,18 +184,23 @@ export async function assertBrowserStills(page: ElectronPage, locale: Locale) {
     assert(!state.failure, `Chat C browser still failed: ${state.failure}`);
     return state.images > 0 && state.loaded === state.images && !state.pending;
   }, async () => `loaded chat C browser stills: ${JSON.stringify(state)}`);
-  return { browserStills: state.images };
+  await waitInViewport(page,
+    { selector: "[data-test-class=browser-step-still]", visibleOnly: true },
+    { selector: '[data-test-class="message assistant"]', last: true });
+  return { browserStills: state.images, answerInView: true };
 }
 
 export async function schedulesShot(page: ElectronPage, words: Demo, locale: Locale) {
   await click(page, words.navSchedules, sidebarItems);
   const view = '[data-test-class="automations-view"]';
   const general = getAppCopy(locale.locale).space.general;
+  const rowSelector = `${view} [data-slot=clickable]`;
   await page.waitForFunction(({ view, titles }) => {
     const text = document.querySelector<HTMLElement>(view)?.innerText ?? "";
     return titles.every(title => text.includes(title));
   }, { view, titles: words.schedules.map(([title]) => title) });
-  const rows = await page.expression<string[][]>(`[...document.querySelectorAll(${JSON.stringify(`${view} [data-slot=clickable]`)})]
+  await waitInViewport(page, { selector: rowSelector });
+  const rows = await page.expression<string[][]>(`[...document.querySelectorAll(${JSON.stringify(rowSelector)})]
     .map(row => row.innerText.split('\\n').map(line => line.trim()).filter(Boolean))`);
   assert.equal(rows.length, words.schedules.length, "Unexpected number of schedule rows");
   assert(!rows.some(lines => lines.includes("General")), 'Schedule list shows the unlocalized target "General"');
