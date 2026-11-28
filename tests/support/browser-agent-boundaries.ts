@@ -20,7 +20,7 @@ export async function browserBoundaryChecks(app: App, tab: string, evidence: str
   assert.ok(selected.nodes.every((node:any)=>node.ref.startsWith('f1-')));
   const missing=await app.main<any>(`${subject}.execute({op:'tab.observe',session:${JSON.stringify(sessionId)},tab:${id},args:{frame:'f999'}})`);
   // f4f8ef05f: an unknown frame id is refused with the ids the tab has.
-  assert.deepEqual(missing,{status:'refused',reason:'unknown_frame',frames:['f0','f1','f2'],recovery:'No frame has id f999. Omit frame to observe every frame, or use an id listed in frames.'});
+  assert.deepEqual(missing,{status:'refused',reason:'unknown_frame',frames:['f0','f1','f2'],recovery:'No frame has id f999. Omit frame to observe every frame, or use an id listed in frames.',seen_by_user:'showing'});
   writeFileSync(join(evidence,'frame-scoped-observation.json'),JSON.stringify({selected,missing},null,2));
   assert.equal(observed.nodes.filter((node:any)=>node.name==="Confirm").length,3,"duplicate-URL frames have distinct isolated observations");
   await app.main(`${subject}.tabs.get(${id}).view.webContents.executeJavaScript("document.querySelectorAll('iframe[id^=browser-frame]').forEach(f=>f.remove())")`);

@@ -60,7 +60,7 @@ try {
   assert.deepEqual(early, { shownAfter: true }, "a slot reported before activation places the page");
   // A moment of cover (a menu over the pane) hides the page; uncovering shows it again.
   const cover = await app.main<{ hidden: boolean; shownAfter: boolean }>(`(()=>{const b=globalThis.browserAgentSubject,t=${subject()};
-    b.commandTab('covered',t.id,true); const hidden=t.attached!==${app.win};
+    b.commandTab('covered',t.id,true); const hidden=!t.view.getVisible();
     b.commandTab('covered',t.id,false); return {hidden,shownAfter:${shown()}}})()`);
   assert.deepEqual(cover, { hidden: true, shownAfter: true }, "uncovering shows the page again");
   await nativeAligned(app);

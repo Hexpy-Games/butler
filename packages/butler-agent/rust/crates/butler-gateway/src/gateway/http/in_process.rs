@@ -8,7 +8,10 @@ use axum::{
     http::{HeaderMap, Method, Request, header::CONTENT_LENGTH},
     response::Response,
 };
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::{
+    sync::CancellationToken,
+    task::{AbortOnDropHandle, TaskTracker},
+};
 use tower::ServiceExt;
 
 use super::{
@@ -69,10 +72,11 @@ impl InProcessGateway {
         *request.headers_mut() = headers;
         request.headers_mut().insert(CONTENT_LENGTH, length.into());
         let router = self.router.clone();
-        let task = self.tracker.spawn(async move {
+        // Own task for a fresh stack; aborted when the caller drops, like a closed connection.
+        let task = AbortOnDropHandle::new(self.tracker.spawn(async move {
             let Ok(response) = router.oneshot(request).await;
             response
-        });
+        }));
         drop(admission);
         Ok(task.await?)
     }

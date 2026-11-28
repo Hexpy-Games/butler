@@ -115,7 +115,8 @@ async fn parallel_pairing_guesses_invalidate_and_redemption_is_single_use()
     let app = pairing::admin(&s);
     let browser = pairing::browser();
     let pin = pairing::issue(&app).await?;
-    let guesses = (0..16).map(|_| pairing::connect(&s.gw, &browser, "wrong"));
+    // Four parallel wrong guesses pass the 3-failure invalidation and stay under the 10-per-client rate limit.
+    let guesses = (0..4).map(|_| pairing::connect(&s.gw, &browser, "wrong"));
     for response in futures_util::future::join_all(guesses).await {
         assert_eq!(response?.status().as_u16(), 401);
     }
@@ -133,7 +134,7 @@ async fn parallel_pairing_guesses_invalidate_and_redemption_is_single_use()
     for response in responses {
         match response?.status().as_u16() {
             303 => successes += 1,
-            401 => {}
+            401 | 429 => {}
             status => panic!("unexpected pairing status {status}"),
         }
     }
