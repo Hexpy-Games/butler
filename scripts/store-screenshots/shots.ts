@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { timeBasedFiniteAnimationsSettled } from "../../tests/support/animation-settle.ts";
-import { type App, type Locale, windowSetup } from "./app.ts";
+import { type App, type Locale, until, windowSetup } from "./app.ts";
 
 type Bounds = { x: number; y: number; width: number; height: number };
 type Geometry = {
@@ -15,6 +15,23 @@ type Facts = Partial<Geometry & View> & { name: string; method?: string; screenE
 
 const screenScript = join(import.meta.dir, "screen.ps1");
 const paint = "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))";
+const visibleToast = '[data-sonner-toast][data-visible="true"]';
+const toastClose = `${visibleToast}[data-front="true"][data-mounted="true"][data-removed="false"] button[data-close-button]`;
+
+async function closeToasts(app: App) {
+  await until(async () => {
+    const state = await app.page.expression<"clear" | "ready" | "waiting">(`(() => {
+      if (!document.querySelector(${JSON.stringify(visibleToast)})) return 'clear';
+      const button = document.querySelector(${JSON.stringify(toastClose)});
+      if (!button) return 'waiting';
+      const { x, y, width, height } = button.getBoundingClientRect();
+      return button.contains(document.elementFromPoint(x + width / 2, y + height / 2)) ? 'ready' : 'waiting';
+    })()`);
+    if (state === "clear") return true;
+    if (state === "ready") await app.page.clickSelector(toastClose);
+    return false;
+  }, "visible toasts to close");
+}
 
 function screen(...args: string[]) {
   const result = Bun.spawnSync(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
@@ -116,6 +133,7 @@ export function shotRecorder(out: string, locale: Locale) {
         assert(app, "Butler did not launch");
         const geometry = await focus(app);
         Object.assign(entry, geometry);
+        await closeToasts(app);
         await settle(app, geometry.contentBounds);
         Object.assign(entry, await app.page.evaluate(() => ({
           theme: document.body.classList.contains("theme-dark") ? "dark" : "light",
@@ -132,6 +150,7 @@ export function shotRecorder(out: string, locale: Locale) {
           const failed = join(out, `${name}-FAILED.png`);
           if (app) {
             await focus(app).catch(() => {});
+            await closeToasts(app);
             await pixels(app, failed, entry);
           } else {
             screen("-Mode", "Capture", "-Out", failed);

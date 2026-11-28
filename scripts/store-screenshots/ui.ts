@@ -8,6 +8,19 @@ const sidebar = '[data-test-class="app-sidebar"]';
 const sidebarItems = `${sidebar} :is(button, [role=button], a, [role=treeitem])`;
 export const approval = '[data-test-class="composer-authority-decision"]';
 const instructions = '[data-settings-section-id="instructions"]';
+const approvalCode = '[data-slot="composer-decision-code"] pre';
+
+export function readApprovalCard(page: ElectronPage, allowLabel: string) {
+  return page.expression<{ title: string; command?: string } | null>(`(() => {
+    const panel = document.querySelector(${JSON.stringify(approval)});
+    if (!panel?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) ||
+      panel.closest('[inert]') || panel.getAttribute('aria-busy') === 'true') return null;
+    const allow = [...panel.querySelectorAll('button:not(:disabled, [aria-disabled=true])')].find(button =>
+      (button.getAttribute('aria-label') || button.textContent)?.trim() === ${JSON.stringify(allowLabel)});
+    if (!allow?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return null;
+    return { title: panel.getAttribute('aria-label') ?? '', command: panel.querySelector(${JSON.stringify(approvalCode)})?.textContent?.trim() };
+  })()`);
+}
 
 export async function click(page: ElectronPage, label: string, scope = buttons) {
   await page.waitForFunction(({ label, scope }) => [...document.querySelectorAll<HTMLElement>(scope)].some(node =>
@@ -85,14 +98,14 @@ export async function organized(page: ElectronPage, words: ReturnType<typeof dem
 
 export async function pendingZip(page: ElectronPage, words: ReturnType<typeof demo>, locale: Locale) {
   await openChat(page, words.B[0], words.B[1]);
-  await page.waitForFunction(({ approval, command, label }) => {
+  await page.waitForFunction(({ approval, approvalCode, command, label }) => {
     const panel = document.querySelector(approval);
     const bounds = panel?.getBoundingClientRect();
-    const code = panel?.querySelector('[data-slot="composer-decision-code"] pre');
+    const code = panel?.querySelector(approvalCode);
     return Boolean(bounds && bounds.width > 0 && bounds.top >= 0 && bounds.bottom <= innerHeight &&
       code && code.scrollWidth <= code.clientWidth + 1 && code.textContent?.trim() === command &&
       panel?.textContent?.includes(label));
-  }, { approval, command: words.zip, label: locale.language === "ko" ? "이번만 허용" : "Allow once" });
+  }, { approval, approvalCode, command: words.zip, label: locale.language === "ko" ? "이번만 허용" : "Allow once" });
 }
 
 export async function browserShot(app: App, words: ReturnType<typeof demo>) {
@@ -122,9 +135,15 @@ export async function memoryShot(page: ElectronPage, words: ReturnType<typeof de
   await click(page, ko ? "설정" : "Settings");
   await click(page, ko ? "기억" : "Memory");
   await page.waitForFunction(({ instructions, rules }) => {
-    const contents = (document.querySelector(instructions) as HTMLElement | null)?.innerText;
-    const chat = document.querySelector('[data-settings-section-id="chat-memory"]');
-    return rules.every(rule => contents?.includes(rule)) && Boolean(chat?.getBoundingClientRect().width);
+    const section = document.querySelector<HTMLElement>(instructions);
+    const scroll = section?.closest<HTMLElement>('[data-test-class="settings-detail-scroll"]');
+    const chatCard = scroll?.querySelector('[data-settings-section-id="chat-memory"] [data-slot="form-section-card"]');
+    if (!section || !scroll || !chatCard?.getBoundingClientRect().width ||
+      !rules.every(rule => section.innerText.includes(rule))) return false;
+    const origin = scroll.getBoundingClientRect().top + scroll.clientTop - scroll.scrollTop;
+    const instructionsTop = section.getBoundingClientRect().top - origin;
+    const chatCardBottom = chatCard.getBoundingClientRect().bottom - origin;
+    scroll.scrollTo({ top: Math.max(0, Math.min(instructionsTop - 24, chatCardBottom - scroll.clientHeight + 24)), behavior: "instant" });
+    return true;
   }, { instructions, rules: [...words.memory] });
-  await page.expression(`document.querySelector(${JSON.stringify(instructions)}).scrollIntoView({ block: 'start', behavior: 'instant' })`);
 }

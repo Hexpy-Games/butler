@@ -14,14 +14,14 @@ export const locales = [
   { locale: "en-US", language: "en", theme: "dark" },
 ] as const;
 
-export async function until<T>(read: () => Promise<T | false | null | undefined>, label: string, timeout = 30_000): Promise<T> {
+export async function until<T>(read: () => Promise<T | false | null | undefined>, label: string | (() => Promise<string>), timeout = 30_000): Promise<T> {
   const deadline = Date.now() + timeout;
   do {
     const value = await read();
     if (value) return value;
     await Bun.sleep(200);
   } while (Date.now() < deadline);
-  throw new Error(`Timed out waiting for ${label}`);
+  throw new Error(`Timed out waiting for ${typeof label === "string" ? label : await label()}`);
 }
 
 export function redact(text: string, token: string | null = null) {

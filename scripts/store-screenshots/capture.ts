@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeOnboardingComplete } from "../../tests/support/native-app-server.ts";
 import { onboardingCompletedPatch } from "../../packages/butler-app/client/ui/src/app/onboarding.ts";
+import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { type Api, type App, type Locale, locales, redact, startApp, until } from "./app.ts";
 import { assertOrganized, chatOrder, createSchedules, demo, demoRoot, populateDemoFiles, startDemoStub, type Chat } from "./demo.ts";
 import { shotRecorder } from "./shots.ts";
-import { approval, browserShot, click, firstRun, memoryShot, openChat, organized, pendingZip, schedulesShot, verifyTheme } from "./ui.ts";
+import { approval, browserShot, click, firstRun, memoryShot, openChat, organized, pendingZip, readApprovalCard, schedulesShot, verifyTheme } from "./ui.ts";
 
 type Words = ReturnType<typeof demo>;
 type Recorder = ReturnType<typeof shotRecorder>;
@@ -15,6 +16,28 @@ type Stub = Awaited<ReturnType<typeof startDemoStub>>;
 type MemoryProgress = { state: string; reason?: string; bytes_done: number; bytes_total: number };
 type Authority = { request_ref: string; executable?: string; approval?: { operation?: { command?: string; tool?: string } } };
 type TurnView = { latest_turn?: { state: string; safe_error_code?: string }; authority_requests?: Authority[] };
+
+function cardTool(title: string, locale: Locale, candidates: string[]) {
+  const copy = getAppCopy(locale.locale);
+  const labels = copy.interfaceTemplates.approvalRequest;
+  if (title === labels.runCommandOutside || title === labels.runCommand(null)) return "run_command";
+  return candidates.find(tool => {
+    const label = copy.guided.tools[tool];
+    return label && (title === labels.operation(label, true) || title === labels.operation(label, false));
+  }) ?? "";
+}
+
+async function chatTimeout(app: App, chat: Chat, view: TurnView) {
+  const requests = view.authority_requests ?? [];
+  const cardInDom = await app.page.expression<boolean>(`Boolean(document.querySelector(${JSON.stringify(approval)}))`).catch(() => null);
+  return `scripted chat ${chat}: ${JSON.stringify({
+    latest_turn: { state: view.latest_turn?.state ?? null },
+    authority_requests: { count: requests.length, tools: requests.map(request => ({
+      executable: request.executable ?? null, "operation.tool": request.approval?.operation?.tool ?? null,
+    })) },
+    view_keys: Object.keys(view), card_in_dom: cardInDom,
+  })}`;
+}
 
 async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: Stub, chat: Chat) {
   const [title, text] = words[chat];
@@ -27,9 +50,11 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
     D: ["update_explicit_memory"], C: ["tool_call", "browser_open", "browser_observe", "browser_act"],
     A: ["list_files", "run_command"], B: [],
   };
+  const allowLabel = getAppCopy(locale.locale).interfaceDetails.allowOnce;
+  let lastView: TurnView = {};
   await until(async () => {
     stub.check(chat);
-    const view = await api<TurnView>(`/session-view?session_id=${encodeURIComponent(session.id)}`);
+    const view = lastView = await api<TurnView>(`/session-view?session_id=${encodeURIComponent(session.id)}`);
     const state = view.latest_turn?.state;
     if (state === "delivered") {
       assert(chat !== "B", "Zip turn finished without the expected approval");
@@ -39,20 +64,23 @@ async function playChat(app: App, api: Api, locale: Locale, words: Words, stub: 
       throw new Error(`Chat ${chat} ended ${state}: ${view.latest_turn?.safe_error_code ?? "no error code"}`);
     }
     const pending = view.authority_requests?.find(request => !answered.has(request.request_ref));
-    if (!pending) return false;
-    const operation = pending.approval?.operation;
-    const tool = operation?.tool ?? pending.executable ?? "";
+    const card = pending ? null : await readApprovalCard(app.page, allowLabel);
+    if (!pending && !card) return false;
+    const operation = pending?.approval?.operation;
+    const command = operation?.command ?? card?.command;
+    const tool = (card ? cardTool(card.title, locale, chat === "B" ? ["run_command"] : allowed[chat]) :
+      operation?.tool ?? pending?.executable ?? "").replace(/^native:/u, "");
     if (chat === "B") {
-      assert.equal(operation?.command, words.zip, "Unexpected command in the Zip approval");
+      assert.equal(command, words.zip, "Unexpected command in the Zip approval");
       assert(!existsSync(join(demoRoot, "Desktop", words.zipName)), "Zip was created before approval");
       return true;
     }
-    assert(allowed[chat].includes(tool.replace(/^native:/u, "")), `Unexpected approval in chat ${chat}: ${tool}`);
-    if (tool === "run_command") assert.equal(operation?.command, words.organize, "Unexpected command in the Downloads approval");
-    await click(app.page, locale.language === "ko" ? "이번만 허용" : "Allow once", `${approval} button`);
-    answered.add(pending.request_ref);
+    assert(allowed[chat].includes(tool), `Unexpected approval in chat ${chat}: ${tool || "unrecognized card tool"}`);
+    if (tool === "run_command") assert.equal(command, words.organize, "Unexpected command in the Downloads approval");
+    await click(app.page, allowLabel, `${approval} button`);
+    if (pending) answered.add(pending.request_ref);
     return false;
-  }, `scripted chat ${chat}`, 120_000);
+  }, () => chatTimeout(app, chat, lastView), 120_000);
 }
 
 async function applyPending(api: Api, words: Words) {

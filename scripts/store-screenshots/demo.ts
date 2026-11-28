@@ -68,7 +68,7 @@ export function demo(language: Language) {
       .map(name => `'${downloads}\\${name}'`).join(", ");
     return `New-Item -ItemType Directory ${target} | Out-Null\nMove-Item ${files} -Destination ${target}`;
   }).join("\n");
-  const zip = `Compress-Archive -Path '${demoRoot}\\Pictures\\2026-11' -DestinationPath '${demoRoot}\\Desktop\\${words.zip}'`;
+  const zip = `Compress-Archive ${demoRoot}\\Pictures\\2026-11 ${demoRoot}\\Desktop\\${words.zip}`;
   return { ...words, organize, zip, zipName: words.zip, helpPath: language === "ko" ? "/help/" : "/en/help/" };
 }
 type Demo = ReturnType<typeof demo>;
