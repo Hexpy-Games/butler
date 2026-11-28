@@ -66,7 +66,7 @@ pub use provider::{
 #[cfg(any(test, feature = "test-support"))]
 pub(crate) use catalog::model_identity_key;
 pub use catalog::{
-    ANTHROPIC_ADAPTIVE_MODELS, ANTHROPIC_BUDGET_MODEL, KIMI_ADAPTIVE_MODEL,
+    ANTHROPIC_ADAPTIVE_MODELS, ANTHROPIC_BUDGET_MODEL, KIMI_ADAPTIVE_MODELS,
     OPENAI_EXPLICIT_CACHE_MODELS, OPENCODE_THINKING_MODEL, ZAI_IMAGE_MODEL, ZAI_THINKING_REFS,
 };
 pub use catalog::{

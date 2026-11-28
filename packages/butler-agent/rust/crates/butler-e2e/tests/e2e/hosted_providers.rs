@@ -29,7 +29,7 @@ async fn start() -> Result<(Scenario, Server), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://{}/v1", listener.local_addr()?);
     let app = Router::new().route("/v1/chat/completions",post(chat))
-        .route("/v1/models",get(||async { Json(json!({"data":[{"id":"deepseek-flash"},{"id":"deepseek-v4-pro"},{"id":"solar-pro4"},{"id":"solar-mini4"},{"id":"motif/motif-3"}]})) }));
+        .route("/v1/models",get(||async { Json(json!({"data":[{"id":"deepseek-flash"},{"id":"deepseek-v4-pro"},{"id":"solar-pro-4"},{"id":"solar-mini-4"},{"id":"motif/motif-3"}]})) }));
     let server = Server(tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     }));
@@ -128,11 +128,23 @@ async fn settings_keys_select_and_route_each_hosted_provider() -> Result<(), Har
     for (provider, model, effort) in [
         ("deepseek", "deepseek-flash", "high"),
         ("deepseek", "deepseek-v4-pro", "none"),
-        ("upstage", "solar-pro4", "medium"),
-        ("upstage", "solar-mini4", "none"),
+        ("upstage", "solar-pro-4", "medium"),
+        ("upstage", "solar-mini-4", "none"),
         ("motif", "motif/motif-3", "none"),
     ] {
         register(&s, provider, model, effort, connected.insert(provider)).await?;
     }
+    let controls =
+        s.gw.patch(
+            "/sessions/general/controls",
+            json!({"model":"upstage/solar-pro4"}),
+        )
+        .await?;
+    assert_eq!(
+        controls.data()["controls"]["model"],
+        "upstage/solar-pro-4",
+        "{}",
+        controls.text
+    );
     s.finish().await
 }

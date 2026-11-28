@@ -1,7 +1,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::models::{
-    ChatStructuredOutput, KIMI_ADAPTIVE_MODEL, OPENCODE_THINKING_MODEL, ProviderPromptRequest,
+    ChatStructuredOutput, KIMI_ADAPTIVE_MODELS, OPENCODE_THINKING_MODEL, ProviderPromptRequest,
     ProviderRequestConfig, ReasoningEffort,
 };
 use butler_turn::btcc::ModelRoundError;
@@ -187,7 +187,8 @@ fn chat_reasoning(
             );
         }
         ("kimi", Some(reasoning))
-            if config.wire_model == KIMI_ADAPTIVE_MODEL && reasoning != ReasoningEffort::None =>
+            if KIMI_ADAPTIVE_MODELS.contains(&config.wire_model.as_str())
+                && reasoning != ReasoningEffort::None =>
         {
             body.insert("reasoning_effort".into(), super::effort(reasoning).into());
         }

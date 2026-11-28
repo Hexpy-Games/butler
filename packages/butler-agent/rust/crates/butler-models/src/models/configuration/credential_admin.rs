@@ -176,6 +176,10 @@ impl ModelConfiguration {
         let config = read_object_sync(&root.join("butler.config.json"));
         let registered = normalized_registered(&config, self, &self.clock.now_iso());
         let default_ref = crate::models::default_model_at(root)?;
+        let default_ref = self
+            .registration_catalog
+            .find_static_model_metadata(Some(&default_ref))
+            .map_or(default_ref, |model| model.model_ref);
         let default = registered
             .iter()
             .find(|model| model.model_ref == default_ref)

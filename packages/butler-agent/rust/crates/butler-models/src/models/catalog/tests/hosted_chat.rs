@@ -2,6 +2,12 @@ use super::*;
 
 pub(super) fn assert_hosted_chat_catalog_presets_limits_and_wire_policy() {
     let catalog = StaticCatalog::load().unwrap();
+    assert_eq!(
+        lookup::find_model_metadata(Some("upstage/solar-pro4"), &catalog.models)
+            .unwrap()
+            .model_id,
+        "solar-pro-4"
+    );
     for (provider, model, context, output, effort) in [
         (
             "deepseek",
@@ -12,7 +18,7 @@ pub(super) fn assert_hosted_chat_catalog_presets_limits_and_wire_policy() {
         ),
         (
             "upstage",
-            "solar-mini4",
+            "solar-mini-4",
             512_000.0,
             128_000.0,
             ReasoningEffort::Medium,

@@ -128,7 +128,7 @@ fn supplied_registered_config_normalizes_without_secrets_or_io() {
 fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_static() {
     assert_search_planning_presets();
     let catalog = ModelCatalog::new().unwrap();
-    let newer_sol = ["gpt-6.2-sol".to_owned()];
+    let newer_sol = ["gpt-6.3-sol".to_owned()];
     let routine =
         |snapshot: &ModelCatalogSnapshot, provider: &str, refreshed: Option<&[String]>| {
             snapshot
@@ -151,8 +151,8 @@ fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_stat
     let mut sol = snapshot
         .find_model_metadata(Some("openai/gpt-6.1-sol"))
         .unwrap();
-    sol.model_id = "gpt-6.2-sol".into();
-    sol.model_ref = "openai/gpt-6.2-sol".into();
+    sol.model_id = "gpt-6.3-sol".into();
+    sol.model_ref = "openai/gpt-6.3-sol".into();
     let mut extended = input(Vec::new());
     extended.extra_models = vec![sol];
     let snapshot = catalog
@@ -160,7 +160,7 @@ fn refreshed_routine_preset_needs_a_cataloged_newer_model_and_falls_back_to_stat
         .unwrap();
     assert_eq!(
         routine(&snapshot, "openai", Some(&newer_sol)),
-        "openai/gpt-6.2-sol"
+        "openai/gpt-6.3-sol"
     );
     assert_eq!(routine(&snapshot, "openai", None), "openai/gpt-6.1-sol");
     assert_eq!(
