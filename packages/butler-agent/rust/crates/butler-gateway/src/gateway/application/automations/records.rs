@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Row};
 use super::contracts::{AutomationRunSummary, AutomationSummary};
 use crate::gateway::application::storage::{AppStorageCode, AppStorageError};
 
-const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session'),a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json,a.model,a.browser_signin,a.browser_payment";
+const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,c.title,a.access_mode,a.schedule_type,a.run_at,a.start_at,a.schedule_json,a.model,a.browser_signin,a.browser_payment";
 
 #[derive(Clone)]
 pub(in crate::gateway::application) struct AutomationRow {
@@ -27,7 +27,7 @@ pub(in crate::gateway::application) struct AutomationRow {
     pub failures: i64,
     pub created: String,
     pub updated: String,
-    pub target_label: String,
+    pub target_label: Option<String>,
     pub access: AccessMode,
     pub model: Option<String>,
     pub browser_signin: bool,

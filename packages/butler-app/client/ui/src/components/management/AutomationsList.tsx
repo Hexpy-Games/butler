@@ -63,7 +63,7 @@ export function AutomationsList({
               <ListRow
                 icon={isAccessMode(automation.access_mode) ? accessModeIcon(automation.access_mode) : undefined}
                 title={automation.title}
-                description={sessionDisplayTitle({ id: automation.target_session_id, title: automation.target_label })}
+                description={sessionDisplayTitle({ id: automation.target_session_id, title: automation.target_label ?? copy.deletedChat })}
                 meta={[
                   scheduleState(automation.state),
                   scheduleFrequency(automation),

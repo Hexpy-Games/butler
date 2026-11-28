@@ -9,7 +9,7 @@ export interface LibraryPage { items: LibraryItem[]; next_cursor?: string | null
 export interface LibraryFacets { total: number }
 export interface CalendarSchedule { kind: string; time: string; weekdays: number[]; tz: string }
 export interface AutomationSummary {
-  id: string; title: string; state: string; target_session_id: string; target_label: string;
+  id: string; title: string; state: string; target_session_id: string; target_label: string | null;
   interval_seconds: number; schedule_type: string; schedule: CalendarSchedule | null;
   next_run_at?: string; last_run_at?: string; last_run_state: string; last_safe_error_code?: string;
 }

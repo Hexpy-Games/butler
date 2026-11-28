@@ -1417,6 +1417,7 @@ export interface AppCopy {
   };
   automations: {
     modelDefaultDescription: string;
+    deletedChat: string;
     saved: string;
     frequency: string;
     time: string;
